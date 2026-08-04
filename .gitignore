@@ -1,0 +1,47 @@
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Prisma — client gerado
+packages/db/generated/
+**/.prisma/
+
+# Ambiente e segredos
+# A string de conexão de produção existe SÓ como secret do GitHub Actions
+# e no Railway (ADR-0010). Nunca em arquivo local.
+.env
+.env.*
+!.env.example
+
+# Testes e cobertura
+coverage/
+.vitest/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Deliberadamente versionados — não ignorar:
+#   .agents/   skills do projeto
+#   .claude/   configuração do harness
+#   .scratch/  spec e tickets (é o issue tracker deste repo)
+#   docs/      ADRs, pesquisa e plano de construção
