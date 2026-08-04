@@ -26,6 +26,18 @@ Leia os ADRs 0006 a 0011 conforme o ticket em que estiver mexendo. Eles contêm
 os modos de falha silenciosos deste stack — em especial o ADR-0006, que explica
 por que Supabase RLS + Prisma não encaixam sozinhos.
 
+# Skills
+
+As skills do projeto viajam no repositório e não precisam ser instaladas: estão
+em `.agents/skills/` com espelho em `.claude/skills/`, travadas em
+`skills-lock.json`. Disponíveis, entre outras: `implement`, `to-spec`,
+`to-tickets`, `domain-modeling`, `tdd`, `design-taste-frontend`, `supabase`,
+`supabase-postgres-best-practices`, `shadcn`, `code-review`.
+
+Ao implementar UI, siga `design-taste-frontend` — é obrigatória pela stack
+travada. Ao mexer em schema, RLS, policies ou migrações, carregue
+`supabase-postgres-best-practices` antes de escrever SQL.
+
 # Como trabalhar
 
 Os tickets são arquivos em `.scratch/fundacao-e-ingestao/issues/`, numerados em

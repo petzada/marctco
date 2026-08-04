@@ -18,6 +18,10 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 **Precedência resolve o conflito; o lado perdedor recebe nota de supersessão apontando para quem venceu.** Sem isso, a próxima sessão re-litiga do zero.
 
+## Implementação
+
+Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sessão. Spec e tickets em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/).
+
 ## Ordem de construção
 
 [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — 8 fases, o veredito de Analytics no MVP, e os itens registrados como abertos. Supersede `sintese-final.md` §13. Os ADRs referenciam as fases pelo número.
