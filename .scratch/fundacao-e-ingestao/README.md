@@ -2,6 +2,7 @@
 
 Fatia vertical cobrindo as **Fases 0 e 1** de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
 
+- **Começar aqui:** [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sessão de implementação
 - **Spec:** [spec.md](./spec.md)
 - **Tickets:** [issues/](./issues/) — 16, numerados em ordem de dependência
 
