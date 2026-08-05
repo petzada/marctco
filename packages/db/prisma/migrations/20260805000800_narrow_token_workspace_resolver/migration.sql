@@ -5,11 +5,11 @@ SET ROLE marctco_private_definer;
 DROP FUNCTION private.resolve_workspace_by_token_hash(TEXT);
 RESET ROLE;
 
-DROP POLICY IF EXISTS pipelines_private_definer_select ON pipelines;
-REVOKE SELECT ON TABLE pipelines FROM marctco_private_definer;
-
 GRANT CREATE ON SCHEMA private TO marctco_private_definer;
 SET ROLE marctco_migrator;
+
+DROP POLICY IF EXISTS pipelines_private_definer_select ON pipelines;
+REVOKE SELECT ON TABLE pipelines FROM marctco_private_definer;
 
 CREATE FUNCTION private.resolve_workspace_by_token_hash(request_token_hash TEXT)
 RETURNS TABLE(workspace_id UUID)
