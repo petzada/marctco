@@ -23,3 +23,11 @@
 - **Descobertas que afetam tickets seguintes:** GitHub continua recusando branch protection no repositório privado com HTTP 403 por falta de plano compatível. Não existe GitHub Environment `production`. Nenhuma configuração verificável de Supabase, Railway, credenciais dos papéis ou backup foi disponibilizada.
 - **Documentos emendados:** Nenhum.
 - **Precisa de mão humana:** 1. Instalar e iniciar Docker Desktop com Compose; `docker version` e `docker compose version` precisam funcionar. 2. Habilitar branch protection para repositório privado mediante GitHub Pro/Team, ou tornar o repositório público; hoje a API continua respondendo 403. 3. Criar o projeto Supabase de produção e informar seus metadados não secretos e região. 4. Criar o projeto Railway na mesma região, com serviços separados `web`, `worker` e Redis, além de Wait for CI. 5. Criar o GitHub Environment `production` e guardar nele a connection string owner de migrations. 6. Gerar e guardar senhas distintas para `marctco_migrator`, `marctco_app` e `marctco_worker`, sem enviá-las no chat ou versioná-las. 7. Confirmar que produção está vazia de leads reais ou indicar um backup restaurável existente.
+
+### Retomada após ação humana — 2026-08-05
+
+- O repositório foi tornado público; GitHub Environments e branch protection passaram a estar disponíveis no plano atual.
+- O GitHub Environment `production` foi criado via API, restrito a branches protegidas e ainda sem secrets; o nome exato do secret será definido pelo workflow do ticket 01.
+- O projeto Supabase existe e a produção foi confirmada vazia de leads reais; o gate A6 não exige backup nesta primeira migration.
+- O Railway registrou um deployment falho do commit documental `c377f30`; ainda não existe código deployável nem workflow com `push`, portanto Wait for CI ainda não pode ser habilitado.
+- Docker Desktop 29.6.2 e Compose v5.3.1 estão instalados, mas o engine Linux permanece `stopped`: `docker version` recebe HTTP 500 no named pipe `dockerDesktopLinuxEngine`. Windows 10 build 19045 e virtualização de firmware estão aptos; a habilitação/conclusão do WSL2 exige PowerShell elevado e reinício da máquina.
