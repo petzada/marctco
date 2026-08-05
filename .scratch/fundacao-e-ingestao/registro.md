@@ -79,3 +79,15 @@
 - **Descobertas que afetam tickets seguintes:** O pooler compartilhado do Supabase é `aws-0-us-west-1.pooler.supabase.com:6543` e exige usuário `<role>.<project-ref>`; os dois serviços já usavam o formato correto. Prisma relata apenas o papel base na falha de autenticação, o que esconde o sufixo do tenant. O `configFile` aparece no `latestDeployment.meta` dos dois serviços, provando que os manifests aninhados carregam. O último deploy dos dois é `main@6595f26`.
 - **Documentos emendados:** Nenhum.
 - **Precisa de mão humana:** 1. No SQL Editor do Supabase, executar `ALTER ROLE marctco_worker WITH PASSWORD '<senha>';` e gravar a mesma senha no `DATABASE_URL` do serviço worker no Railway, preservando `?pgbouncer=true&connection_limit=1`; a senha atual no Railway não corresponde à do papel. 2. Decidir sobre o merge do PR 3. 3. Confirmar a região do projeto Railway contra `us-west-1` do Supabase e o estado de Wait for CI, que a API da CLI não expõe.
+
+### Deploy Railway concluído — CONCLUÍDO
+
+- **O que foi construído:** Nada além do que já estava mesclado. Esta entrada fecha a validação externa do ticket 01.
+- **Arquivos-chave criados/alterados:** `.scratch/fundacao-e-ingestao/issues/01-esqueleto-vivo-monorepo-ci-deploy.md` — dois critérios marcados.
+- **Critérios de aceite:** 38 de 39 marcados. Marquei a colocação das credenciais e o deploy separado com Wait for CI. Resta apenas a confirmação de que Railway e Supabase estão na mesma região, que a CLI do Railway não expõe.
+- **Testes:** Deploy de `main@b68c1fc` verde nos dois serviços. Web `/health` responde HTTP 200 em `https://web-production-613e6.up.railway.app`. Worker registra `worker ready` e o healthcheck passa. CI de `main` verde, incluindo `Production migration`.
+- **Branch / PR:** `ticket/01-close-railway-deploy`, sobre `main` em `b68c1fc`, que mesclou https://github.com/petzada/marctco/pull/3.
+- **Decisões que tomei sozinho:** Nenhuma além das já registradas.
+- **Descobertas que afetam tickets seguintes:** A senha de `marctco_worker` no Railway não correspondia à do papel no Supabase; o `ALTER ROLE` corrigiu e o papel passa na autoverificação. Os dois serviços entram em `WAITING` no commit de merge antes de construir, o que prova Wait for CI ativo. Não existe serviço Redis no projeto Railway — os tickets de fila precisarão provisioná-lo.
+- **Documentos emendados:** Nenhum.
+- **Precisa de mão humana:** 1. Confirmar no painel do Railway, em Settings de cada serviço, que a região é `us-west-1`, igual à do Supabase; a CLI não expõe esse campo.
