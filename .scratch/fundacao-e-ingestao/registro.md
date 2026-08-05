@@ -182,7 +182,7 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **Arquivos-chave criados/alterados:** `packages/db/src/foundation-recovery.ts` — `decideAuthWorkspaceRecovery` e `decideMigrationRecovery`.<br>`packages/db/src/recover-foundation-cli.ts` — auditoria dos artefatos da 002.<br>`packages/db/src/foundation-recovery.test.ts` — casos foundation + auth workspace.<br>`docs/adr/0010-migrations-e-ci-cd.md` — bootstrap CREATEROLE para papéis técnicos pós-foundation.<br>`.scratch/fundacao-e-ingestao/acoes-manuais-pendentes.md` — SQL humano obrigatório.
 - **Critérios de aceite:** Recovery cobre o cenário de produção documentado; aborta sem o papel; resolve quando pré-condições satisfeitas; workflow `pnpm db:recover:foundation` intacto.
 - **Testes:** `foundation-recovery.test.ts` expandido; suíte local a validar no PR.
-- **Branch / PR:** `ticket/04-recover-private-definer-role`; PR a abrir após CI verde.
+- **Branch / PR:** `ticket/04-recover-private-definer-role`; https://github.com/petzada/marctco/pull/11, CI verde (Quality, Database, CI).
 - **Decisões que tomei sozinho:** Foundation recovery passa a retornar `none` (não `abort`) quando a migration unresolved não é a 001, delegando à handler da 002. Mantive o nome do script `db:recover:foundation` para não quebrar o workflow.
 - **Descobertas que afetam tickets seguintes:** Qualquer migration futura que crie papel `NOLOGIN` além dos três iniciais precisará do mesmo bootstrap humano enquanto o secret de release for `marctco_migrator`. O CI não reproduz essa falha porque o Postgres efêmero usa `postgres` com `CREATEROLE`.
 - **Documentos emendados:** ADR-0010, `acoes-manuais-pendentes.md`, este registro.
