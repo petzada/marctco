@@ -67,6 +67,8 @@ A matriz acima é **especificação**, não implementação. A fatia de fundaç�
 
 O que precisa nascer com a fatia não é a matriz — é o **ponto único onde ela mora**. A leitura de dados já passa obrigatoriamente pelo helper de transação de `packages/db`, que é o único caminho de acesso a dado; ele recebe o papel junto com o `workspace_id`, e é ali que qualquer regra futura entra.
 
+*Emendado pelo [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md).* Receber o papel não basta — um helper que devolva o client do Prisma torna o `role` um parâmetro inerte, e a frase abaixo ("nenhuma consulta consegue ser escrita sem que o autor decida ali o que aquele papel enxerga") vira intenção em vez de interface. O ponto único só existe de fato se `packages/db` expuser **leituras nomeadas** recebendo `AccessContext`, com o escopo do papel aplicado do lado de dentro e o client cru inacessível de fora.
+
 **Permissão colocada tarde é reescrita de toda consulta.** Se as telas nascem assumindo "vejo tudo", cada `where` precisa ser revisitado depois — e o que escapar não dá erro, dá vazamento interno silencioso, que é o modo de falha mais difícil de detectar por teste. É a mesma lógica de gravar `arrived_at` antes de existir tela de SLA: o que não se reconstrói depois é a disciplina de passar por um lugar só.
 
 **Considered option (rejeitada): matriz completa de quatro papéis × todas as ações, agora.** Semanas de trabalho sobre telas que ainda não existem, e boa parte descartada quando a operação real disser como se organiza.
@@ -81,6 +83,6 @@ O que precisa nascer com a fatia não é a matriz — é o **ponto único onde e
 
 ## Consequences
 
-O enum encolhe de cinco valores para quatro, com `SUPERVISOR` no lugar de `ADMIN` e `VIEWER`. Como não há dado em produção, é uma migração sem expand/contract. O helper de acesso passa a exigir papel além de workspace — o que significa que nenhuma consulta consegue ser escrita sem que o autor decida, ali, o que aquele papel enxerga.
+O enum encolhe de cinco valores para quatro, com `SUPERVISOR` no lugar de `ADMIN` e `VIEWER`. Como não há dado em produção, é uma migração sem expand/contract. O helper de acesso passa a exigir papel além de workspace — mas **exigir o papel não basta para que ele seja usado**, e é por isso que o [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md) fecha o `packages/db` em operações nomeadas: só assim nenhuma consulta consegue ser escrita sem que o autor decida, ali, o que aquele papel enxerga.
 
 **Na fatia de fundação, a regra do `ATTENDANT` não tem quem a exercite, e isso é esperado.** O provisionamento cria um único membro, `OWNER`, e o cadastro de colaboradores fica fora da fatia; atribuição só chega na Fase 2, então `assigned_user_id` é sempre nulo. Um atendente, se existisse, veria uma lista vazia — o que está **correto** e não é defeito. A regra entra agora pelo mesmo motivo que `arrived_at` é gravado antes de existir tela de SLA: o que se paga caro depois não é a regra, é ter construído telas sem o lugar onde ela mora.

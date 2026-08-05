@@ -22,6 +22,10 @@ _Avoid_: Criar workspace sem funil, semear funil por script de desenvolvimento e
 O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. São quatro, e nenhum a mais — **Atendente** responde pelos leads atribuídos a ele; **Supervisor**, pelo time ou filial; **Gestão**, pela operação inteira; **Direção**, pela operação e pela conta. O escopo é aplicado no servidor, num lugar só.
 _Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, confundir com tag de time
 
+**Contexto de acesso**:
+Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e o evento que o originou. Ambas isolam pelo workspace; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
+_Avoid_: Workspace e papel viajando separados, papel como parâmetro que ninguém usa, papel inventado para o job preencher campo, contexto em singleton ou cache sem chave de workspace, montar o contexto em cada tela
+
 **Tag**:
 Rótulo configurável no workspace para identificar filial, time ou carteira; aplica-se a membros e, se útil, a oportunidades. É o que define o time de um Supervisor.
 _Avoid_: Sub-workspace, departamento como tenant, “empresa” no sentido de workspace
@@ -47,8 +51,8 @@ Instante em que a Oportunidade passa a existir e o relógio de atendimento pode 
 _Avoid_: Confundir com o instante do recebimento em todos os casos, reconstruir a chegada depois, relógio correndo sobre lead que ninguém podia atender
 
 **Marcador**:
-Pendência anexada a uma Oportunidade que já existe e já pode ser atendida. Sinaliza, nunca bloqueia, e é sempre resolvível. Quantos houver, o usuário os alcança por um único ponto de entrada no lead.
-_Avoid_: Fila de revisão, portão antes da Oportunidade, um rótulo por tipo espalhado pela tela, marcador que não tem resolução
+Pendência anexada a uma Oportunidade que já existe e já pode ser atendida. Sinaliza, nunca bloqueia, e é sempre resolvível. Quantos houver, o usuário os alcança por um único ponto de entrada no lead. Os marcadores não moram todos no mesmo lugar, mas quem responde "o que este lead tem" é um só — a pergunta "quais leads têm este aviso" é outra, e pertence aos contadores.
+_Avoid_: Fila de revisão, portão antes da Oportunidade, um rótulo por tipo espalhado pela tela, marcador que não tem resolução, cada tela remontando a lista por conta própria
 
 **Pessoa**:
 Cadastro único da pessoa física/jurídica no workspace, com zero ou um CPF válido e múltiplos telefones/e-mails normalizados. Nenhum telefone ou e-mail vence uma contradição por si só; chaves conflitantes criam Pessoa nova e marcam revisão de identidade, sem impedir o atendimento.
@@ -81,6 +85,10 @@ _Avoid_: Chamar de Lead — na UI, Lead é a Oportunidade; EnvioLead nunca apare
 **Conector de origem**:
 Adaptador que conhece a forma do payload de uma origem de lead e a converte para o contrato canônico de entrada. A Pluga faz o De→Para de Meta/Google; LPs enviam o mesmo vocabulário servidor-servidor. O conector não conhece funil, Pessoa nem Oportunidade.
 _Avoid_: Conector que normaliza ou decide regra de negócio, integração como sinônimo de conector
+
+**Plano de ingestão**:
+O que uma submissão recebida vai produzir, descrito como dado antes de acontecer: quarentena, retransmissão inerte ou Oportunidade nova com seus marcadores. É decidido sem tocar no banco e executado numa transação só, o que faz caber num teste puro aquilo que antes só o ambiente inteiro exercitava. Um plano de retransmissão não tem onde guardar etapa, responsável, situação ou chegada — é assim que o funil não rebobina.
+_Avoid_: Roteiro espalhado pelo worker, plano com campos opcionais que alguém preenche, decidir consultando, um caminho para a ingestão e outro para a liberação da quarentena
 
 **Evento de integração**:
 Payload bruto recebido de uma origem, persistido transacionalmente como outbox antes da resposta HTTP e reprocessável. Um dispatcher independente o entrega ao BullMQ quando o Redis estiver disponível. É a **única** cópia do payload; o EnvioLead aponta para a transmissão mais recente em vez de repetir o conteúdo.

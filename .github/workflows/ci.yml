@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test:unit
+      - run: pnpm build
+
+  database:
+    name: Database
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: marctco
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d marctco"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+      pgbouncer:
+        image: edoburu/pgbouncer:v1.24.1-p0
+        env:
+          DB_HOST: postgres
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: marctco
+          POOL_MODE: transaction
+          AUTH_TYPE: scram-sha-256
+        ports:
+          - 6432:5432
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/marctco?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/marctco?schema=public
+      PGBOUNCER_DATABASE_URL: postgresql://postgres:postgres@localhost:6432/marctco?schema=public&pgbouncer=true&connection_limit=1
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:migrations
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:drift
+      - run: pnpm test:db
+      - run: pnpm test:a7
+
+  ci:
+    name: CI
+    if: always()
+    needs: [quality, database]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every PR gate
+        run: |
+          test '${{ needs.quality.result }}' = 'success'
+          test '${{ needs.database.result }}' = 'success'
+
+  release:
+    name: Production migration
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [ci]
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: production-migrations
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+      ALLOW_REMOTE_MIGRATE_DEPLOY: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate:deploy
+      - run: pnpm --filter @marctco/db exec prisma migrate status

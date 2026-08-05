@@ -16,6 +16,16 @@ A idempotência tem um dono só: a constraint mais o worker. Nunca um pré-check
 
 ## Acceptance criteria
 
+**O módulo de ingestão**
+
+- [ ] A ingestão é um **módulo de `packages/domain`** com três funções puras: `planSubmission(inbound)`, `planPersonLookup(normalized)` e `decideIntake(input) → IntakePlan`. O worker não sequencia regra de negócio — ele executa o plano ([ADR-0017](../../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
+- [ ] **Três fases e não uma**, porque o resultado do `ON CONFLICT` é **entrada** de `decideIntake`, não saída: sem ele não se sabe se o envio é novo ou retransmissão
+- [ ] **`now` é argumento** de `decideIntake`, nunca `Date.now()` por dentro — relógio lido internamente é I/O disfarçado e mata o teste puro
+- [ ] `IntakePlan` é **união discriminada**: `Quarantine | Retransmission | NewOpportunity`. Campos opcionais num plano único devolveriam as invariantes ao território da disciplina
+- [ ] `applyIntakePlan(ctx, plan)` em `packages/db` executa numa transação: `switch` exaustivo, **nenhuma** regra de negócio ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
+
+**Schema e idempotência**
+
 - [ ] `LeadSubmission` com `source`, `external_lead_id`, `received_at` e **`last_integration_event_id`** — **sem `raw`**. O payload é guardado uma vez, no `IntegrationEvent`; a submissão aponta para a transmissão mais recente em vez de repetir o conteúdo ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))
 - [ ] `external_lead_id` é `NOT NULL` — em Postgres `NULL` não colide com `NULL`, e sem valor a constraint não deduplicaria nada
 - [ ] `UNIQUE(workspace_id, source, external_lead_id)`
@@ -29,4 +39,5 @@ A idempotência tem um dono só: a constraint mais o worker. Nunca um pré-check
 - [ ] `financing_type`, `financial_institution` e `installment_amount` são anuláveis e não bloqueiam criação
 - [ ] Nenhuma Oportunidade jurídica é criada pela ingestão
 - [ ] Duas submissões simultâneas do mesmo `external_lead_id` produzem **uma** Oportunidade
-- [ ] **Seam 2 ponta a ponta**: lead inequívoco e lead com pendência resultam ambos em Pessoa + Oportunidade, o segundo com marcador; isolamento por workspace permanece provado
+- [ ] **Seam 1**: o `IntakePlan` de cada caso — inequívoco, com pendência, sem contato, retransmissão — sem banco e sem container. É aqui que a regra é provada
+- [ ] **Seam 2 ponta a ponta**: lead inequívoco e lead com pendência resultam ambos em Pessoa + Oportunidade, o segundo com marcador; isolamento por workspace permanece provado. O Seam 2 prova que o plano é **aplicado como descrito**, não qual plano é o certo

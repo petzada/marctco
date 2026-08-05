@@ -4,7 +4,8 @@ Status: ready-for-agent
 
 > Fatia vertical: Fases 0 e 1 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).
-> ADRs vinculantes: 0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011.
+> ADRs vinculantes: 0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011, 0016, 0017, 0018.
+> Correções de arquitetura aplicadas antes de codar: [correcoes-de-arquitetura.md](./correcoes-de-arquitetura.md).
 
 ---
 
@@ -144,6 +145,10 @@ Monorepo pnpm sem Turborepo ([ADR-0011](../../docs/adr/0011-monorepo-pnpm-e-domi
 
 Os conectores de origem vivem em `apps/worker`. Os payloads de exemplo do botão de teste ficam em `packages/domain`, como JSON estático.
 
+O **módulo de ingestão** mora em `packages/domain`, não no worker ([ADR-0017](../../docs/adr/0017-ingestao-como-decisao-e-plano.md)): ao contrário do conector, ele tem dois consumidores — o job do worker e o "completar e liberar" da tela de Integrações. Um consumidor é pasta; dois é pacote.
+
+`packages/db` **não exporta o client do Prisma** ([ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)). Exporta operações nomeadas recebendo `AccessContext`, com `SET LOCAL`, escopo de papel, keyset e índice do lado de dentro. O client cru é interno e o CI reprova import de fora.
+
 ### Nomenclatura
 
 Código em inglês, UI em PT-BR ([ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md)). Colunas em `snake_case`, enums em `SCREAMING_SNAKE_CASE`, sem acento em identificador. **Todo model precisa de linha na tabela de mapeamento do ADR-0005** — model sem linha lá é model com nome improvisado.
@@ -190,6 +195,9 @@ Duas camadas ([ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md)): e
 - Na sessão do navegador o workspace vem do segmento de URL e é **validado** contra `WorkspaceMember` antes do GUC; o que não corresponde a uma associação devolve 404 e fica registrado. Na ingestão o `workspace_id` do corpo é **ignorado**. Validar e ignorar não são a mesma regra ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)).
 - O worker roda **sob RLS**, com o claim vindo do job. Se o evento não pertencer àquele workspace, a leitura devolve zero linhas e o job falha alto.
 - Transação **nunca** envolve chamada de rede externa.
+- **`AccessContext` é construído num ponto só** por requisição ou por job, e é argumento obrigatório de toda operação de `packages/db`. Receber o papel não basta: um helper que devolvesse o client tornaria o `role` inerte, e a RLS **não pega** escopo de papel — um atendente vendo a carteira inteira é leitura legítima dentro do tenant certo ([ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)).
+- **Duas variantes**: `UserContext` (`workspace_id`, `user_id`, `role`) e `JobContext` (`workspace_id`, `integration_event_id`). O worker não tem usuário nem papel, e um contexto único o obrigaria a inventar um — papel sem escopo declarado é o que o ADR-0015 proíbe. Só `findPersonCandidates` e `applyIntakePlan` aceitam as duas; `listLeads(jobCtx)` não compila.
+- **As três consultas sem tenant não recebem contexto e não podem receber**: elas acontecem antes de existir workspace e são as que produzem o `workspace_id` que o constrói. Lista fechada de três, varrida pelo Seam 3.
 
 ### Contrato HTTP
 
@@ -221,6 +229,23 @@ Railway e Supabase na mesma região.
 O contrato canônico `v1` é validado de forma tolerante no worker e produz `InboundLead`. `normalize()` produz `NormalizedLead`. Dois tipos, não um: o compilador garante que a normalização aconteceu ([ADR-0008](../../docs/adr/0008-fronteira-conector-dominio.md)).
 
 O adapter conhece a **forma canônica**; o domínio conhece o **significado**. A Pluga faz o De→Para de Meta/Google; o conector sintetiza `external_lead_id` quando necessário. O domínio normaliza, decide quarentena, resolve inequivocamente ou abre revisão, e só então cria/associa Opportunity.
+
+A sequência é de três fases puras ([ADR-0017](../../docs/adr/0017-ingestao-como-decisao-e-plano.md)):
+
+```
+planSubmission(inbound)      → SubmissionKey       // source + external_lead_id
+   ↓ o chamador insere com ON CONFLICT DO NOTHING RETURNING id
+planPersonLookup(normalized) → PersonLookupPlan    // quais chaves buscar, e com que força
+decideIntake(input)          → IntakePlan          // Quarantine | Retransmission | NewOpportunity
+   ↓
+applyIntakePlan(ctx, plan)                          // packages/db, uma transação, switch exaustivo
+```
+
+Três fases e não uma porque o resultado do `ON CONFLICT` é **entrada** da decisão, não saída. `now` é argumento de `decideIntake`, nunca lido por dentro. E a variante `Retransmission` **não tem campo** de etapa, responsável, situação nem `arrived_at` — é assim que "retransmissão não rebobina" para de depender de disciplina.
+
+Os dois chamadores são o job do worker (`now` = `received_at`) e o route handler de "completar e liberar" (`now` = instante da liberação). É literalmente a mesma função.
+
+Na liberação o `InboundLead` vem **do formulário, não do conector**: o gestor lê o payload cru e preenche campos `v1`, com `source` e `external_lead_id` preservados do envio original. O conector fica em `apps/worker` e não é importado pelo app — ali não há forma de origem para interpretar, há um humano preenchendo o contrato.
 
 `external_lead_id` é `NOT NULL` sempre — em Postgres `NULL` não colide com `NULL`, e sem valor a constraint não deduplicaria nada. Quando a origem não fornece ID, o conector usa o **`IntegrationEvent.id`**: sem relógio dentro, único por requisição, estável sob qualquer reprocessamento.
 
@@ -273,11 +298,13 @@ Prisma Client é gerado em `packages/db`; o `postinstall` precisa garantir `pris
 
 **Um lead, um ícone.** Todos os avisos de um lead são alcançados por um único ponto de entrada na linha e no card, que abre a lista; três avisos são um ícone com contagem, nunca três rótulos. Os contadores-filtro continuam no topo e continuam por tipo — são perguntas diferentes. A regra vale para todo aviso que as fases seguintes acrescentarem.
 
+Quem responde "o que este lead tem" é `markersFor(opportunity, reviews)`, em `packages/domain` ([ADR-0018](../../docs/adr/0018-marcador-como-modulo.md)) — as três superfícies chamam a mesma função. Os contadores **não** passam por ela: vêm de `countLeadsByMarker` sobre o índice parcial, porque contar a partir da lista carregada contaria só a página.
+
 **Lacuna conhecida:** o `DESIGN.md` não documenta `popover` nem `tooltip`. Os componentes disponíveis são `button-icon`, `status-badge`, `dropdown-menu` e `modal`. A escolha entre reusar `dropdown-menu` e acrescentar um `popover` ao guia é do ticket 12, e precisa entrar no guia — não ser inventada dentro do componente.
 
 Toda rota autenticada vive sob `/workspace/:slug` ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)); `/onboarding` fica fora do prefixo, porque ali ainda não há workspace.
 
-**Fluxo de dados** ([ADR-0013](../../docs/adr/0013-fluxo-de-dados-no-app.md)): leitura em Server Component chamando o helper de transação; filtro e cursor na URL via `nuqs`; escrita em route handler sob `/workspace/:slug/...`, não em Server Action — o tenant precisa continuar estrutural também no caminho de escrita. Paginação **keyset**, nunca `OFFSET`. `@tanstack/react-query` entra na Fase 2, no Kanban e na remoção otimista da linha atribuída.
+**Fluxo de dados** ([ADR-0013](../../docs/adr/0013-fluxo-de-dados-no-app.md)): leitura em Server Component chamando `listLeads(ctx, …)` de `packages/db` — a tela não monta consulta ([ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)); filtro e cursor na URL via `nuqs`; escrita em route handler sob `/workspace/:slug/...`, não em Server Action — o tenant precisa continuar estrutural também no caminho de escrita. Paginação **keyset**, nunca `OFFSET`. `@tanstack/react-query` entra na Fase 2, no Kanban e na remoção otimista da linha atribuída.
 
 ---
 
@@ -293,6 +320,13 @@ Funções puras, sem container, sem banco. Rápido o bastante para cobrir casos 
 
 Cobre: contrato `v1` tolerante a extras; normalização de telefone, CPF, e-mail e moeda; preservação de múltiplos contatos; quarentena; recusa de liberação sem contato; associação inequívoca; conflito de identidade; **possível duplicado disparado por duas Oportunidades em aberto da mesma Pessoa, inclusive sem dado nenhum de financiamento**; `external_lead_id` derivado do `IntegrationEvent.id` produzindo a **mesma** chave para o mesmo evento processado duas vezes; três resoluções não destrutivas; definição dos funis padrão consumida tanto pelo seed de desenvolvimento quanto pelo provisionamento.
 
+Cobre também, por efeito do [ADR-0017](../../docs/adr/0017-ingestao-como-decisao-e-plano.md) e do [ADR-0018](../../docs/adr/0018-marcador-como-modulo.md):
+
+- **O `PersonLookupPlan`** — qual conjunto de chaves cada envio produz. Sem isto, um worker que busque só por telefone reconhece menos gente do que o ticket 08 promete e todo teste puro continua verde, porque é o teste que escolhe as candidatas que passa.
+- **O `IntakePlan` de cada caso**, incluindo **retransmissão inerte**: card que já avançou permanece, negócio perdido não reabre, responsável não muda. Era a regra mais fácil de errar e dependia do teste mais caro do projeto.
+- **Os dois `arrived_at` lado a lado** — recebimento direto e liberação da quarentena — como o mesmo argumento com valor diferente, e não como exceção escondida num caminho.
+- **`markersFor`**, inclusive o lead com três avisos.
+
 Este seam só existe porque `packages/domain` é puro. Se ele passar a importar Prisma, o seam morre.
 
 ### Seam 2 — Ingestão ponta a ponta
@@ -302,6 +336,8 @@ Este seam só existe porque `packages/domain` é puro. Se ele passar a importar 
 Cobre: 200 em JSON autenticado; 401 em token inválido; 400 em corpo inválido; tenant pelo token; outbox persistida antes do 200; Redis fora mantendo despacho pendente; dispatcher recuperando e publicando uma vez por `jobId`; **evento reprocessado depois de o Redis voltar não criando segunda Oportunidade**; retransmissão inerte, com a detecção por `ON CONFLICT DO NOTHING` permitindo que a transação **continue** e registre o reenvio; múltiplos contatos preservados; conflito de identidade criando Pessoa nova **com** Oportunidade e marcador; segunda Oportunidade em aberto da mesma Pessoa nascendo **ligada** à anterior mesmo sem dado de financiamento; cada uma das três resoluções, incluindo mesclagem por `merged_into_opportunity_id` com as FKs **repontadas**; mesclagem de Pessoas reavaliando a duplicidade; `arrived_at` igual ao `received_at` no caminho direto e igual à liberação para lead ex-quarentena; roteamento por `is_default` e por `target_pipeline_id`; quarentena sem contato; financiamento ausente sem bloquear; provisionamento criando Workspace, vínculo de dono e funil padrão **num commit só**.
 
 Redis real, e não processor inline, porque o seam precisa provar a independência entre aceite durável no PostgreSQL e despacho posterior no BullMQ.
+
+**Com o módulo de ingestão em `packages/domain`, este seam não perde cobertura — perde responsabilidade.** A pergunta "qual plano é o certo" desce para o Seam 1; aqui fica "o plano é aplicado como descrito, sob RLS, numa transação". Vale também para o "completar e liberar", que passa a exercitar a mesma função do job em vez de um caminho paralelo.
 
 ### Seam 3 — Invariantes de RLS e schema
 
@@ -315,6 +351,7 @@ Mais três varreduras, todas da mesma natureza — invariantes que nenhuma rota 
 - **Lista fechada de `SECURITY DEFINER`:** enumerar as funções do banco e **reprovar qualquer uma fora das três** nomeadas no [ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9. Sem esta varredura a lista é comentário, e a quarta função entra sem ninguém notar.
 - **Nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela.
 - **Toda tabela de negócio tem índice que sirva à sua listagem**, não só o `workspace_id` da policy.
+- **Nenhum import do client cru do Prisma fora de `packages/db`** — é o que impede o escopo de papel de voltar a ser convenção, e nenhuma rota o exercita ([ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)).
 
 Este seam é deliberadamente independente da fatia: seu propósito é reprovar a tabela que alguém criar daqui a meses e esquecer a policy, ou a que a Fase 5 acrescentar sem tratar mesclagem. Um teste de feature nunca pega isso, porque nenhuma rota toca a combinação.
 

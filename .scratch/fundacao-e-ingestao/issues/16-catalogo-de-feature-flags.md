@@ -17,6 +17,8 @@ Três entradas, e nenhuma a mais. Assinatura digital e funil jurídico **não** 
 - [ ] Liberação por workspace registrada em `workspace_flags`
 - [ ] A leitura de flag **exige `workspace_id` explícito** como argumento — não existe leitura de ambiente
 - [ ] Nenhum valor de flag resolvido em escopo de módulo, singleton ou cache sem chave de workspace: o worker processa vários tenants no mesmo processo
+- [ ] O `workspace_id` chega pelo **`AccessContext`**, que já é argumento obrigatório de toda operação de `packages/db` — a exigência acima deixa de depender de cada chamador lembrar ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
+- [ ] Na **Fase 4**, as flags resolvidas passam a viajar dentro do mesmo `AccessContext` — nas duas variantes, porque o worker também consome flag. Nesta fatia o objeto nasce sem elas, com lugar para entrarem sem tocar chamada nenhuma
 - [ ] Ausência de linha significa **desligado** (fail-closed) — as três flags gastam dinheiro por uso
 - [ ] O catálogo **nunca** é embarcado no cliente; o browser recebe apenas o resultado resolvido para o seu workspace
 - [ ] O guard é do servidor: rota, consulta ou job recusam por conta própria. Esconder elemento de interface não é controle de acesso

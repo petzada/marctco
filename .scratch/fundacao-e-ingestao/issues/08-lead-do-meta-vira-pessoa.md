@@ -19,6 +19,8 @@ O reconhecimento de pessoa recorrente é o coração deste ticket. O cliente ate
 - [ ] `packages/domain` não importa Prisma e não faz I/O
 - [ ] O conector `v1` vive em `apps/worker`, não em `packages/domain`
 - [ ] `InboundLead` → `normalize()` → `NormalizedLead`: dois tipos, com Zod como fonte única e tipo TypeScript inferido
+- [ ] **`planPersonLookup(normalized) → PersonLookupPlan`**: quem decide **por quais chaves buscar** é o domínio, não a consulta do worker. "CPF é forte, telefone só sem contradição, e-mail isolado é fraco" decide o que buscar, não apenas como arbitrar depois ([ADR-0017](../../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
+- [ ] O plano é **dado inerte** — nenhuma porta, nenhum callback, nenhuma promise entra em `packages/domain`. Quem executa a busca é `findPersonCandidates(ctx, plan)` em `packages/db`, uma das duas operações que aceitam tanto `UserContext` quanto `JobContext`, porque a ingestão tem dois chamadores ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
 - [ ] Telefone gravado em E.164, com Brasil como país padrão — o país padrão é conhecimento do domínio, não do conector
 - [ ] CPF gravado só com dígitos, com dígito verificador validado
 - [ ] E-mail gravado em minúsculas
@@ -32,3 +34,4 @@ O reconhecimento de pessoa recorrente é o coração deste ticket. O cliente ate
 - [ ] Nenhum contato anterior é sobrescrito ao receber um novo
 - [ ] Sem nenhuma das três chaves, **não** cria Pessoa — único caso em que a ingestão não produz Oportunidade
 - [ ] **Seam 1**: casos de borda de telefone brasileiro, CPF inválido, caixa de e-mail e conflito de chaves, sem banco e sem container
+- [ ] **Seam 1 cobre também o `PersonLookupPlan`**: qual conjunto de chaves cada envio produz. Sem isso, um worker que busque só por telefone reconhece menos gente do que este ticket promete e **todo teste puro continua verde**, porque é o teste que escolhe as candidatas que passa

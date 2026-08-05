@@ -15,7 +15,8 @@ Na UI o card se chama **Lead**; no domínio é sempre Oportunidade. Não existe 
 ## Acceptance criteria
 
 - [ ] Tabela paginada mostrando exclusivamente leads do workspace do usuário, na rota `/workspace/:slug/leads` ([ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na-url.md))
-- [ ] **Leitura em Server Component**, chamando o helper de transação; **nenhum endpoint** para a listagem ([ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md))
+- [ ] **Leitura em Server Component**, chamando `listLeads(ctx, cursor, filters)` de `packages/db`; **nenhum endpoint** para a listagem ([ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md))
+- [ ] A tela **não** monta consulta: keyset, índice parcial e escopo do `ATTENDANT` vivem dentro de `listLeads` e `countLeadsByMarker`. Uma tela que pudesse escrever `skip:` passaria no CI inteiro, e o defeito seria lead sumindo da triagem em silêncio ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
 - [ ] Filtros, cursor e marcador ativo vivem na **URL** via `nuqs` — de quebra, toda vista vira link compartilhável com o time
 - [ ] **Paginação keyset por `(arrived_at, id)`**, nunca `OFFSET`. Com lead entrando no topo a cada poucos minutos, `OFFSET` faz a lista deslocar entre uma página e outra: o gestor revê um lead e **nunca vê** o que caiu na fronteira. É correção, não desempenho
 - [ ] Sem "página N de M" e sem `COUNT(*)` de total geral — o keyset não precisa deles
@@ -31,7 +32,11 @@ Na UI o card se chama **Lead**; no domínio é sempre Oportunidade. Não existe 
 - [ ] Leads com revisão pendente **aparecem normalmente** na tabela — nunca escondidos numa fila
 - [ ] **Um lead, um ícone**: todos os avisos de um lead (sem telefone, identidade em conflito, possível duplicado, e o que as fases seguintes acrescentarem) são alcançados por um **único** ponto de entrada na linha e no card, que abre a lista. Três avisos são um ícone com contagem, **nunca** três rótulos na linha — a tabela é de triagem em volume alto e deixa de ser legível justamente quando mais precisa ser
 - [ ] O padrão vale para todo aviso futuro, não só para os desta fatia
+- [ ] **`markersFor(opportunity, reviews) → Marker[]` em `packages/domain`** é quem responde "o que este lead tem". As três superfícies — linha, card e comparação — chamam a mesma função; nenhuma remonta a agregação por conta própria ([ADR-0018](../../../docs/adr/0018-marcador-como-modulo.md))
+- [ ] Ordem e critério de "o que conta como aviso" são do domínio; rótulo PT-BR e ícone são da UI. Acrescentar aviso na Fase 2 é uma variante no tipo, e o `switch` da UI quebra no compilador
+- [ ] **Seam 1** cobre a agregação, inclusive o lead com três avisos
 - [ ] Contador-filtro de pendências na própria tabela, no mesmo padrão do contador de "sem telefone". Contadores continuam **por tipo** e vivem no topo, fora da linha: eles respondem "quais leads têm este aviso"; o ícone responde "o que este lead tem"
+- [ ] **Os contadores não passam por `markersFor`** — vêm de `countLeadsByMarker` sobre o índice parcial. Computá-los a partir da lista carregada contaria só a página, ou obrigaria a carregar a tabela toda ([ADR-0018](../../../docs/adr/0018-marcador-como-modulo.md))
 - [ ] **Escolher a superfície de exibição no `DESIGN.md` antes de codar**: o guia não documenta `popover` nem `tooltip`. Os componentes disponíveis são `button-icon`, `status-badge`, `dropdown-menu` e `modal`. Reusar `dropdown-menu` ou acrescentar um `popover` ao guia — mas registrar no guia, não inventar dentro do componente
 - [ ] Abrir um lead com possível duplicado mostra a outra Oportunidade e seu responsável
 - [ ] **A resolução acontece aqui**, não em Integrações: possível duplicado oferece `NEW_FINANCING`, `SAME_FINANCING` e `INVALID_OR_SPAM`; conflito de identidade oferece mesclar numa candidata ou confirmar pessoas distintas

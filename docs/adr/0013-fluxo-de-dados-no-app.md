@@ -1,5 +1,7 @@
 # Fluxo de dados no app: Server Component lê, route handler escreve
 
+> *Emendado pelo [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md).* Continua valendo que Server Component lê chamando `packages/db` direto, sem endpoint por tela. O que muda é **o que a chamada devolve**: leituras nomeadas recebendo `AccessContext`, não o client transacional do Prisma. Keyset, índice parcial e escopo de papel passam a viver dentro dessas funções, em vez de dependerem de cada tela repeti-los.
+
 A leitura acontece em **Server Component**, chamando direto o helper de transação de `packages/db`. Filtro, paginação e contadores vivem na **URL**, via `nuqs`. A escrita acontece em **route handler sob `/workspace/:slug/...`** — não em Server Action. A paginação é **keyset**, nunca `OFFSET`. Escrita concorrente é arbitrada por **condição no `WHERE`**, nunca por leitura anterior. `@tanstack/react-query` entra na Fase 2, onde ganha o lugar.
 
 **Status:** accepted · 2026-08-05

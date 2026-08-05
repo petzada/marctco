@@ -26,3 +26,4 @@ O segredo nunca vai no JavaScript do formulário. O gestor entrega URL e token a
 - [ ] Meta e Google ficam simétricos no registro: mesma normalização, mesmas regras, mesmo funil
 - [ ] Origem do lead visível no card e na tabela
 - [ ] Os três conectores compartilham o domínio: nenhum deles normaliza por conta própria
+- [ ] Os três entram no **mesmo módulo de ingestão** — `planPersonLookup` → `decideIntake` → `applyIntakePlan`. O conector continua em `apps/worker` e continua sintetizando `external_lead_id`; o que ele **não** faz é sequenciar escrita ([ADR-0017](../../../docs/adr/0017-ingestao-como-decisao-e-plano.md))

@@ -21,6 +21,8 @@ Isto é contraintuitivo o bastante para alguém tentar "consertar" parseando no 
 | Sintetiza `external_lead_id` quando a origem não fornece | Decide reúso de Person |
 | Não conhece funil, Person, Opportunity nem etapa | Decide criar Opportunity, associar com prova ou abrir revisão |
 
+*Emendado pelo [ADR-0017](./0017-ingestao-como-decisao-e-plano.md).* A coluna do domínio ganha mais duas linhas, que estavam por omissão no worker: **decide quais chaves buscar** para resolver a Pessoa (`PersonLookupPlan`) e **descreve todas as escritas** que a submissão produz (`IntakePlan`). A coluna do conector não muda — ele continua em `apps/worker`, continua sintetizando `external_lead_id` e continua sem conhecer funil, Person nem Opportunity.
+
 **Normalização é do domínio, não do adapter** — não por pureza: normalizar telefone exige país default (Brasil). Com normalização no adapter, ou a regra se repete em três lugares até divergirem, ou o adapter passa a carregar conhecimento de negócio que não é dele. `sintese-final.md` §17 já trata dado normalizado como garantia do CRM.
 
 ## Dois tipos, não um

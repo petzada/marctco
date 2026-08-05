@@ -1,0 +1,48 @@
+{
+  "name": "marctco",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.32.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "@sentry/cli",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma",
+      "sharp"
+    ]
+  },
+  "scripts": {
+    "postinstall": "pnpm --filter @marctco/db generate",
+    "build": "pnpm --filter @marctco/domain build && pnpm --filter @marctco/db build && pnpm --filter @marctco/web build && pnpm --filter @marctco/worker build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint . --max-warnings=0 && node scripts/check-prisma-imports.mjs",
+    "test": "vitest run",
+    "test:unit": "vitest run --project domain",
+    "test:db": "vitest run --project db",
+    "test:a7": "vitest run --project a7",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down -v",
+    "db:migrate:dev": "node scripts/prisma-safe.mjs migrate dev",
+    "db:migrate:deploy": "node scripts/prisma-safe.mjs migrate deploy",
+    "db:drift": "node scripts/check-prisma-drift.mjs",
+    "db:roles:local": "node scripts/set-local-role-passwords.mjs",
+    "check:migrations": "node scripts/check-migration-safety.mjs",
+    "ship": "node scripts/ship.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@types/node": "24.10.1",
+    "eslint": "9.39.2",
+    "globals": "16.5.0",
+    "tsx": "4.23.7",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.66.0",
+    "vitest": "4.0.18"
+  }
+}

@@ -1,0 +1,10 @@
+.git
+.github
+.scratch
+node_modules
+**/node_modules
+**/.next
+**/dist
+.env*
+PROMPT-GOAL-IMPLEMENTACAO.md
+

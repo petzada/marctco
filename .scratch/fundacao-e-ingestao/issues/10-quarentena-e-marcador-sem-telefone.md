@@ -24,4 +24,6 @@ O marcador significa **exatamente uma coisa**: não dá para chamar no WhatsApp 
 - [ ] O estado de quarentena vive no evento de integração; o marcador vive na Oportunidade — os dois **não** são o mesmo campo
 - [ ] Sair da quarentena **exige ao menos um contato** — não existe liberação de envio sem telefone e sem e-mail. A regra tem uma dona só: liberar vazio criaria `Person` sem chave, que a resolução de identidade nunca mais alcança, e card que ninguém consegue atender
 - [ ] O `arrived_at` do lead liberado é o instante da **liberação**; a quarentena é o único lugar do sistema onde algo fica retido, e um relógio que nasce estourado não tem como ser zerado ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
+- [ ] **Quarentena é uma variante do `IntakePlan`, não um desvio antes dele**: `decideIntake` devolve `Quarantine` quando não há contato, e a liberação chama a **mesma** função com `now` = instante da liberação. O `arrived_at` divergente deixa de ser exceção escondida num caminho e vira o mesmo argumento com valor diferente ([ADR-0017](../../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
+- [ ] **Seam 1** prova os dois `arrived_at` lado a lado — recebimento direto e liberação — sem banco
 - [ ] A interface de completar e liberar está no ticket 14
