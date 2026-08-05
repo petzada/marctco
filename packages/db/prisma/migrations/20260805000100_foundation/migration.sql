@@ -14,6 +14,18 @@ BEGIN
 END
 $roles$;
 
+-- Supabase's postgres role is intentionally not a superuser. The role creator
+-- needs explicit SET membership before it can create objects as the migrator.
+GRANT marctco_migrator TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
+DO $migration_history$
+BEGIN
+  IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE
+      ON TABLE public._prisma_migrations TO marctco_migrator;
+  END IF;
+END
+$migration_history$;
+
 GRANT USAGE, CREATE ON SCHEMA public TO marctco_migrator;
 GRANT USAGE ON SCHEMA public TO marctco_app, marctco_worker;
 CREATE SCHEMA private;
@@ -61,11 +73,11 @@ CREATE POLICY workspace_members_workspace_isolation ON workspace_members
   USING (workspace_id = (SELECT current_setting('app.workspace_id', true))::uuid)
   WITH CHECK (workspace_id = (SELECT current_setting('app.workspace_id', true))::uuid);
 
-RESET ROLE;
-
 GRANT USAGE ON TYPE workspace_role TO marctco_app, marctco_worker;
 GRANT SELECT, INSERT, UPDATE ON TABLE workspaces, workspace_members TO marctco_app, marctco_worker;
 ALTER DEFAULT PRIVILEGES FOR ROLE marctco_migrator IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE ON TABLES TO marctco_app, marctco_worker;
 ALTER DEFAULT PRIVILEGES FOR ROLE marctco_migrator IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO marctco_app, marctco_worker;
+
+RESET ROLE;
