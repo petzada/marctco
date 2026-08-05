@@ -17,8 +17,10 @@ function sanitizeLogArguments(arguments_: unknown[]): unknown[] {
 
 function protectChildBindings(logger: Logger): Logger {
   const child = logger.child.bind(logger);
-  logger.child = ((bindings: Bindings, options?: ChildLoggerOptions) =>
-    protectChildBindings(child(sanitizeTelemetry(bindings), options))) as unknown as Logger["child"];
+  logger.child = ((bindings: Bindings, options?: ChildLoggerOptions) => {
+    const safe_options = options?.level ? { level: options.level } : undefined;
+    return protectChildBindings(child(sanitizeTelemetry(bindings), safe_options));
+  }) as unknown as Logger["child"];
   return logger;
 }
 

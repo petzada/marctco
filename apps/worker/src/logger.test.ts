@@ -17,13 +17,20 @@ describe("safe worker logger", () => {
         { Person: { email: "pii@example.com" }, submission: { phone: "5511999999999" } },
         "failed"
       );
+    logger
+      .child(
+        { workspace_id: "workspace-safe" },
+        { serializers: { workspace_id: () => ({ cpf: "98765432100" }) } }
+      )
+      .info("child serializer ignored");
 
-    expect(output).toHaveLength(1);
+    expect(output).toHaveLength(2);
     expect(output[0]).toContain('"workspace_id":"workspace-safe"');
     expect(output[0]).not.toContain("12345678909");
     expect(output[0]).not.toContain("pii@example.com");
     expect(output[0]).not.toContain("5511999999999");
     expect(output[0]).not.toContain("Person");
     expect(output[0]).not.toContain("submission");
+    expect(output.join("\n")).not.toContain("98765432100");
   });
 });

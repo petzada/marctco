@@ -140,8 +140,12 @@ describe("Seam 3: RLS and schema invariants", () => {
       "private.provision_workspace",
       "private.resolve_workspace_by_token_hash"
     ]);
+    const function_names = functions.map((row) => `${row.schema_name}.${row.function_name}`);
+    expect(new Set(function_names).size, "SECURITY DEFINER overloads are forbidden").toBe(
+      function_names.length
+    );
     expect(
-      functions.filter((row) => !allowed.has(`${row.schema_name}.${row.function_name}`))
+      function_names.filter((function_name) => !allowed.has(function_name))
     ).toEqual([]);
   });
 
