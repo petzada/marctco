@@ -51,6 +51,13 @@ try {
       ) AS migrator_private_definer_membership,
       EXISTS(
         SELECT 1
+        FROM pg_namespace AS namespace
+        INNER JOIN pg_roles AS owner ON owner.oid = namespace.nspowner
+        WHERE namespace.nspname = 'private'
+          AND owner.rolname = 'marctco_migrator'
+      ) AS private_schema_migrator_owned,
+      EXISTS(
+        SELECT 1
         FROM pg_proc AS proc
         INNER JOIN pg_namespace AS namespace ON namespace.oid = proc.pronamespace
         WHERE namespace.nspname = 'private'
@@ -75,6 +82,7 @@ try {
   const authArtifacts = auth_rows[0] ?? {
     private_definer_role_exists: false,
     migrator_private_definer_membership: false,
+    private_schema_migrator_owned: false,
     resolve_user_workspaces_exists: false,
     definer_policies: []
   };

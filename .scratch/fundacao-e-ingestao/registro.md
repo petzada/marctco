@@ -199,3 +199,15 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **Descobertas que afetam tickets seguintes:** Run 31029352341 confirma que CREATE ROLE humano + recovery do PR #11 não bastam; qualquer papel técnico `NOLOGIN` criado por `postgres` precisa também do GRANT membership manual antes do redeploy enquanto o secret de release for `marctco_migrator`.
 - **Documentos emendados:** ADR-0010, `acoes-manuais-pendentes.md`, este registro.
 - **Precisa de mão humana:** 1. Executar como `postgres` o `GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE` em `acoes-manuais-pendentes.md`. 2. Mesclar o PR de recovery e re-run Production migration **somente depois** do passo 1.
+
+### Recuperação production migration 002 — schema private — PARCIAL
+
+- **O que foi construído:** Após o merge do PR #12, produção falhou nos `GRANT`/`CREATE FUNCTION` sobre o schema `private` porque a foundation deixou o schema owned by `postgres` e o release roda como `marctco_migrator`. A 002 passou a fazer `SET ROLE marctco_migrator` antes dos grants de schema, consultar `has_schema_privilege` para pular grants já concedidos, e o recovery fail-closed reconhece `permission denied for schema private`, exige ownership de `private` por `marctco_migrator`, e marca `rolled-back` antes do redeploy.
+- **Arquivos-chave criados/alterados:** `packages/db/prisma/migrations/20260805000200_authentication_workspace_context/migration.sql` — ordem SET ROLE + grants idempotentes.<br>`packages/db/src/foundation-recovery.ts` — terceiro erro conhecido e `PRIVATE_SCHEMA_OWNER_SQL`.<br>`packages/db/src/recover-foundation-cli.ts` — auditoria de ownership do schema.<br>`packages/db/src/foundation-recovery.test.ts` — casos schema private.<br>`docs/adr/0010-migrations-e-ci-cd.md` — bootstrap ownership do schema.<br>`.scratch/fundacao-e-ingestao/acoes-manuais-pendentes.md` — SQL humano do passo 3.
+- **Critérios de aceite:** Recovery cobre schema private; migration pula grants existentes; aborta sem ownership; resolve quando pré-condições satisfeitas.
+- **Testes:** `foundation-recovery.test.ts` expandido; suíte local e CI a validar no PR.
+- **Branch / PR:** `ticket/06-recover-private-schema-grant`; PR a abrir após CI verde.
+- **Decisões que tomei sozinho:** Preferência A (reordenar 002 + grants idempotentes) em vez de migration corretiva 010, porque a 002 ainda não aplicou. Ownership humano via `ALTER SCHEMA` é inevitável enquanto a foundation applied não puder ser reeditada.
+- **Descobertas que afetam tickets seguintes:** Run 31029997919 confirma três bootstraps humanos encadeados para a 002 em Supabase gerenciado: CREATE ROLE, GRANT membership, ALTER SCHEMA OWNER. Migrations futuras que manipulem o schema `private` assumem `marctco_migrator` como owner após o passo 3.
+- **Documentos emendados:** ADR-0010, `acoes-manuais-pendentes.md`, este registro.
+- **Precisa de mão humana:** 1. Executar como `postgres` o `ALTER SCHEMA private OWNER TO marctco_migrator` em `acoes-manuais-pendentes.md` (passos 1–2 já feitos nos PRs #11/#12). 2. Mesclar o PR de recovery e re-run Production migration **somente depois** do passo 3.

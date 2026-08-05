@@ -24,12 +24,22 @@ BEGIN
   END IF;
 END
 $grant_migrator$;
--- PostgreSQL requires CREATE on the containing schema while ownership is
--- transferred. It is revoked immediately after the function is owned.
-GRANT USAGE, CREATE ON SCHEMA private TO marctco_private_definer;
-GRANT USAGE ON SCHEMA private TO marctco_app;
 
 SET ROLE marctco_migrator;
+
+-- Schema private is created in the foundation migration before SET ROLE, so in
+-- managed Postgres it stays owned by postgres until a one-time human bootstrap
+-- transfers ownership. Grants must run as the schema owner (marctco_migrator).
+DO $schema_grants$
+BEGIN
+  IF NOT has_schema_privilege('marctco_private_definer', 'private', 'CREATE') THEN
+    GRANT USAGE, CREATE ON SCHEMA private TO marctco_private_definer;
+  END IF;
+  IF NOT has_schema_privilege('marctco_app', 'private', 'USAGE') THEN
+    GRANT USAGE ON SCHEMA private TO marctco_app;
+  END IF;
+END
+$schema_grants$;
 
 GRANT SELECT ON TABLE workspaces, workspace_members TO marctco_private_definer;
 

@@ -1,10 +1,10 @@
 # Ações manuais pendentes — fundação e ingestão
 
-> Atualizado após run 31029352341 (2026-08-05).
+> Atualizado após run 31029997919 (2026-08-05).
 
-## Ticket 04/06 — Production migration 002 (CRÍTICO)
+## Ticket 06 — Production migration 002 (CRÍTICO)
 
-A migration `20260805000200_authentication_workspace_context` falhou em produção porque `marctco_migrator` não tem privilégio para `GRANT` do papel `marctco_private_definer`. O `CREATE ROLE` já foi bootstrapado manualmente (recovery do PR #11); o histórico Prisma deixou a 002 como failed/unresolved.
+A migration `20260805000200_authentication_workspace_context` falhou em produção com `permission denied for schema private`. Os passos 1 e 2 (CREATE ROLE + GRANT membership) já foram bootstrapados manualmente; o schema `private` continua owned by `postgres` porque a foundation o criou antes de `SET ROLE marctco_migrator`.
 
 **Ordem obrigatória:**
 
@@ -14,17 +14,23 @@ A migration `20260805000200_authentication_workspace_context` falhou em produç�
 CREATE ROLE marctco_private_definer NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 ```
 
-2. Ainda como `postgres`, executar **uma vez** o membership que só o criador do role pode conceder:
+2. Ainda como `postgres`, confirmar o membership (passo do PR #12 — **não reexecutar** se já existir):
 
 ```sql
 GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE;
 ```
 
-3. Mesclar o PR de recovery (`ticket/06-recover-private-definer-grant`) e re-executar o job **Production migration** na `main` já com o recovery mergeado.
+3. Ainda como `postgres`, executar **uma vez** a transferência de ownership do schema:
 
-4. O job roda `pnpm db:recover:foundation`, marca a 002 como `rolled-back` somente se o papel existir, o membership estiver concedido e não houver artefatos residuais da 002, e então `pnpm db:migrate:deploy` reaplica a 002 — os blocos `IF NOT EXISTS` pulam `CREATE ROLE` e `GRANT`, e concluem grants, policies e `private.resolve_user_workspaces`.
+```sql
+ALTER SCHEMA private OWNER TO marctco_migrator;
+```
 
-**Sem o SQL do passo 2**, o recovery aborta fail-closed e o deploy não prossegue.
+4. Mesclar o PR de recovery (`ticket/06-recover-private-schema-grant`) e re-executar o job **Production migration** na `main` já com o recovery mergeado.
+
+5. O job roda `pnpm db:recover:foundation`, marca a 002 como `rolled-back` somente se o papel existir, o membership estiver concedido, `private` for owned by `marctco_migrator`, e não houver artefatos residuais da 002; então `pnpm db:migrate:deploy` reaplica a 002 — os blocos idempotentes pulam role/membership já bootstrapados, e concluem grants de schema, policies e `private.resolve_user_workspaces`.
+
+**Sem o SQL do passo 3**, o recovery aborta fail-closed e o deploy não prossegue.
 
 ## Adiável para tickets 07 / 15
 

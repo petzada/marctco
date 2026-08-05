@@ -7,6 +7,7 @@ import {
   FOUNDATION_MIGRATION_NAME,
   PRIVATE_DEFINER_BOOTSTRAP_SQL,
   PRIVATE_DEFINER_GRANT_SQL,
+  PRIVATE_SCHEMA_OWNER_SQL,
   type AuthWorkspaceRecoveryState,
   type FoundationRecoveryState
 } from "./foundation-recovery.js";
@@ -43,6 +44,32 @@ const pristineAuthFailure: AuthWorkspaceRecoveryState = {
   artifacts: {
     private_definer_role_exists: true,
     migrator_private_definer_membership: true,
+    private_schema_migrator_owned: true,
+    resolve_user_workspaces_exists: false,
+    definer_policies: []
+  }
+};
+
+const pristineAuthSchemaPrivateFailure: AuthWorkspaceRecoveryState = {
+  history_table_exists: true,
+  migrations: [
+    {
+      migration_name: FOUNDATION_MIGRATION_NAME,
+      finished_at: new Date(),
+      rolled_back_at: null,
+      logs: null
+    },
+    {
+      migration_name: AUTH_WORKSPACE_MIGRATION_NAME,
+      finished_at: null,
+      rolled_back_at: null,
+      logs: "ERROR: permission denied for schema private"
+    }
+  ],
+  artifacts: {
+    private_definer_role_exists: true,
+    migrator_private_definer_membership: true,
+    private_schema_migrator_owned: true,
     resolve_user_workspaces_exists: false,
     definer_policies: []
   }
@@ -68,6 +95,7 @@ const pristineAuthGrantFailure: AuthWorkspaceRecoveryState = {
   artifacts: {
     private_definer_role_exists: true,
     migrator_private_definer_membership: true,
+    private_schema_migrator_owned: true,
     resolve_user_workspaces_exists: false,
     definer_policies: []
   }
@@ -176,6 +204,28 @@ describe("authentication workspace migration recovery", () => {
       action: "resolve-rolled-back",
       migration_name: AUTH_WORKSPACE_MIGRATION_NAME
     });
+  });
+
+  it("allows rollback resolution for permission denied for schema private when migrator owns the schema", () => {
+    expect(decideAuthWorkspaceRecovery(pristineAuthSchemaPrivateFailure)).toEqual({
+      action: "resolve-rolled-back",
+      migration_name: AUTH_WORKSPACE_MIGRATION_NAME
+    });
+  });
+
+  it("aborts with schema owner SQL when schema private failed and migrator does not own the schema", () => {
+    const decision = decideAuthWorkspaceRecovery({
+      ...pristineAuthSchemaPrivateFailure,
+      artifacts: {
+        ...pristineAuthSchemaPrivateFailure.artifacts,
+        private_schema_migrator_owned: false
+      }
+    });
+    expect(decision.action).toBe("abort");
+    if (decision.action === "abort") {
+      expect(decision.reason).toContain(PRIVATE_SCHEMA_OWNER_SQL);
+      expect(decision.reason).toContain("Supabase SQL Editor");
+    }
   });
 
   it("aborts with bootstrap SQL when marctco_private_definer is missing", () => {
