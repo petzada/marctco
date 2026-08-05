@@ -84,7 +84,12 @@ describe("A7 mechanical checks", () => {
     expect(result).toEqual({ duplicate: [], continued: [{ value: 1 }] });
   });
 
-  it("does not report the private schema as Prisma drift", () => {
+  it("does not report the existing private schema as Prisma drift", async () => {
+    const schemas = await client.$queryRaw<Array<{ schema_name: string | null }>>`
+      SELECT to_regnamespace('private')::text AS schema_name
+    `;
+    expect(schemas).toEqual([{ schema_name: "private" }]);
+
     const repository_root = fileURLToPath(new URL("../../..", import.meta.url));
     const pnpm = process.env.npm_execpath;
     if (!pnpm) {

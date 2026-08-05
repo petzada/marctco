@@ -16,6 +16,9 @@ $roles$;
 
 GRANT USAGE, CREATE ON SCHEMA public TO marctco_migrator;
 GRANT USAGE ON SCHEMA public TO marctco_app, marctco_worker;
+CREATE SCHEMA private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA private TO marctco_migrator;
 
 SET ROLE marctco_migrator;
 
@@ -66,4 +69,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE marctco_migrator IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE ON TABLES TO marctco_app, marctco_worker;
 ALTER DEFAULT PRIVILEGES FOR ROLE marctco_migrator IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO marctco_app, marctco_worker;
-

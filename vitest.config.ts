@@ -7,7 +7,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "domain",
-          include: ["packages/domain/src/**/*.test.ts"]
+          include: ["packages/domain/src/**/*.test.ts", "apps/worker/src/**/*.test.ts"]
         }
       },
       {

@@ -10,12 +10,31 @@ if (!database_url) {
 const client = new PrismaClient({ datasources: { db: { url: database_url } } });
 const workspace_a = randomUUID();
 const workspace_b = randomUUID();
+const isolation_cases = [
+  {
+    table_name: "workspace_members",
+    read_sql:
+      "SELECT workspace_id AS tenant_id FROM workspace_members ORDER BY workspace_id",
+    write_sql: `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('${workspace_b}', '${randomUUID()}', 'ATTENDANT')`
+  },
+  {
+    table_name: "workspaces",
+    read_sql: "SELECT id AS tenant_id FROM workspaces ORDER BY id",
+    write_sql: `INSERT INTO workspaces (id, slug, name, updated_at) VALUES ('${randomUUID()}', '${randomUUID()}', 'Cross-workspace', CURRENT_TIMESTAMP)`
+  }
+] as const;
 
 beforeAll(async () => {
   await client.workspace.createMany({
     data: [
       { id: workspace_a, slug: randomUUID(), name: "Workspace A" },
       { id: workspace_b, slug: randomUUID(), name: "Workspace B" }
+    ]
+  });
+  await client.workspaceMember.createMany({
+    data: [
+      { workspace_id: workspace_a, user_id: randomUUID(), role: "ATTENDANT" },
+      { workspace_id: workspace_b, user_id: randomUUID(), role: "ATTENDANT" }
     ]
   });
 });
@@ -50,6 +69,9 @@ describe("Seam 3: RLS and schema invariants", () => {
     `;
 
     expect(rows.map((row) => row.table_name)).toEqual(["workspace_members", "workspaces"]);
+    expect(isolation_cases.map((test_case) => test_case.table_name)).toEqual(
+      rows.map((row) => row.table_name)
+    );
     for (const row of rows) {
       expect(row.enabled, row.table_name).toBe(true);
       expect(row.forced, row.table_name).toBe(true);
@@ -57,24 +79,25 @@ describe("Seam 3: RLS and schema invariants", () => {
     }
   });
 
-  it("returns no cross-workspace rows and refuses a cross-workspace insert", async () => {
-    const visible = await client.$transaction(async (transaction) => {
-      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
-      await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
-      return transaction.$queryRaw<Array<{ id: string }>>`SELECT id FROM workspaces ORDER BY id`;
-    });
-    expect(visible).toEqual([{ id: workspace_a }]);
-
-    await expect(
-      client.$transaction(async (transaction) => {
+  it.each(isolation_cases)(
+    "$table_name returns no cross-workspace rows and refuses a cross-workspace insert",
+    async ({ read_sql, write_sql }) => {
+      const visible = await client.$transaction(async (transaction) => {
         await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
         await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
-        await transaction.$executeRawUnsafe(
-          `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('${workspace_b}', '${randomUUID()}', 'ATTENDANT')`
-        );
-      })
-    ).rejects.toThrow(/row-level security policy/i);
-  });
+        return transaction.$queryRawUnsafe<Array<{ tenant_id: string }>>(read_sql);
+      });
+      expect(visible).toEqual([{ tenant_id: workspace_a }]);
+
+      await expect(
+        client.$transaction(async (transaction) => {
+          await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+          await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
+          await transaction.$executeRawUnsafe(write_sql);
+        })
+      ).rejects.toThrow(/row-level security policy/i);
+    }
+  );
 
   it("keeps runtime roles non-privileged and business tables owned by the migrator", async () => {
     const roles = await client.$queryRaw<
@@ -99,19 +122,27 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(owners.every((row) => row.owner_name === "marctco_migrator")).toBe(true);
   });
 
-  it("allows only the three declared SECURITY DEFINER function names", async () => {
-    const functions = await client.$queryRaw<Array<{ function_name: string }>>`
-      SELECT routine_name::text AS function_name
-      FROM information_schema.routines
-      WHERE routine_schema = 'private' AND security_type = 'DEFINER'
-      ORDER BY routine_name
+  it("allows SECURITY DEFINER only in private and only for the three declared names", async () => {
+    const functions = await client.$queryRaw<
+      Array<{ schema_name: string; function_name: string }>
+    >`
+      SELECT namespace.nspname::text AS schema_name, procedure.proname::text AS function_name
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE procedure.prosecdef
+        AND namespace.nspname <> 'information_schema'
+        AND namespace.nspname <> 'pg_catalog'
+        AND namespace.nspname NOT LIKE 'pg_toast%'
+      ORDER BY namespace.nspname, procedure.proname
     `;
     const allowed = new Set([
-      "claim_pending_events",
-      "provision_workspace",
-      "resolve_workspace_by_token_hash"
+      "private.claim_pending_events",
+      "private.provision_workspace",
+      "private.resolve_workspace_by_token_hash"
     ]);
-    expect(functions.filter((row) => !allowed.has(row.function_name))).toEqual([]);
+    expect(
+      functions.filter((row) => !allowed.has(`${row.schema_name}.${row.function_name}`))
+    ).toEqual([]);
   });
 
   it("has an index whose leading column scopes every business table by workspace", async () => {
@@ -134,4 +165,3 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(rows.every((row) => row.indexed)).toBe(true);
   });
 });
-
