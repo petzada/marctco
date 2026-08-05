@@ -15,5 +15,21 @@ describe("runtime database role boot check", () => {
       );
     }
   );
+
+  it("reports only sanitized endpoint metadata when authentication fails", async () => {
+    const invalid_password = "wrong-password-must-not-leak";
+    const invalid_url = `postgresql://marctco_worker:${invalid_password}@localhost:54329/marctco?schema=public`;
+
+    const failure = await assertSafeDatabaseRole({
+      process_name: "worker",
+      database_url: invalid_url
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(
+      /worker.*database connection failed.*host=localhost.*port=54329.*username=marctco_worker.*query_keys=\[schema\]/i
+    );
+    expect((failure as Error).message).not.toContain(invalid_password);
+  });
 });
 
