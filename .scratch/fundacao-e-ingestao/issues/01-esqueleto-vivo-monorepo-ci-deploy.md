@@ -64,13 +64,13 @@ Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **
 
 **Push e PR**
 
-- [ ] Script de push abre o PR automaticamente na mesma ação
-- [ ] Branch protection na `main`: push direto bloqueado, merge exige CI verde
-- [ ] GitHub Actions em cada PR, **sem qualquer secret de produção**: typecheck, lint, build, testes puros
-- [ ] Postgres efêmero no CI: `prisma migrate deploy` aplica o histórico inteiro do zero
-- [ ] **Drift check**: `migrate diff` entre `schema.prisma` e o banco migrado retorna vazio
-- [ ] Varredura de DDL destrutiva no SQL das migrations reprova `DELETE`, `TRUNCATE`, `DROP COLUMN`, `DROP TABLE` e alteração destrutiva de tipo
-- [ ] **Redis efêmero** disponível no mesmo workflow, para os tickets seguintes
+- [x] Script de push abre o PR automaticamente na mesma ação
+- [x] Branch protection na `main`: push direto bloqueado, merge exige CI verde
+- [x] GitHub Actions em cada PR, **sem qualquer secret de produção**: typecheck, lint, build, testes puros
+- [x] Postgres efêmero no CI: `prisma migrate deploy` aplica o histórico inteiro do zero
+- [x] **Drift check**: `migrate diff` entre `schema.prisma` e o banco migrado retorna vazio
+- [x] Varredura de DDL destrutiva no SQL das migrations reprova `DELETE`, `TRUNCATE`, `DROP COLUMN`, `DROP TABLE` e alteração destrutiva de tipo
+- [x] **Redis efêmero** disponível no mesmo workflow, para os tickets seguintes
 
 **Release**
 
