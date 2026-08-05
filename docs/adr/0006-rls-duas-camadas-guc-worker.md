@@ -1,8 +1,10 @@
 # Isolamento multi-tenant: duas camadas, GUC `app.workspace_id`, worker sob RLS
 
-O isolamento entre workspaces tem **duas camadas**: escopo explícito na aplicação é o caminho normal, e RLS no Postgres é a rede que transforma um filtro esquecido em zero linhas em vez de vazamento entre clientes. As policies keiam num GUC `app.workspace_id` setado pelo servidor — nunca em `auth.uid()` — e o **worker roda sob RLS** como o app, com o claim setado por job. `service_role` fica restrito a migrations, ferramenta interna da marctco e inspeção de DLQ.
+O isolamento entre workspaces tem **duas camadas**: escopo explícito na aplicação é o caminho normal, e RLS no Postgres é a rede que transforma um filtro esquecido em zero linhas em vez de vazamento entre clientes. As policies de `marctco_app` e `marctco_worker` keiam num GUC `app.workspace_id` setado pelo servidor — nunca em `auth.uid()` — e o **worker roda sob RLS** como o app, com o claim setado por job. O executor `NOLOGIN` das quatro funções privadas é a exceção estreita definida pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md), não um papel de runtime. `service_role` fica restrito a migrations, ferramenta interna da marctco e inspeção de DLQ.
 
 **Status:** accepted · 2026-08-04
+
+> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a regra 9 agora fecha em quatro funções, incluindo a resolução de associação navegador → workspace; `FORCE RLS` exige um executor técnico `NOLOGIN` com policies/grants mínimos para que as funções privadas funcionem sem dar bypass ao app ou ao worker.
 
 ## O problema que o stack doc não registra
 
@@ -27,9 +29,9 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
 1. **`FORCE ROW LEVEL SECURITY` em toda tabela de negócio, não só `ENABLE`.** `ENABLE` não se aplica ao *owner* da tabela. As tabelas são criadas pelas migrations do Prisma, logo o papel das migrations é owner; sem `FORCE`, qualquer conexão com esse papel ignora as policies silenciosamente. Este é o modo de falha mais perigoso do desenho, porque o teste ingênuo passa.
 
-2. **Papéis separados por função.** Um papel para migrations (owner, DDL). Um papel sem `BYPASSRLS` para app e worker. `service_role` só em ferramenta interna cross-tenant. A connection string do app **nunca** é a das migrations.
+2. **Papéis separados por função.** Um papel para migrations (owner, DDL). Um papel sem `BYPASSRLS` para app e worker. Cada função privada tem executor técnico `NOLOGIN`, sem `BYPASSRLS` e sem membership assumível pelo app/worker; `marctco_private_definer` é o owner de `resolve_user_workspaces`, e os owners das outras funções serão escolhidos com as mesmas propriedades quando existirem ([ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). Nenhum é connection string nem processo. `service_role` só em ferramenta interna cross-tenant. A connection string do app **nunca** é a das migrations.
 
-3. **Envolver a leitura do GUC em subselect:** `using (workspace_id = (select current_setting('app.workspace_id', true))::uuid)`. Sem o `(select ...)`, a função é avaliada **por linha** — 100x+ mais lento em tabela grande. Com ele, o planner avalia uma vez como InitPlan.
+3. **Envolver a leitura do GUC em subselect:** `using (workspace_id = (select nullif(current_setting('app.workspace_id', true), ''))::uuid)`. O `NULLIF` trata o reset de `SET LOCAL` no pool como ausência do claim, logo nega sem erro. Sem o `(select ...)`, a função é avaliada **por linha** — 100x+ mais lento em tabela grande. Com ele, o planner avalia uma vez como InitPlan.
 
 4. **Índice em `workspace_id` em toda tabela de negócio.** Coluna de policy sem índice transforma cada consulta em seq scan.
 
@@ -49,17 +51,18 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
    Consequência direta: **Supabase Realtime é incompatível com este desenho.** As policies keiam no GUC, não em `auth.uid()`; uma conexão Realtime do navegador nunca passa pelo `SET LOCAL`, então `current_setting('app.workspace_id', true)` volta `NULL` e a policy nega tudo. Fazer funcionar exigiria um segundo conjunto de policies em `auth.jwt()` — duas fontes de verdade para isolamento.
 
-9. **`SECURITY DEFINER` só em schema privado, e a lista é fechada.** Existem consultas que precisam acontecer **antes** de haver tenant, e por isso não podem passar por policy keiada no GUC. Elas não justificam bypass para o app inteiro: cada uma vira uma função `SECURITY DEFINER` em schema `private`, com superfície mínima, `EXECUTE` revogado de todo papel que não seja o do app, e `search_path` fixado na própria função.
+9. **`SECURITY DEFINER` só em schema privado, e a lista é fechada.** Existem consultas que precisam acontecer **antes** de haver tenant, e por isso não podem passar por policy keiada no GUC. Elas não justificam bypass para o app inteiro: cada uma vira uma função `SECURITY DEFINER` em schema `private`, com superfície mínima, `EXECUTE` revogado de todo papel que não seja o do app, `search_path` fixado e owner técnico `NOLOGIN` definido no ADR-0019. Policies para esse owner são por tabela/comando necessário; as policies de app/worker continuam no GUC.
 
-   São **três**, e nenhuma a mais:
+   São **quatro**, e nenhuma a mais:
 
    | Função | Por que não tem tenant | O que devolve |
    |---|---|---|
-   | `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `workspace_id` |
-   | `claim_pending_events` | O dispatcher procura pendência de todos os workspaces, sem sessão e sem job prévio | Só `(id, workspace_id)` — nunca `raw`, que carrega CPF e telefone |
-   | `provision_workspace` | Cria o Workspace, o vínculo do primeiro membro e o funil padrão; o tenant ainda não existe | `workspace_id` |
+| `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `workspace_id` |
+| `claim_pending_events` | O dispatcher procura pendência de todos os workspaces, sem sessão e sem job prévio | Só `(id, workspace_id)` — nunca `raw`, que carrega CPF e telefone |
+| `provision_workspace` | Cria o Workspace, o vínculo do primeiro membro e o funil padrão; o tenant ainda não existe | `workspace_id` |
+| `resolve_user_workspaces` | A sessão valida o slug contra `WorkspaceMember` antes de conhecer o `workspace_id` | Somente escolhas/associação do próprio usuário: `workspace_id`, `slug`, `name`, `role` |
 
-   O que **devolvem** importa tanto quanto quem pode chamá-las: uma função sem tenant que devolvesse payload seria um vazamento cross-tenant com aparência de recurso. O Seam 3 enumera `SECURITY DEFINER` no banco e **reprova qualquer função fora desta lista** — sem isso, a lista é comentário, e a quarta função entra sem ninguém notar.
+   O que **devolvem** importa tanto quanto quem pode chamá-las: uma função sem tenant que devolvesse payload seria um vazamento cross-tenant com aparência de recurso. O Seam 3 enumera `SECURITY DEFINER` no banco e **reprova qualquer função fora desta lista** — sem isso, a lista é comentário, e uma quinta função entra sem ninguém notar.
 
 10. **O app e o worker se recusam a subir com o papel errado.** Toda a defesa deste ADR depende de um valor numa variável de ambiente, e nenhuma das duas camadas olha para lá. O painel do Supabase entrega, pronta para copiar, a connection string do `postgres` — colá-la no Railway produz exatamente o cenário de abertura deste documento: RLS habilitada, policies escritas, isolamento zero, sem nenhum sinal de erro, com o CI inteiro verde.
 

@@ -2,6 +2,8 @@
 
 Status: accepted · 2026-08-05
 
+> **Emendado pelo [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md):** a exceção sem contexto agora inclui a validação navegador → associação/workspace, totalizando quatro funções, e sua execução sob `FORCE RLS` usa papel técnico `NOLOGIN` com grants/policies mínimos.
+
 > Origem: revisão de arquitetura sobre a especificação, antes de existir código. Os cinco candidatos
 > foram lidos dos ADRs 0004–0015, do [CONTEXT.md](../../CONTEXT.md) e das 17 issues desta fatia.
 > Nenhum deles é refatoração: são módulos que **ainda não existem** e que, como estão especificados,
@@ -82,9 +84,10 @@ vez de cursor passa no CI, e o defeito não é lentidão — é lead sumindo da 
    `resolveIntakeReview`, `applyIntakePlan`. Cada uma aplica o GUC, o escopo do papel, o keyset e o índice
    correspondente do lado de dentro. Só `findPersonCandidates` e `applyIntakePlan` aceitam as duas variantes,
    e ambas são do caminho de ingestão: `listLeads(jobCtx)` não compila.
-3. **As três consultas sem tenant são exceção declarada.** `resolve_workspace_by_token_hash`,
-   `claim_pending_events` e `provision_workspace` acontecem antes de existir workspace e são justamente as
-   que produzem o `workspace_id` do contexto. Não recebem `AccessContext`; a lista é fechada em três e o
+3. **As quatro consultas sem tenant são exceção declarada.** `resolve_workspace_by_token_hash`,
+   `claim_pending_events`, `provision_workspace` e `resolve_user_workspaces` acontecem antes de existir
+   workspace ou antes de a sessão validar a associação, e são justamente as que produzem ou validam o
+   `workspace_id` do contexto. Não recebem `AccessContext`; a lista é fechada em quatro e o
    Seam 3 reprova qualquer `SECURITY DEFINER` fora dela ([ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9).
 4. **O client cru continua existindo, interno.** Um módulo só dentro de `packages/db` o alcança;
    `no-restricted-imports` barra o resto, e o CI reprova o import fora.
@@ -282,11 +285,12 @@ ADR-0015 fechou em quatro para evitar — ou tornar `role` opcional, o que derru
 processo que toca todos os tenants**. A união discriminada resolve as duas de uma vez, e ainda torna
 `listLeads(jobCtx)` um erro de compilação em vez de uma consulta que devolve o que não deveria.
 
-**2 · Três consultas não podem ter contexto, por definição.** "Toda operação recebe `AccessContext`"
-colidia de frente com a lista fechada do ADR-0006 regra 9: a resolução do token, a descoberta de pendências
-e o provisionamento acontecem **antes** de existir workspace — são as que produzem o `workspace_id` com que
-o contexto é construído. Sem a cláusula escrita, a regra parece ter um furo, e é por furo aparente que a
-quarta função entra.
+**2 · Quatro consultas não podem ter contexto, por definição.** "Toda operação recebe `AccessContext`"
+colidia de frente com a lista fechada do ADR-0006 regra 9: a resolução do token, a descoberta de pendências,
+o provisionamento e a validação navegador → associação/workspace acontecem **antes** de existir contexto —
+são as que produzem ou validam o `workspace_id` com que ele é construído. Sem a cláusula escrita, a regra
+parece ter um furo, e é por furo aparente que uma quinta função entra. A emenda de executor sob `FORCE RLS`
+é do [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md).
 
 **3 · A liberação da quarentena precisava do conector.** `planPersonLookup` exige `NormalizedLead`, que
 exige `InboundLead`, que só o conector produzia — e o conector vive em `apps/worker`, que `apps/web` não

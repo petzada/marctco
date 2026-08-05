@@ -4,6 +4,8 @@ O workspace ativo de uma sessão de navegador vive no **caminho da URL** — `/w
 
 **Status:** accepted · 2026-08-04
 
+> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a validação indicada neste ADR é executada pelo resolvedor pré-contexto e pela quarta função privada `resolve_user_workspaces`; a URL continua sendo a escolha validada, não uma credencial.
+
 ## O problema
 
 O [ADR-0006](./0006-rls-duas-camadas-guc-worker.md) dizia "o browser não escolhe seu workspace — ele prova quem é, e o servidor resolve o resto", e o ticket de autenticação repetia a regra como "tentativa de forçar outro `workspace_id` pela requisição é **ignorada**". Mas a mesma fatia exige um seletor de workspace para quem pertence a mais de um.
@@ -51,6 +53,6 @@ O ponto de chamada é **uma função só**, no mesmo espírito dos adapters da s
 
 ## Consequences
 
-`Workspace` ganha `slug` (UUIDv4, único). Toda rota autenticada nasce sob `/workspace/:slug`. O onboarding vive **fora** do prefixo, em `/onboarding`, porque ali ainda não existe workspace — é o provisionamento que o cria. O ADR-0006 regra 7 passa a distinguir explicitamente ignorar de validar.
+`Workspace` ganha `slug` (UUIDv4, único). Toda rota autenticada nasce sob `/workspace/:slug`. O onboarding vive **fora** do prefixo, em `/onboarding`, porque ali ainda não existe workspace — é o provisionamento que o cria. O ADR-0006 regra 7 passa a distinguir explicitamente ignorar de validar. A validação browser → `WorkspaceMember` acontece pelo resolvedor único e pela função privada estreita do ADR-0019, antes do `SET LOCAL`.
 
 Em troca, o workspace ativo deixa de ser estado de usuário e passa a ser propriedade da requisição — que é o que torna abas independentes por construção e faz todo link profundo nascer correto, inclusive os que fases futuras vão gravar em notificação e e-mail.

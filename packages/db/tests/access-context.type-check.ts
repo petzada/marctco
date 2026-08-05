@@ -14,7 +14,7 @@
  * describes has quietly become a runtime check instead — the exact
  * regression `@ts-expect-error` below is watching for.
  */
-import { createJobContext, createUserContext, type UserContext } from "../src/access-context.js";
+import { createJobContext, type UserContext } from "../src/access-context.js";
 
 function representativeUserOnlyOperation(context: UserContext): void {
   // A real operation would open a scoped transaction here. The type shape
@@ -22,11 +22,7 @@ function representativeUserOnlyOperation(context: UserContext): void {
   void context;
 }
 
-const userContext = createUserContext({
-  workspace_id: "11111111-1111-1111-1111-111111111111",
-  user_id: "22222222-2222-2222-2222-222222222222",
-  role: "OWNER"
-});
+declare const userContext: UserContext;
 
 const jobContext = createJobContext({
   workspace_id: "11111111-1111-1111-1111-111111111111",

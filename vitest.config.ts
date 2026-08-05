@@ -4,7 +4,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
-      "@marctco/domain": fileURLToPath(new URL("./packages/domain/src/index.ts", import.meta.url))
+      "@marctco/domain": fileURLToPath(new URL("./packages/domain/src/index.ts", import.meta.url)),
+      "@marctco/db": fileURLToPath(new URL("./packages/db/src/index.ts", import.meta.url))
     }
   },
   test: {
@@ -14,9 +15,10 @@ export default defineConfig({
         test: {
           name: "domain",
           include: [
-            "packages/domain/src/**/*.test.ts",
-            "apps/worker/src/**/*.test.ts",
-            "packages/db/src/access-context.test.ts"
+          "packages/domain/src/**/*.test.ts",
+          "apps/worker/src/**/*.test.ts",
+          "apps/web/**/*.test.ts",
+          "packages/db/src/access-context.test.ts"
           ]
         }
       },
@@ -26,7 +28,9 @@ export default defineConfig({
           name: "db",
           include: [
             "packages/db/src/foundation-recovery.test.ts",
+            "packages/db/src/integration-connection.test.ts",
             "packages/db/src/runtime-database-url.test.ts",
+            "packages/db/src/workspace-context.test.ts",
             "packages/db/tests/{boot-check,rls}.test.ts"
           ],
           fileParallelism: false

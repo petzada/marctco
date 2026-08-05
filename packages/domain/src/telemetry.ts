@@ -3,8 +3,13 @@ const allowedKeys = new Set([
   "integration_event_id",
   "source",
   "external_lead_id",
+  "event",
   "message",
-  "stack"
+  "request_id",
+  "result",
+  "stack",
+  "user_id_hash",
+  "workspace_slug_hash"
 ]);
 
 export type SafeTelemetry = Record<string, string | number | boolean | null>;

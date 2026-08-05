@@ -17,14 +17,55 @@ enum WorkspaceRole {
   @@map("workspace_role")
 }
 
+enum FinancingType {
+  VEHICLE
+  REAL_ESTATE
+  PERSONAL_LOAN
+  OTHER
+
+  @@map("financing_type")
+}
+
+enum PipelineType {
+  COMMERCIAL
+  LEGAL
+
+  @@map("pipeline_type")
+}
+
+enum StageRole {
+  ENTRY
+  CLOSING
+  LEGAL_HANDOFF
+  NORMAL
+
+  @@map("stage_role")
+}
+
+enum IntegrationProvider {
+  PLUGA
+  LANDING_PAGE
+
+  @@map("integration_provider")
+}
+
+enum IntegrationConnectionStatus {
+  ACTIVE
+  DISABLED
+
+  @@map("integration_connection_status")
+}
+
 model Workspace {
-  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug       String            @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name       String
-  timezone   String            @default("America/Sao_Paulo")
-  created_at DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at DateTime          @updatedAt @db.Timestamptz(6)
-  members    WorkspaceMember[]
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                    String                  @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                    String
+  timezone                String                  @default("America/Sao_Paulo")
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                @updatedAt @db.Timestamptz(6)
+  members                 WorkspaceMember[]
+  pipelines               Pipeline[]
+  integration_connections IntegrationConnection[]
 
   @@map("workspaces")
 }
@@ -41,3 +82,55 @@ model WorkspaceMember {
   @@map("workspace_members")
 }
 
+model Pipeline {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id            String                  @db.Uuid
+  name                    String
+  type                    PipelineType
+  is_default              Boolean                 @default(false)
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                @updatedAt @db.Timestamptz(6)
+  workspace               Workspace               @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  stages                  Stage[]
+  integration_connections IntegrationConnection[] @relation("IntegrationConnectionTargetPipeline")
+
+  @@unique([workspace_id, id])
+  @@index([workspace_id])
+  @@map("pipelines")
+}
+
+model IntegrationConnection {
+  id                 String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id       String                      @db.Uuid
+  provider           IntegrationProvider
+  contract_version   String                      @default("v1")
+  token_hash         String                      @unique @db.Char(64)
+  token_last4        String                      @db.Char(4)
+  status             IntegrationConnectionStatus @default(ACTIVE)
+  target_pipeline_id String?                     @db.Uuid
+  created_at         DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                    @updatedAt @db.Timestamptz(6)
+  workspace          Workspace                   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  target_pipeline    Pipeline?                   @relation("IntegrationConnectionTargetPipeline", fields: [workspace_id, target_pipeline_id], references: [workspace_id, id], onDelete: Restrict)
+
+  @@unique([workspace_id, provider])
+  @@index([workspace_id])
+  @@map("integration_connections")
+}
+
+model Stage {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String    @db.Uuid
+  pipeline_id  String    @db.Uuid
+  label        String
+  position     Int
+  role         StageRole @default(NORMAL)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @updatedAt @db.Timestamptz(6)
+  pipeline     Pipeline  @relation(fields: [workspace_id, pipeline_id], references: [workspace_id, id], onDelete: Cascade)
+
+  @@unique([pipeline_id, position])
+  @@index([workspace_id])
+  @@index([workspace_id, pipeline_id])
+  @@map("stages")
+}

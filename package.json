@@ -18,7 +18,7 @@
     ]
   },
   "scripts": {
-    "postinstall": "pnpm --filter @marctco/db generate",
+    "postinstall": "pnpm --filter @marctco/domain build && pnpm --filter @marctco/db generate",
     "build": "pnpm --filter @marctco/domain build && pnpm --filter @marctco/db build && pnpm --filter @marctco/web build && pnpm --filter @marctco/worker build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint . --max-warnings=0 && node scripts/check-prisma-imports.mjs",

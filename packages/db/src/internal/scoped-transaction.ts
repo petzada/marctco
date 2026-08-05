@@ -37,7 +37,7 @@ export async function withAccessContext<Context extends AccessContext, Result>(
 ): Promise<Result> {
   assertUuid(context.workspace_id, "AccessContext.workspace_id");
   if (context.kind === "user" && !KNOWN_ROLES.has(context.role)) {
-    // Defense in depth: createUserContext already refuses an unknown role.
+    // Defense in depth: the context resolver already refuses an unknown role.
     // This only fires if a context somehow reached here without going
     // through that constructor, and it fails closed rather than scoping to
     // nothing.

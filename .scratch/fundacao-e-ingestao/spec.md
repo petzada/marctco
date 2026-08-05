@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+> **Emendada pelo [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md):** a resolução da associação para a sessão de navegador é uma quarta exceção pré-contexto, sob executor técnico `NOLOGIN`; a lista, retornos e provas do Seam 3 seguem esse ADR.
+
 > Fatia vertical: Fases 0 e 1 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).
 > ADRs vinculantes: 0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011, 0016, 0017, 0018.
@@ -190,14 +192,14 @@ Duas camadas ([ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md)): e
 - `SET LOCAL` dentro de transação, nunca `SET`.
 - **Papéis criados dentro das migrations**, idempotentes e prefixados (`marctco_migrator`, `marctco_app`, `marctco_worker`), para que CI, Docker local e produção derivem da mesma fonte. Senha nunca numa migration — o arquivo está no git.
 - **App e worker abortam o boot** se o papel conectado for superusuário, tiver `BYPASSRLS` ou for dono de tabela de negócio. É a única verificação que pega a connection string errada no Railway, porque nenhum CI sabe qual string está lá.
-- **`SECURITY DEFINER` só em schema `private`, lista fechada de três**: `resolve_workspace_by_token_hash`, `claim_pending_events` e `provision_workspace`. Nenhuma delas devolve payload — `claim_pending_events` devolve `(id, workspace_id)` e nada mais.
+- **`SECURITY DEFINER` só em schema `private`, lista fechada de quatro**: `resolve_workspace_by_token_hash`, `claim_pending_events`, `provision_workspace` e `resolve_user_workspaces`. Nenhuma delas devolve payload; a última devolve somente escolhas/associações do próprio usuário, e `claim_pending_events` devolve `(id, workspace_id)` e nada mais. O executor `NOLOGIN`, grants e policies mínimos são do [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md).
 - O browser **não** acessa o Postgres direto. Supabase Auth é autenticação e nada mais.
 - Na sessão do navegador o workspace vem do segmento de URL e é **validado** contra `WorkspaceMember` antes do GUC; o que não corresponde a uma associação devolve 404 e fica registrado. Na ingestão o `workspace_id` do corpo é **ignorado**. Validar e ignorar não são a mesma regra ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)).
 - O worker roda **sob RLS**, com o claim vindo do job. Se o evento não pertencer àquele workspace, a leitura devolve zero linhas e o job falha alto.
 - Transação **nunca** envolve chamada de rede externa.
 - **`AccessContext` é construído num ponto só** por requisição ou por job, e é argumento obrigatório de toda operação de `packages/db`. Receber o papel não basta: um helper que devolvesse o client tornaria o `role` inerte, e a RLS **não pega** escopo de papel — um atendente vendo a carteira inteira é leitura legítima dentro do tenant certo ([ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)).
 - **Duas variantes**: `UserContext` (`workspace_id`, `user_id`, `role`) e `JobContext` (`workspace_id`, `integration_event_id`). O worker não tem usuário nem papel, e um contexto único o obrigaria a inventar um — papel sem escopo declarado é o que o ADR-0015 proíbe. Só `findPersonCandidates` e `applyIntakePlan` aceitam as duas; `listLeads(jobCtx)` não compila.
-- **As três consultas sem tenant não recebem contexto e não podem receber**: elas acontecem antes de existir workspace e são as que produzem o `workspace_id` que o constrói. Lista fechada de três, varrida pelo Seam 3.
+- **As quatro consultas sem tenant não recebem contexto e não podem receber**: elas acontecem antes de existir workspace e são as que produzem ou validam o `workspace_id` que constrói o contexto. Lista fechada de quatro, varrida pelo Seam 3. `resolve_user_workspaces` é o caso da validação server-side do slug da sessão.
 
 ### Contrato HTTP
 
@@ -348,7 +350,7 @@ Cobre: varredura de `pg_tables` e `pg_policies` exigindo, para **toda** tabela d
 Mais três varreduras, todas da mesma natureza — invariantes que nenhuma rota exercita:
 
 - **Atributos de papel:** o papel do app não é superusuário, não tem `BYPASSRLS` e não é dono de tabela de negócio.
-- **Lista fechada de `SECURITY DEFINER`:** enumerar as funções do banco e **reprovar qualquer uma fora das três** nomeadas no [ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9. Sem esta varredura a lista é comentário, e a quarta função entra sem ninguém notar.
+- **Lista fechada de `SECURITY DEFINER`:** enumerar as funções do banco e **reprovar qualquer uma fora das quatro** nomeadas no [ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9. O Seam 3 também prova que `resolve_user_workspaces` pertence a `marctco_private_definer` e que toda função privada tem executor `NOLOGIN`/sem bypass, `search_path` fixado e grants mínimos do [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md). Sem esta varredura a lista é comentário, e uma quinta função entra sem ninguém notar.
 - **Nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela.
 - **Toda tabela de negócio tem índice que sirva à sua listagem**, não só o `workspace_id` da policy.
 - **Nenhum import do client cru do Prisma fora de `packages/db`** — é o que impede o escopo de papel de voltar a ser convenção, e nenhuma rota o exercita ([ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)).

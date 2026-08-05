@@ -1,8 +1,15 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createJobContext, createUserContext, type AccessContext } from "../src/access-context.js";
+import { createJobContext, type AccessContext, type UserContext } from "../src/access-context.js";
 import { withAccessContext } from "../src/internal/scoped-transaction.js";
+import {
+  deletePipeline,
+  deleteStage,
+  reorderStages,
+  replaceStageRoles
+} from "../src/pipeline-operations.js";
+import { listUserWorkspaces, resolveUserContextForSlug } from "../src/workspace-context.js";
 
 const database_url = process.env.DATABASE_URL;
 if (!database_url) {
@@ -12,7 +19,43 @@ if (!database_url) {
 const client = new PrismaClient({ datasources: { db: { url: database_url } } });
 const workspace_a = randomUUID();
 const workspace_b = randomUUID();
+const workspace_slug_a = randomUUID();
+const workspace_slug_b = randomUUID();
+const user_a = randomUUID();
+const user_b = randomUUID();
+const pipeline_a = randomUUID();
+const pipeline_b = randomUUID();
+const stage_a_entry = randomUUID();
+const stage_a_closing = randomUUID();
+const stage_b_entry = randomUUID();
+const stage_b_closing = randomUUID();
+const integration_connection_a = randomUUID();
+const integration_connection_b = randomUUID();
+const active_token_a = "mtco_rls_active_token_a";
+const active_token_b = "mtco_rls_active_token_b";
+const token_hash_a = createHash("sha256").update(active_token_a, "utf8").digest("hex");
+const token_hash_b = createHash("sha256").update(active_token_b, "utf8").digest("hex");
+const cross_workspace_token_hash = createHash("sha256")
+  .update(`mtco_cross_workspace_${randomUUID()}`, "utf8")
+  .digest("hex");
+let user_context_a: UserContext;
 const isolation_cases = [
+  {
+    table_name: "integration_connections",
+    read_sql:
+      "SELECT workspace_id AS tenant_id FROM integration_connections ORDER BY workspace_id",
+    write_sql: `INSERT INTO integration_connections (id, workspace_id, provider, contract_version, token_hash, token_last4, status, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'LANDING_PAGE', 'v1', '${cross_workspace_token_hash}', 'rker', 'ACTIVE', CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "pipelines",
+    read_sql: "SELECT workspace_id AS tenant_id FROM pipelines ORDER BY workspace_id",
+    write_sql: `INSERT INTO pipelines (id, workspace_id, name, type, is_default, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'Cross-workspace', 'LEGAL', false, CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "stages",
+    read_sql: "SELECT workspace_id AS tenant_id FROM stages ORDER BY workspace_id",
+    write_sql: `INSERT INTO stages (id, workspace_id, pipeline_id, label, position, role, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${pipeline_b}', 'Cross-workspace', 3, 'NORMAL', CURRENT_TIMESTAMP)`
+  },
   {
     table_name: "workspace_members",
     read_sql:
@@ -27,18 +70,95 @@ const isolation_cases = [
 ] as const;
 
 beforeAll(async () => {
-  await client.workspace.createMany({
-    data: [
-      { id: workspace_a, slug: randomUUID(), name: "Workspace A" },
-      { id: workspace_b, slug: randomUUID(), name: "Workspace B" }
-    ]
+  await client.$transaction(async (transaction) => {
+    await transaction.workspace.createMany({
+      data: [
+        { id: workspace_a, slug: workspace_slug_a, name: "Workspace A" },
+        { id: workspace_b, slug: workspace_slug_b, name: "Workspace B" }
+      ]
+    });
+    await transaction.workspaceMember.createMany({
+      data: [
+        { workspace_id: workspace_a, user_id: user_a, role: "OWNER" },
+        { workspace_id: workspace_b, user_id: user_b, role: "ATTENDANT" }
+      ]
+    });
+    await transaction.pipeline.create({
+      data: {
+        id: pipeline_a,
+        workspace_id: workspace_a,
+        name: "Comercial A",
+        type: "COMMERCIAL",
+        is_default: true,
+        stages: {
+          create: [
+            {
+              id: stage_a_entry,
+              label: "Entrada",
+              position: 1,
+              role: "ENTRY"
+            },
+            {
+              id: stage_a_closing,
+              label: "Conclusão",
+              position: 2,
+              role: "CLOSING"
+            }
+          ]
+        }
+      }
+    });
+    await transaction.pipeline.create({
+      data: {
+        id: pipeline_b,
+        workspace_id: workspace_b,
+        name: "Comercial B",
+        type: "COMMERCIAL",
+        is_default: true,
+        stages: {
+          create: [
+            {
+              id: stage_b_entry,
+              label: "Entrada",
+              position: 1,
+              role: "ENTRY"
+            },
+            {
+              id: stage_b_closing,
+              label: "Conclusão",
+              position: 2,
+              role: "CLOSING"
+            }
+          ]
+        }
+      }
+    });
+    await transaction.integrationConnection.createMany({
+      data: [
+        {
+          id: integration_connection_a,
+          workspace_id: workspace_a,
+          provider: "PLUGA",
+          token_hash: token_hash_a,
+          token_last4: active_token_a.slice(-4),
+          target_pipeline_id: null
+        },
+        {
+          id: integration_connection_b,
+          workspace_id: workspace_b,
+          provider: "PLUGA",
+          token_hash: token_hash_b,
+          token_last4: active_token_b.slice(-4),
+          target_pipeline_id: pipeline_b
+        }
+      ]
+    });
   });
-  await client.workspaceMember.createMany({
-    data: [
-      { workspace_id: workspace_a, user_id: randomUUID(), role: "ATTENDANT" },
-      { workspace_id: workspace_b, user_id: randomUUID(), role: "ATTENDANT" }
-    ]
-  });
+  const context = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
+  if (!context) {
+    throw new Error("failed to resolve the seeded user workspace");
+  }
+  user_context_a = context.context;
 });
 
 afterAll(async () => {
@@ -70,7 +190,13 @@ describe("Seam 3: RLS and schema invariants", () => {
       ORDER BY tables.tablename
     `;
 
-    expect(rows.map((row) => row.table_name)).toEqual(["workspace_members", "workspaces"]);
+    expect(rows.map((row) => row.table_name)).toEqual([
+      "integration_connections",
+      "pipelines",
+      "stages",
+      "workspace_members",
+      "workspaces"
+    ]);
     expect(isolation_cases.map((test_case) => test_case.table_name)).toEqual(
       rows.map((row) => row.table_name)
     );
@@ -89,7 +215,8 @@ describe("Seam 3: RLS and schema invariants", () => {
         await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
         return transaction.$queryRawUnsafe<Array<{ tenant_id: string }>>(read_sql);
       });
-      expect(visible).toEqual([{ tenant_id: workspace_a }]);
+      expect(visible.length).toBeGreaterThan(0);
+      expect(visible.every((row) => row.tenant_id === workspace_a)).toBe(true);
 
       await expect(
         client.$transaction(async (transaction) => {
@@ -124,7 +251,7 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(owners.every((row) => row.owner_name === "marctco_migrator")).toBe(true);
   });
 
-  it("allows SECURITY DEFINER only in private and only for the three declared names", async () => {
+  it("allows SECURITY DEFINER only in private and only for the declared names", async () => {
     const functions = await client.$queryRaw<
       Array<{ schema_name: string; function_name: string }>
     >`
@@ -140,7 +267,8 @@ describe("Seam 3: RLS and schema invariants", () => {
     const allowed = new Set([
       "private.claim_pending_events",
       "private.provision_workspace",
-      "private.resolve_workspace_by_token_hash"
+      "private.resolve_workspace_by_token_hash",
+      "private.resolve_user_workspaces"
     ]);
     const function_names = functions.map((row) => `${row.schema_name}.${row.function_name}`);
     expect(new Set(function_names).size, "SECURITY DEFINER overloads are forbidden").toBe(
@@ -176,6 +304,496 @@ describe("Seam 3: RLS and schema invariants", () => {
       SELECT has_schema_privilege('marctco_worker', 'private', 'USAGE') AS can_use
     `;
     expect(privileges).toEqual([{ can_use: false }]);
+  });
+
+  it("enforces default, entry and closing pipeline invariants in the database", async () => {
+    await expect(
+      client.$transaction((transaction) =>
+        transaction.workspace.create({
+          data: {
+            id: randomUUID(),
+            slug: randomUUID(),
+            name: "Workspace sem funil padrão"
+          }
+        })
+      )
+    ).rejects.toThrow(/exactly one default commercial pipeline/i);
+
+    await expect(
+      client.pipeline.create({
+        data: {
+          workspace_id: workspace_a,
+          name: "Legal sem etapas",
+          type: "LEGAL",
+          is_default: false
+        }
+      })
+    ).rejects.toThrow(/exactly one ENTRY/i);
+
+    await expect(
+      client.pipeline.create({
+        data: {
+          workspace_id: workspace_a,
+          name: "Legal não pode ser padrão",
+          type: "LEGAL",
+          is_default: true,
+          stages: {
+            create: [
+              { label: "Entrada", position: 1, role: "ENTRY" },
+              { label: "Conclusão", position: 2, role: "CLOSING" }
+            ]
+          }
+        }
+      })
+    ).rejects.toThrow(/check constraint/i);
+
+    await expect(
+      client.stage.create({
+        data: {
+          workspace_id: workspace_a,
+          pipeline_id: pipeline_a,
+          label: "Outra entrada",
+          position: 3,
+          role: "ENTRY"
+        }
+      })
+    ).rejects.toThrow(/unique/i);
+
+    await expect(
+      client.$transaction((transaction) =>
+        transaction.stage.delete({ where: { id: stage_a_closing } })
+      )
+    ).rejects.toThrow(/at least one CLOSING/i);
+
+    await expect(
+      client.pipeline.create({
+        data: {
+          workspace_id: workspace_a,
+          name: "Outro comercial",
+          type: "COMMERCIAL",
+          is_default: true,
+          stages: {
+            create: [
+              {
+                label: "Entrada",
+                position: 1,
+                role: "ENTRY"
+              },
+              {
+                label: "Conclusão",
+                position: 2,
+                role: "CLOSING"
+              }
+            ]
+          }
+        }
+      })
+    ).rejects.toThrow(/unique/i);
+  });
+
+  it("reorders, replaces required roles and deletes through named transactional operations", async () => {
+    const editable_pipeline = await client.pipeline.create({
+      data: {
+        workspace_id: workspace_a,
+        name: "Editável",
+        type: "COMMERCIAL",
+        is_default: false,
+        stages: {
+          create: [
+            {
+              label: "Entrada",
+              position: 1,
+              role: "ENTRY"
+            },
+            {
+              label: "Trabalho",
+              position: 2,
+              role: "NORMAL"
+            },
+            {
+              label: "Conclusão",
+              position: 3,
+              role: "CLOSING"
+            }
+          ]
+        }
+      },
+      include: { stages: { orderBy: { position: "asc" } } }
+    });
+    const [entry, normal, closing] = editable_pipeline.stages;
+    if (!entry || !normal || !closing) {
+      throw new Error("failed to create editable pipeline stages");
+    }
+
+    await reorderStages(
+      user_context_a,
+      {
+        pipeline_id: editable_pipeline.id,
+        ordered_stage_ids: [closing.id, entry.id, normal.id]
+      },
+      client
+    );
+    expect(
+      await client.stage.findMany({
+        where: { pipeline_id: editable_pipeline.id },
+        select: { id: true, position: true },
+        orderBy: { position: "asc" }
+      })
+    ).toEqual([
+      { id: closing.id, position: 1 },
+      { id: entry.id, position: 2 },
+      { id: normal.id, position: 3 }
+    ]);
+
+    await replaceStageRoles(
+      user_context_a,
+      {
+        pipeline_id: editable_pipeline.id,
+        stages: [
+          { stage_id: closing.id, role: "CLOSING" },
+          { stage_id: entry.id, role: "NORMAL" },
+          { stage_id: normal.id, role: "ENTRY" }
+        ]
+      },
+      client
+    );
+    await expect(
+      deleteStage(user_context_a, { stage_id: normal.id }, client)
+    ).rejects.toThrow(/needs a replacement/i);
+    await deleteStage(
+      user_context_a,
+      { stage_id: normal.id, replacement_stage_id: entry.id },
+      client
+    );
+    expect(await client.stage.findUnique({ where: { id: normal.id } })).toBeNull();
+    expect((await client.stage.findUnique({ where: { id: entry.id } }))?.role).toBe("ENTRY");
+
+    await deletePipeline(user_context_a, { pipeline_id: editable_pipeline.id }, client);
+    expect(await client.pipeline.findUnique({ where: { id: editable_pipeline.id } })).toBeNull();
+
+    await expect(deletePipeline(user_context_a, { pipeline_id: pipeline_a }, client)).rejects.toThrow(
+      /needs a replacement/i
+    );
+    const successor = await client.pipeline.create({
+      data: {
+        workspace_id: workspace_a,
+        name: "Sucessor padrão",
+        type: "COMMERCIAL",
+        is_default: false,
+        stages: {
+          create: [
+            { label: "Entrada", position: 1, role: "ENTRY" },
+            { label: "Conclusão", position: 2, role: "CLOSING" }
+          ]
+        }
+      }
+    });
+    await deletePipeline(
+      user_context_a,
+      {
+        pipeline_id: pipeline_a,
+        replacement_default_pipeline_id: successor.id
+      },
+      client
+    );
+    expect((await client.pipeline.findUnique({ where: { id: successor.id } }))?.is_default).toBe(true);
+  });
+
+  it.each(["marctco_app", "marctco_worker"] as const)(
+    "%s cannot read a business table before app.workspace_id is set",
+    async (role) => {
+      const visible = await client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(`SET LOCAL ROLE ${role}`);
+        return transaction.$queryRaw<Array<{ workspace_id: string }>>`
+          SELECT workspace_id FROM workspace_members ORDER BY workspace_id
+        `;
+      });
+      expect(visible).toEqual([]);
+    }
+  );
+
+  it("keeps the pre-GUC resolver role technical, NOLOGIN and subject to RLS", async () => {
+    const roles = await client.$queryRaw<
+      Array<{ can_login: boolean; is_superuser: boolean; bypasses_rls: boolean }>
+    >`
+      SELECT rolcanlogin AS can_login, rolsuper AS is_superuser, rolbypassrls AS bypasses_rls
+      FROM pg_roles
+      WHERE rolname = 'marctco_private_definer'
+    `;
+    expect(roles).toEqual([{ can_login: false, is_superuser: false, bypasses_rls: false }]);
+  });
+
+  it("keeps the private resolver owned, scoped and executable only as declared", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private' AND procedure.proname = 'resolve_user_workspaces'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: 'marctco_private_definer',
+        search_path: ['search_path=pg_catalog'],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+
+    const memberships = await client.$queryRaw<Array<{ runtime_can_assume_definer: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_auth_members AS membership
+        JOIN pg_roles AS parent_role ON parent_role.oid = membership.roleid
+        JOIN pg_roles AS member_role ON member_role.oid = membership.member
+        WHERE parent_role.rolname = 'marctco_private_definer'
+          AND member_role.rolname IN ('marctco_app', 'marctco_worker')
+      ) AS runtime_can_assume_definer
+    `;
+    expect(memberships).toEqual([{ runtime_can_assume_definer: false }]);
+  });
+
+  it("resolves only the workspace for an active integration token before a workspace GUC exists", async () => {
+    const resolved = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+      return transaction.$queryRaw<
+        Array<{ workspace_id: string }>
+      >`
+        SELECT workspace_id
+        FROM private.resolve_workspace_by_token_hash(${token_hash_a})
+      `;
+    });
+    expect(resolved).toEqual([
+      { workspace_id: workspace_a }
+    ]);
+
+    await client.integrationConnection.update({
+      where: { id: integration_connection_a },
+      data: { status: "DISABLED" }
+    });
+    const disabled = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+      return transaction.$queryRaw<Array<{ workspace_id: string }>>`
+        SELECT workspace_id
+        FROM private.resolve_workspace_by_token_hash(${token_hash_a})
+      `;
+    });
+    expect(disabled).toEqual([]);
+    await client.integrationConnection.update({
+      where: { id: integration_connection_a },
+      data: { status: "ACTIVE" }
+    });
+  });
+
+  it("gives the token resolver only its declared private execution and SELECT surface", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private' AND procedure.proname = 'resolve_workspace_by_token_hash'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: "marctco_private_definer",
+        search_path: ["search_path=pg_catalog"],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+
+    const permissions = await client.$queryRaw<
+      Array<{
+        can_select_connections: boolean;
+        can_select_pipelines: boolean;
+        can_insert_connections: boolean;
+        can_update_connections: boolean;
+      }>
+    >`
+      SELECT
+        has_table_privilege('marctco_private_definer', 'public.integration_connections', 'SELECT') AS can_select_connections,
+        has_table_privilege('marctco_private_definer', 'public.pipelines', 'SELECT') AS can_select_pipelines,
+        has_table_privilege('marctco_private_definer', 'public.integration_connections', 'INSERT') AS can_insert_connections,
+        has_table_privilege('marctco_private_definer', 'public.integration_connections', 'UPDATE') AS can_update_connections
+    `;
+    expect(permissions).toEqual([
+      {
+        can_select_connections: true,
+        can_select_pipelines: false,
+        can_insert_connections: false,
+        can_update_connections: false
+      }
+    ]);
+  });
+
+  it("enforces a unique indexed SHA-256 hash and a commercial target in the database", async () => {
+    const hash_index = await client.$queryRaw<Array<{ indexed: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_index AS index
+        JOIN pg_attribute AS attribute
+          ON attribute.attrelid = index.indrelid
+         AND attribute.attnum = index.indkey[0]
+        WHERE index.indrelid = 'public.integration_connections'::regclass
+          AND index.indisunique
+          AND attribute.attname = 'token_hash'
+      ) AS indexed
+    `;
+    expect(hash_index).toEqual([{ indexed: true }]);
+
+    await expect(
+      client.integrationConnection.create({
+        data: {
+          workspace_id: workspace_a,
+          provider: "LANDING_PAGE",
+          token_hash: token_hash_a,
+          token_last4: "same"
+        }
+      })
+    ).rejects.toThrow(/unique/i);
+
+    const legal_pipeline = await client.pipeline.create({
+      data: {
+        workspace_id: workspace_a,
+        name: "Jurídico A",
+        type: "LEGAL",
+        stages: {
+          create: [
+            { label: "Entrada", position: 1, role: "ENTRY" },
+            { label: "Conclusão", position: 2, role: "CLOSING" }
+          ]
+        }
+      }
+    });
+    const legal_hash = createHash("sha256")
+      .update(`mtco_legal_${randomUUID()}`, "utf8")
+      .digest("hex");
+    await expect(
+      client.integrationConnection.create({
+        data: {
+          workspace_id: workspace_a,
+          provider: "LANDING_PAGE",
+          token_hash: legal_hash,
+          token_last4: "lega",
+          target_pipeline_id: legal_pipeline.id
+        }
+      })
+    ).rejects.toThrow(/target pipeline must be commercial/i);
+    await client.pipeline.delete({ where: { id: legal_pipeline.id } });
+  });
+
+  it("prevents a targeted commercial pipeline from becoming legal later", async () => {
+    const target_pipeline = await client.pipeline.create({
+      data: {
+        workspace_id: workspace_a,
+        name: "Comercial roteado",
+        type: "COMMERCIAL",
+        is_default: false,
+        stages: {
+          create: [
+            { label: "Entrada", position: 1, role: "ENTRY" },
+            { label: "Conclusão", position: 2, role: "CLOSING" }
+          ]
+        }
+      }
+    });
+    const connection = await client.integrationConnection.create({
+      data: {
+        workspace_id: workspace_a,
+        provider: "LANDING_PAGE",
+        token_hash: createHash("sha256")
+          .update(`mtco_target_${randomUUID()}`, "utf8")
+          .digest("hex"),
+        token_last4: "rget",
+        target_pipeline_id: target_pipeline.id
+      }
+    });
+
+    await expect(
+      client.$transaction((transaction) =>
+        transaction.pipeline.update({
+          where: { id: target_pipeline.id },
+          data: { type: "LEGAL" }
+        })
+      )
+    ).rejects.toThrow(/must remain commercial/i);
+
+    await client.integrationConnection.delete({ where: { id: connection.id } });
+    await client.pipeline.delete({ where: { id: target_pipeline.id } });
+  });
+
+  it("resolves membership before a request has a workspace GUC", async () => {
+    const resolved_as_app = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe('SET LOCAL ROLE marctco_app');
+      return transaction.$queryRaw<
+        Array<{ workspace_id: string; workspace_slug: string; workspace_role: string }>
+      >`
+        SELECT workspace_id, workspace_slug, workspace_role::text
+        FROM private.resolve_user_workspaces(${user_a}::uuid, ${workspace_slug_a}::uuid)
+      `;
+    });
+    expect(resolved_as_app).toEqual([
+      { workspace_id: workspace_a, workspace_slug: workspace_slug_a, workspace_role: 'OWNER' }
+    ]);
+
+    const selected = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
+    expect(selected).toMatchObject({
+      workspace_id: workspace_a,
+      slug: workspace_slug_a,
+      role: "OWNER"
+    });
+    expect(selected?.context).toMatchObject({
+      workspace_id: workspace_a,
+      user_id: user_a,
+      role: "OWNER"
+    });
+
+    const foreign = await resolveUserContextForSlug(user_a, workspace_slug_b, client);
+    expect(foreign).toBeNull();
+
+    const choices = await listUserWorkspaces({ authenticated_user_id: user_a }, client);
+    expect(choices).toEqual([
+      {
+        workspace_id: workspace_a,
+        slug: workspace_slug_a,
+        name: "Workspace A",
+        role: "OWNER"
+      }
+    ]);
   });
 
   it("catches a business table created without RLS or policy — verified deliberately", async () => {
@@ -342,13 +960,7 @@ describe("Seam 3: RLS and schema invariants", () => {
 
 describe("Seam 3: withAccessContext is the single production path to data (ADR-0016)", () => {
   it("scopes a UserContext read to its own workspace, under the app role", async () => {
-    const user_context = createUserContext({
-      workspace_id: workspace_a,
-      user_id: randomUUID(),
-      role: "OWNER"
-    });
-
-    const visible = await withAccessContext(client, user_context, async (transaction) => {
+    const visible = await withAccessContext(client, user_context_a, async (transaction) => {
       await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
       return transaction.$queryRaw<Array<{ workspace_id: string }>>`
         SELECT workspace_id FROM workspace_members ORDER BY workspace_id
@@ -375,13 +987,7 @@ describe("Seam 3: withAccessContext is the single production path to data (ADR-0
   });
 
   it("uses SET LOCAL, not SET: the workspace claim never survives past the transaction", async () => {
-    const user_context = createUserContext({
-      workspace_id: workspace_a,
-      user_id: randomUUID(),
-      role: "OWNER"
-    });
-
-    await withAccessContext(client, user_context, async (transaction) => {
+    await withAccessContext(client, user_context_a, async (transaction) => {
       await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
       await transaction.$queryRaw`SELECT 1`;
     });
@@ -393,7 +999,7 @@ describe("Seam 3: withAccessContext is the single production path to data (ADR-0
   });
 
   it("fails closed and never opens the transaction for an unknown role, even past the constructor", async () => {
-    // createUserContext already refuses this; this proves the helper itself
+    // The context resolver already refuses this; this proves the helper itself
     // does not silently trust a context that reached it some other way.
     const corrupted_context = {
       kind: "user",

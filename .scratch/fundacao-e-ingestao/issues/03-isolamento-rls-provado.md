@@ -4,6 +4,8 @@
 
 **Status:** done
 
+> **Nota de supersessão — ADR-0019:** a lista final de `SECURITY DEFINER` agora tem quatro funções; `resolve_user_workspaces` usa o executor técnico `marctco_private_definer`, e as demais precisam de executor equivalente ao serem materializadas. O estado `done` registra a fundação entregue neste ticket; a implementação e a prova dessa emenda pertencem ao ticket 04 e aos tickets que materializam as funções, sem marcar seus critérios como concluídos antes da validação.
+
 ## Nota de escopo (registrada ao fechar o ticket)
 
 O ticket 01 já entregou boa parte da base SQL desta issue (papéis prefixados, `FORCE ROW LEVEL SECURITY`, policies keiadas em `app.workspace_id` com subselect, índice em `workspace_id`, a varredura de `pg_tables`/`pg_policies`, a enumeração de `SECURITY DEFINER` e a checagem de atributos de papel) — ver "Descobertas do ticket 01". O que faltava, e que este ticket constrói, é a camada TypeScript em `packages/db`: `AccessContext` (união discriminada, dois construtores, nenhum literal) e `withAccessContext`, o único caminho de transação que os named operations futuros vão usar.
@@ -35,7 +37,7 @@ Ver [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md). Atenção
   — **Parcial.** O client cru não é exportado (verificado pelo Seam 3, item abaixo), mas as nove operações nomeadas ainda não têm código: `Person`, `Opportunity`, `IntegrationEvent` e `IntakeReview` não existem nesta fatia até os tickets 06–11. Cada operação nasce com sua tabela, sobre `withAccessContext`.
 - [ ] **`listLeads(jobCtx)` não compila.** Só `findPersonCandidates` e `applyIntakePlan` aceitam as duas variantes, e as duas são do caminho de ingestão
   — **Parcial.** `listLeads` ainda não existe. O mecanismo que faz essa chamada não compilar está provado genericamente em `packages/db/tests/access-context.type-check.ts`, com uma operação representativa `UserContext`-only e `@ts-expect-error` na chamada com `JobContext`; roda em `pnpm typecheck` e quebra o build se a barreira regredir.
-- [x] **As três funções sem tenant não recebem `AccessContext` e não podem receber** — elas acontecem antes de existir workspace, e são justamente as que produzem o `workspace_id` que o constrói. Lista fechada de três, varrida pelo Seam 3 ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9)
+- [x] **Baseline superseded:** esta fundação fechou e varreu a lista então vigente de três funções sem tenant. O [ADR-0019](../../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) substitui-a por quatro e exige o executor técnico; a atualização verificável do Seam 3 é trabalho pendente do ticket 04.
 - [x] O client cru vive num módulo interno de `packages/db`; `no-restricted-imports` barra o import de fora e o **CI reprova**
 - [ ] Cada operação aplica, do lado de dentro, o `SET LOCAL`, o escopo do papel, o cursor keyset e o índice que lhe corresponde ([ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md))
   — **Parcial.** `withAccessContext` aplica o `SET LOCAL`; escopo do papel, keyset e índice por operação só existem quando a operação existir (mesma razão do item acima).
@@ -51,9 +53,9 @@ Ver [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md). Atenção
 - [x] Teste: escrita cross-workspace é recusada
 - [x] **Os testes de isolamento conectam com o papel do app**, não com o dono — rodar como dono com `FORCE` passa sem provar que o papel do app carece de `BYPASSRLS`
 - [x] **Seam 3 assere atributos de papel**: o papel do app não é superusuário, não tem `BYPASSRLS` e não é dono de tabela de negócio
-- [x] **Seam 3 enumera `SECURITY DEFINER`** e reprova qualquer função fora da lista fechada de três do [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9 — sem isso a lista é comentário
+- [x] **Baseline superseded:** o Seam 3 enumera `SECURITY DEFINER` e provou a lista de três então vigente. O ADR-0019 exige expandir a prova para a lista fechada de quatro, owner técnico, grants e policies mínimos; isso permanece pendente até a implementação do ticket 04.
 - [ ] Schema `private` existe, com `EXECUTE` das funções revogado de todo papel exceto o do app, e `search_path` fixado em cada função
-  — **Parcial.** O schema existe e `USAGE` já é negado a `marctco_worker` (testado). `EXECUTE` por função e `search_path` fixado só são verificáveis quando as três funções existirem (tickets 06, 15, 17).
+  — **Parcial.** O schema existe e `USAGE` já é negado a `marctco_worker` (testado). `EXECUTE` por função, `search_path` fixado e owner técnico só são verificáveis quando as quatro funções existirem (tickets 04, 06, 15, 17).
 - [x] **Seam 3 verifica que nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)) — varredura genérica por coluna `merged_into_%`, provada contra uma violação sintética porque nenhuma tabela real tem essa coluna ainda
 - [x] **Seam 3 reprova qualquer import do client cru do Prisma fora de `packages/db`** — é a varredura que impede o escopo de papel de virar convenção outra vez, e nenhuma rota a exercita ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
 - [x] Os testes rodam no CI e barram o merge — `pnpm test:unit` e `pnpm test:db` fazem parte dos jobs `Quality`/`Database` do `.github/workflows/ci.yml`; PR #8 com `Database`, `Quality` e o gate `CI` verdes

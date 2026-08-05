@@ -25,7 +25,7 @@ function assertUuid(value: string, label: string): void {
  * literal" a compiler fact instead of a naming convention (ADR-0016). Code
  * outside this module has no way to spell the brand, so a `{ kind: "user",
  * ... }` object literal structurally fails to satisfy `UserContext` — the
- * only way in is `createUserContext` / `createJobContext`.
+ * only way in is the workspace resolver / `createJobContext`.
  */
 declare const userContextBrand: unique symbol;
 declare const jobContextBrand: unique symbol;
@@ -64,7 +64,7 @@ export interface JobContext {
  */
 export type AccessContext = UserContext | JobContext;
 
-export interface CreateUserContextInput {
+interface CreateUserContextInput {
   readonly workspace_id: string;
   readonly user_id: string;
   readonly role: string;
@@ -75,7 +75,12 @@ export interface CreateUserContextInput {
  * missing role throws here, before any query runs, rather than silently
  * falling through to "sees everything" (ADR-0016 rule 5).
  */
-export function createUserContext(input: CreateUserContextInput): UserContext {
+/**
+ * Internal constructor used exclusively after `WorkspaceMember` has been
+ * resolved by `resolveUserContextForSlug`. It is deliberately absent from the
+ * package API: callers cannot turn arbitrary URL input into a UserContext.
+ */
+export function createUserContextFromResolvedMembership(input: CreateUserContextInput): UserContext {
   assertUuid(input.workspace_id, "workspace_id");
   assertUuid(input.user_id, "user_id");
   if (!KNOWN_ROLES.has(input.role)) {
