@@ -211,3 +211,10 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **Descobertas que afetam tickets seguintes:** Run 31029997919 confirma três bootstraps humanos encadeados para a 002 em Supabase gerenciado: CREATE ROLE, GRANT membership, ALTER SCHEMA OWNER. Migrations futuras que manipulem o schema `private` assumem `marctco_migrator` como owner após o passo 3.
 - **Documentos emendados:** ADR-0010, `acoes-manuais-pendentes.md`, este registro.
 - **Precisa de mão humana:** 1. Executar como `postgres` o `ALTER SCHEMA private OWNER TO marctco_migrator` em `acoes-manuais-pendentes.md` (passos 1–2 já feitos nos PRs #11/#12). 2. Mesclar o PR de recovery e re-run Production migration **somente depois** do passo 3.
+
+### Gate do ticket 06 — FECHADO (2026-08-05)
+
+- **Evidência Production migration:** https://github.com/petzada/marctco/actions/runs/31031305105 — Quality, Database, CI e Production migration verdes. Aplicadas em produção: `002` … `009`. `prisma migrate status`: **Database schema is up to date!** (9/9).
+- **Checklist do gate:** 7/7 — encoding OK; teste mutação reversa; `pnpm test:db` 54/54; Standards+Spec 0/0 com 009; registro com Ticket 04 e 009; PR #10 + recoveries #11/#12/#13 mergeados; `origin/main` reflete o código.
+- **Próximo:** ticket **17** (provisionamento). Ordem restante: `17 → 07 → 08 → 09 → (10·11·13·16) → 12·14 → 15`.
+- Handoff de contexto em 2026-08-05 → ver `PROMPT-HANDOFF.md`.

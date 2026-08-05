@@ -36,4 +36,5 @@ Este ticket contém uma das quatro consultas do sistema que legitimamente **não
 - Teste Seam 3 verde: `"prevents a targeted commercial pipeline from becoming legal later"` (`packages/db/tests/rls.test.ts`).
 - Encoding `Conclusão` confirmado em `rls.test.ts` (sem mojibake `ConclusÃ£o`).
 - Suíte DB integral: **54/54** (`pnpm test:db`); unit **22/22**, A7 **5/5**, lint e typecheck verdes localmente.
-- Empacotado com tickets 04 e 05 em branch `ticket/04-05-06-auth-pipelines-integration` — gate fechado após CI verde no PR.
+- Empacotado com tickets 04 e 05 em branch `ticket/04-05-06-auth-pipelines-integration` (PR #10).
+- Recoveries de produção (#11 CREATE ROLE, #12 GRANT membership, #13 ALTER SCHEMA owner) — Production migration verde em https://github.com/petzada/marctco/actions/runs/31031305105 (`002`–`009` aplicadas; schema up to date). Gate 06 fechado 7/7.
