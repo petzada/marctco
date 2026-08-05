@@ -24,10 +24,39 @@ BEGIN
   END IF;
 END
 $grant_migrator$;
+
+DO $schema_access$
+DECLARE
+  schema_owner name;
+BEGIN
+  SELECT owner.rolname
+  INTO schema_owner
+  FROM pg_namespace AS namespace
+  INNER JOIN pg_roles AS owner ON owner.oid = namespace.nspowner
+  WHERE namespace.nspname = 'private';
+
+  IF schema_owner = 'marctco_migrator' THEN
+    EXECUTE 'SET ROLE marctco_migrator';
+  ELSIF schema_owner IS DISTINCT FROM current_user THEN
+    RAISE EXCEPTION
+      'schema private must be owned by marctco_migrator or the migration session user';
+  END IF;
+END
+$schema_access$;
+
 -- PostgreSQL requires CREATE on the containing schema while ownership is
--- transferred. It is revoked immediately after the function is owned.
-GRANT USAGE, CREATE ON SCHEMA private TO marctco_private_definer;
-GRANT USAGE ON SCHEMA private TO marctco_app;
+-- transferred. Grants run as the schema owner; production requires a one-time
+-- human bootstrap: ALTER SCHEMA private OWNER TO marctco_migrator.
+DO $schema_grants$
+BEGIN
+  IF NOT has_schema_privilege('marctco_private_definer', 'private', 'CREATE') THEN
+    GRANT USAGE, CREATE ON SCHEMA private TO marctco_private_definer;
+  END IF;
+  IF NOT has_schema_privilege('marctco_app', 'private', 'USAGE') THEN
+    GRANT USAGE ON SCHEMA private TO marctco_app;
+  END IF;
+END
+$schema_grants$;
 
 SET ROLE marctco_migrator;
 

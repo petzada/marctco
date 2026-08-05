@@ -5,10 +5,12 @@ export const AUTH_WORKSPACE_MIGRATION_NAME =
 const FOUNDATION_EXPECTED_FAILURE = 'permission denied to set role "marctco_migrator"';
 const AUTH_WORKSPACE_CREATE_ROLE_FAILURE = "permission denied to create role";
 const AUTH_WORKSPACE_GRANT_ROLE_FAILURE = "permission denied to grant role";
+const AUTH_WORKSPACE_SCHEMA_PRIVATE_FAILURE = "permission denied for schema private";
 
 export const PRIVATE_DEFINER_ROLE = "marctco_private_definer";
 export const PRIVATE_DEFINER_BOOTSTRAP_SQL = `CREATE ROLE ${PRIVATE_DEFINER_ROLE} NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;`;
 export const PRIVATE_DEFINER_GRANT_SQL = `GRANT ${PRIVATE_DEFINER_ROLE} TO marctco_migrator WITH INHERIT FALSE, SET TRUE;`;
+export const PRIVATE_SCHEMA_OWNER_SQL = "ALTER SCHEMA private OWNER TO marctco_migrator;";
 
 function isAuthWorkspaceExpectedFailure(logs: string | null | undefined): boolean {
   if (!logs) {
@@ -16,12 +18,17 @@ function isAuthWorkspaceExpectedFailure(logs: string | null | undefined): boolea
   }
   return (
     logs.includes(AUTH_WORKSPACE_CREATE_ROLE_FAILURE) ||
-    logs.includes(AUTH_WORKSPACE_GRANT_ROLE_FAILURE)
+    logs.includes(AUTH_WORKSPACE_GRANT_ROLE_FAILURE) ||
+    logs.includes(AUTH_WORKSPACE_SCHEMA_PRIVATE_FAILURE)
   );
 }
 
 function isAuthWorkspaceGrantRoleFailure(logs: string | null | undefined): boolean {
   return logs?.includes(AUTH_WORKSPACE_GRANT_ROLE_FAILURE) ?? false;
+}
+
+function isAuthWorkspaceSchemaPrivateFailure(logs: string | null | undefined): boolean {
+  return logs?.includes(AUTH_WORKSPACE_SCHEMA_PRIVATE_FAILURE) ?? false;
 }
 
 export interface FailedMigrationState {
@@ -41,6 +48,7 @@ export interface FoundationArtifacts {
 export interface AuthWorkspaceArtifacts {
   private_definer_role_exists: boolean;
   migrator_private_definer_membership: boolean;
+  private_schema_migrator_owned: boolean;
   resolve_user_workspaces_exists: boolean;
   definer_policies: string[];
 }
@@ -161,6 +169,15 @@ export function decideAuthWorkspaceRecovery(
     return {
       action: "abort",
       reason: `marctco_migrator must receive ${PRIVATE_DEFINER_ROLE} membership manually in Supabase SQL Editor as postgres before recovery; run: ${PRIVATE_DEFINER_GRANT_SQL}`
+    };
+  }
+  if (
+    isAuthWorkspaceSchemaPrivateFailure(failed.logs) &&
+    !artifacts.private_schema_migrator_owned
+  ) {
+    return {
+      action: "abort",
+      reason: `schema private must be owned by marctco_migrator before recovery; run in Supabase SQL Editor as postgres: ${PRIVATE_SCHEMA_OWNER_SQL}`
     };
   }
 
