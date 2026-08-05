@@ -91,3 +91,15 @@
 - **Descobertas que afetam tickets seguintes:** A senha de `marctco_worker` no Railway não correspondia à do papel no Supabase; o `ALTER ROLE` corrigiu e o papel passa na autoverificação. Os dois serviços entram em `WAITING` no commit de merge antes de construir, o que prova Wait for CI ativo. Não existe serviço Redis no projeto Railway — os tickets de fila precisarão provisioná-lo.
 - **Documentos emendados:** Nenhum.
 - **Precisa de mão humana:** 1. Confirmar no painel do Railway, em Settings de cada serviço, que a região é `us-west-1`, igual à do Supabase; a CLI não expõe esse campo.
+
+### Fechamento do ticket 01 — CONCLUÍDO
+
+- **O que foi construído:** Nada de novo. Esta entrada registra o último gate externo e fecha o ticket.
+- **Arquivos-chave criados/alterados:** `.scratch/fundacao-e-ingestao/issues/01-esqueleto-vivo-monorepo-ci-deploy.md` — último critério marcado e `Status: done`.
+- **Critérios de aceite:** 39 de 39 marcados. O critério de mesma região foi confirmado pelo usuário no painel do Railway; a CLI não expõe o campo — `railway status --json` devolve `multiRegionConfig.region: null` nos dois serviços, o que reflete ausência de override em config-as-code, não a região efetiva.
+- **Testes:** Nenhuma execução nova. O último estado verificado permanece: `main` verde incluindo `Production migration`, web `/health` HTTP 200 em produção, worker `ready`.
+- **Branch / PR:** `ticket/01-close-ticket`, sobre `main` em `9a2bfc0`.
+- **Decisões que tomei sozinho:** Aceitei o marcador de região como confirmação humana, registrando aqui a procedência para que fique auditável.
+- **Descobertas que afetam tickets seguintes:** Nenhuma além das já registradas. Continua valendo: não existe serviço Redis no projeto Railway, e os tickets de fila (07, 15) precisarão provisioná-lo.
+- **Documentos emendados:** Nenhum.
+- **Precisa de mão humana:** Nada.

@@ -2,7 +2,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** needs-info
+**Status:** done
 
 ## What to build
 
@@ -76,7 +76,7 @@ Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **
 
 - [x] Após merge na `main`, job exclusivo e serializado por `concurrency` aplica `prisma migrate deploy` uma única vez e verifica o resultado
 - [x] Railway usa **Wait for CI** e faz deploy de app e worker como serviços separados; migration **não** roda no startup dos serviços
-- [ ] Railway e Supabase na **mesma região**
+- [x] Railway e Supabase na **mesma região**
 
 **Fora deste ticket, por decisão registrada**
 
