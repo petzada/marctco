@@ -15,9 +15,10 @@ GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE;
 -- transferred. It is revoked immediately after the function is owned.
 GRANT USAGE, CREATE ON SCHEMA private TO marctco_private_definer;
 GRANT USAGE ON SCHEMA private TO marctco_app;
-GRANT SELECT ON TABLE workspaces, workspace_members TO marctco_private_definer;
 
 SET ROLE marctco_migrator;
+
+GRANT SELECT ON TABLE workspaces, workspace_members TO marctco_private_definer;
 
 CREATE POLICY workspaces_private_definer_select ON workspaces
   FOR SELECT TO marctco_private_definer
