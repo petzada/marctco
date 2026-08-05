@@ -128,7 +128,7 @@ describe.skipIf(!enabled)("managed Postgres migration role", () => {
         {
           role_name: "postgres",
           can_set_migrator: true,
-          owned_business_tables: 5n,
+          owned_business_tables: 6n,
           followup_applied: true
         }
       ]);
