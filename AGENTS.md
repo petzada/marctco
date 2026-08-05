@@ -48,6 +48,7 @@ Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sess
 | [0016](./docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md) | **Contexto de acesso e leitor escopado** — `packages/db` não devolve o client do Prisma |
 | [0017](./docs/adr/0017-ingestao-como-decisao-e-plano.md) | **Ingestão é decisão pura; o plano de escrita é dado** — `IntakePlan`, dois chamadores |
 | [0018](./docs/adr/0018-marcador-como-modulo.md) | Marcador é módulo de domínio: `markersFor` responde "o que este lead tem" |
+| [0019](./docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) | Resolução pré-contexto: quarta função privada, executor `NOLOGIN` sob `FORCE RLS`, `UserContext` único |
 
 **Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.
 

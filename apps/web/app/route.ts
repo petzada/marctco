@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-export function GET(): Response {
-  return Response.json({ service: "marctco-web", status: "ok" });
+export function GET(request: Request): Response {
+  return Response.redirect(new URL("/access", request.url), 307);
 }
 

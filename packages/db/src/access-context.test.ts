@@ -2,18 +2,18 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   createJobContext,
-  createUserContext,
+  createUserContextFromResolvedMembership,
   isJobContext,
   isUserContext,
   WorkspaceRole
 } from "./access-context.js";
 
-describe("createUserContext", () => {
+describe("createUserContextFromResolvedMembership", () => {
   it("builds a UserContext for each of the four known roles", () => {
     for (const role of Object.values(WorkspaceRole)) {
       const workspace_id = randomUUID();
       const user_id = randomUUID();
-      const context = createUserContext({ workspace_id, user_id, role });
+      const context = createUserContextFromResolvedMembership({ workspace_id, user_id, role });
       expect(context.kind).toBe("user");
       expect(context.workspace_id).toBe(workspace_id);
       expect(context.user_id).toBe(user_id);
@@ -25,25 +25,37 @@ describe("createUserContext", () => {
 
   it("fails closed on an unknown role instead of building a context that sees everything", () => {
     expect(() =>
-      createUserContext({ workspace_id: randomUUID(), user_id: randomUUID(), role: "ADMIN" })
+      createUserContextFromResolvedMembership({
+        workspace_id: randomUUID(),
+        user_id: randomUUID(),
+        role: "ADMIN"
+      })
     ).toThrow(/unknown workspace role/i);
   });
 
   it("fails closed on a missing role", () => {
     expect(() =>
-      createUserContext({ workspace_id: randomUUID(), user_id: randomUUID(), role: "" })
+      createUserContextFromResolvedMembership({ workspace_id: randomUUID(), user_id: randomUUID(), role: "" })
     ).toThrow(/unknown workspace role/i);
   });
 
   it("refuses a non-UUID workspace_id", () => {
     expect(() =>
-      createUserContext({ workspace_id: "not-a-uuid", user_id: randomUUID(), role: "OWNER" })
+      createUserContextFromResolvedMembership({
+        workspace_id: "not-a-uuid",
+        user_id: randomUUID(),
+        role: "OWNER"
+      })
     ).toThrow(/must be a UUID/i);
   });
 
   it("refuses a non-UUID user_id", () => {
     expect(() =>
-      createUserContext({ workspace_id: randomUUID(), user_id: "not-a-uuid", role: "OWNER" })
+      createUserContextFromResolvedMembership({
+        workspace_id: randomUUID(),
+        user_id: "not-a-uuid",
+        role: "OWNER"
+      })
     ).toThrow(/must be a UUID/i);
   });
 });

@@ -6,6 +6,8 @@ Toda origem de lead (Pluga Meta, Pluga Google, webhook servidor-servidor de LP) 
 
 **Status:** accepted · 2026-08-04
 
+> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a resolução de associação navegador → workspace é o quarto caso sem tenant. A lista fechada, o executor técnico `NOLOGIN` e as policies mínimas passam a ser definidos por aquele ADR; esta decisão de ingestão permanece inalterada.
+
 Este é o ponto mais irreversível do sistema: uma vez que leads reais atravessaram este caminho, mudar a regra de deduplicação significa reconciliar dados de produção à mão.
 
 ## Contrato HTTP
@@ -183,7 +185,7 @@ O handler precisa descobrir **qual** workspace pertence àquele token — ou sej
 
 Resolver dando bypass de RLS ao app seria destruir a rede inteira por causa de uma consulta. A saída é uma **função `SECURITY DEFINER` em schema privado** que recebe o hash do token e devolve o `workspace_id`, com `EXECUTE` revogado de todo papel que não seja o do app. Superfície mínima, auditável, e o resto do sistema continua sem bypass.
 
-**Não é a única consulta sem tenant.** O dispatcher, que procura pendências de todos os workspaces sem sessão e sem job prévio, tem exatamente o mesmo formato — e um "claim por evento" seria circular, porque para setar o claim ele precisa do `workspace_id` do evento, e para ler o `workspace_id` ele precisaria do claim. O provisionamento de workspace é o terceiro caso. As três recebem o mesmo remédio e formam **lista fechada**, enumerada e verificada no ADR-0006 regra 9. O que cada uma devolve importa tanto quanto quem pode chamá-la: `claim_pending_events` devolve `(id, workspace_id)` e nunca o `raw`, que carrega CPF e telefone.
+**Não é a única consulta sem tenant.** O dispatcher, que procura pendências de todos os workspaces sem sessão e sem job prévio, tem exatamente o mesmo formato — e um "claim por evento" seria circular, porque para setar o claim ele precisa do `workspace_id` do evento, e para ler o `workspace_id` ele precisaria do claim. O provisionamento e a resolução navegador → associação/workspace completam os outros casos. As quatro recebem o mesmo remédio e formam **lista fechada**, enumerada e verificada no ADR-0006 regra 9, conforme detalhado no ADR-0019. O que cada uma devolve importa tanto quanto quem pode chamá-la: `claim_pending_events` devolve `(id, workspace_id)` e nunca o `raw`, que carrega CPF e telefone.
 
 Lookup por hash indexado, **sem cache** — token revogado precisa parar de funcionar imediatamente. O hash é **SHA-256 determinístico**, e isso não é descuido: salt e key-stretching existem contra segredo de baixa entropia escolhido por humano, e um token de integração é 256 bits de CSPRNG, onde não há o que forçar. Hash adaptativo é salgado por linha, o que torna impossível procurar por índice — restaria carregar todas as conexões e verificar uma a uma, na rota mais quente do sistema, com cache proibido. Salgar um valor inadivinhável não compra segurança; compra latência.
 

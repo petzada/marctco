@@ -18,7 +18,11 @@
     "test": "vitest run --project db",
     "test:a7": "vitest run --project a7"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
+    "@marctco/domain": "workspace:*",
     "@prisma/client": "6.19.0"
   },
   "devDependencies": {

@@ -36,5 +36,26 @@ describe("sanitizeTelemetry", () => {
     expect(sanitized.message).toBe("falha segura");
     expect(sanitized.stack).toContain("Error: falha segura");
   });
+
+  it("permits only hashed identifiers in workspace-access audit events", () => {
+    expect(
+      sanitizeTelemetry({
+        event: "workspace_access",
+        result: "denied",
+        user_id_hash: "a".repeat(64),
+        workspace_slug_hash: "b".repeat(64),
+        request_id: "request-safe",
+        user_id: "must-not-log",
+        slug: "must-not-log",
+        ip_address: "203.0.113.10"
+      })
+    ).toEqual({
+      event: "workspace_access",
+      result: "denied",
+      user_id_hash: "a".repeat(64),
+      workspace_slug_hash: "b".repeat(64),
+      request_id: "request-safe"
+    });
+  });
 });
 
