@@ -6,6 +6,7 @@ import {
   decideMigrationRecovery,
   FOUNDATION_MIGRATION_NAME,
   PRIVATE_DEFINER_BOOTSTRAP_SQL,
+  PRIVATE_DEFINER_GRANT_SQL,
   type AuthWorkspaceRecoveryState,
   type FoundationRecoveryState
 } from "./foundation-recovery.js";
@@ -41,6 +42,32 @@ const pristineAuthFailure: AuthWorkspaceRecoveryState = {
   ],
   artifacts: {
     private_definer_role_exists: true,
+    migrator_private_definer_membership: true,
+    resolve_user_workspaces_exists: false,
+    definer_policies: []
+  }
+};
+
+const pristineAuthGrantFailure: AuthWorkspaceRecoveryState = {
+  history_table_exists: true,
+  migrations: [
+    {
+      migration_name: FOUNDATION_MIGRATION_NAME,
+      finished_at: new Date(),
+      rolled_back_at: null,
+      logs: null
+    },
+    {
+      migration_name: AUTH_WORKSPACE_MIGRATION_NAME,
+      finished_at: null,
+      rolled_back_at: null,
+      logs:
+        'ERROR: permission denied to grant role "marctco_private_definer"\nDETAIL: Only roles with the ADMIN option on role "marctco_private_definer" may grant this role.'
+    }
+  ],
+  artifacts: {
+    private_definer_role_exists: true,
+    migrator_private_definer_membership: true,
     resolve_user_workspaces_exists: false,
     definer_policies: []
   }
@@ -144,6 +171,13 @@ describe("authentication workspace migration recovery", () => {
     });
   });
 
+  it("allows rollback resolution for permission denied to grant role when membership was bootstrapped", () => {
+    expect(decideAuthWorkspaceRecovery(pristineAuthGrantFailure)).toEqual({
+      action: "resolve-rolled-back",
+      migration_name: AUTH_WORKSPACE_MIGRATION_NAME
+    });
+  });
+
   it("aborts with bootstrap SQL when marctco_private_definer is missing", () => {
     const decision = decideAuthWorkspaceRecovery({
       ...pristineAuthFailure,
@@ -152,6 +186,21 @@ describe("authentication workspace migration recovery", () => {
     expect(decision.action).toBe("abort");
     if (decision.action === "abort") {
       expect(decision.reason).toContain(PRIVATE_DEFINER_BOOTSTRAP_SQL);
+      expect(decision.reason).toContain("Supabase SQL Editor");
+    }
+  });
+
+  it("aborts with grant SQL when grant role failed and migrator membership is missing", () => {
+    const decision = decideAuthWorkspaceRecovery({
+      ...pristineAuthGrantFailure,
+      artifacts: {
+        ...pristineAuthGrantFailure.artifacts,
+        migrator_private_definer_membership: false
+      }
+    });
+    expect(decision.action).toBe("abort");
+    if (decision.action === "abort") {
+      expect(decision.reason).toContain(PRIVATE_DEFINER_GRANT_SQL);
       expect(decision.reason).toContain("Supabase SQL Editor");
     }
   });

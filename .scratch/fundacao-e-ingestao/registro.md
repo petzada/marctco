@@ -187,3 +187,15 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **Descobertas que afetam tickets seguintes:** Qualquer migration futura que crie papel `NOLOGIN` além dos três iniciais precisará do mesmo bootstrap humano enquanto o secret de release for `marctco_migrator`. O CI não reproduz essa falha porque o Postgres efêmero usa `postgres` com `CREATEROLE`.
 - **Documentos emendados:** ADR-0010, `acoes-manuais-pendentes.md`, este registro.
 - **Precisa de mão humana:** 1. Executar no Supabase SQL Editor como `postgres` o `CREATE ROLE marctco_private_definer ...` documentado em `acoes-manuais-pendentes.md`. 2. Mesclar o PR de recovery e re-run do job Production migration **somente depois** do passo 1.
+
+### Recuperação production migration 002 — GRANT private_definer — PARCIAL
+
+- **O que foi construído:** Após o merge do PR #11, produção falhou no `GRANT marctco_private_definer TO marctco_migrator` porque só quem tem `ADMIN` no papel pode concedê-lo — `marctco_migrator` não pode reexecutar o grant na migration. A 002 passou a consultar `pg_auth_members` e pular o `GRANT` quando o membership já existe; o recovery fail-closed reconhece `permission denied to grant role`, exige o papel e o membership bootstrapados manualmente, e marca `rolled-back` antes do redeploy.
+- **Arquivos-chave criados/alterados:** `packages/db/prisma/migrations/20260805000200_authentication_workspace_context/migration.sql` — `GRANT` idempotente.<br>`packages/db/src/foundation-recovery.ts` — segundo erro conhecido e `PRIVATE_DEFINER_GRANT_SQL`.<br>`packages/db/src/recover-foundation-cli.ts` — auditoria de membership migrator/definer.<br>`packages/db/src/foundation-recovery.test.ts` — casos grant role.<br>`docs/adr/0010-migrations-e-ci-cd.md` — bootstrap CREATEROLE + GRANT membership.<br>`.scratch/fundacao-e-ingestao/acoes-manuais-pendentes.md` — SQL humano do passo 2.
+- **Critérios de aceite:** Recovery cobre grant role; migration pula GRANT existente; aborta sem membership; resolve quando pré-condições satisfeitas.
+- **Testes:** `foundation-recovery.test.ts` 21/21; typecheck, lint e migration safety verdes localmente; CI remoto verde (Quality, Database, CI).
+- **Branch / PR:** `ticket/06-recover-private-definer-grant`; https://github.com/petzada/marctco/pull/12, CI verde (Quality, Database, CI).
+- **Decisões que tomei sozinho:** Para falha de grant, recovery exige membership já concedido (fail-closed) em vez de confiar só no no-op da migration — o humano precisa do passo 2 antes do redeploy.
+- **Descobertas que afetam tickets seguintes:** Run 31029352341 confirma que CREATE ROLE humano + recovery do PR #11 não bastam; qualquer papel técnico `NOLOGIN` criado por `postgres` precisa também do GRANT membership manual antes do redeploy enquanto o secret de release for `marctco_migrator`.
+- **Documentos emendados:** ADR-0010, `acoes-manuais-pendentes.md`, este registro.
+- **Precisa de mão humana:** 1. Executar como `postgres` o `GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE` em `acoes-manuais-pendentes.md`. 2. Mesclar o PR de recovery e re-run Production migration **somente depois** do passo 1.

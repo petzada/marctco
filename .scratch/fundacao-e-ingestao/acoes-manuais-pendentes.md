@@ -1,24 +1,30 @@
 # Ações manuais pendentes — fundação e ingestão
 
-> Atualizado no fechamento do gate 04/05/06 (2026-08-05).
+> Atualizado após run 31029352341 (2026-08-05).
 
 ## Ticket 04/06 — Production migration 002 (CRÍTICO)
 
-A migration `20260805000200_authentication_workspace_context` falhou em produção porque `marctco_migrator` não tem `CREATEROLE`. A foundation (001) já está aplicada; o histórico Prisma deixou a 002 como failed/unresolved.
+A migration `20260805000200_authentication_workspace_context` falhou em produção porque `marctco_migrator` não tem privilégio para `GRANT` do papel `marctco_private_definer`. O `CREATE ROLE` já foi bootstrapado manualmente (recovery do PR #11); o histórico Prisma deixou a 002 como failed/unresolved.
 
 **Ordem obrigatória:**
 
-1. No **Supabase SQL Editor**, autenticado como `postgres`, executar **uma vez** (se o papel já existir, não recriar):
+1. No **Supabase SQL Editor**, autenticado como `postgres`, confirmar que o papel existe (passo do PR #11 — **não recriar** se já existir):
 
 ```sql
 CREATE ROLE marctco_private_definer NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 ```
 
-2. Mesclar o PR de recovery (`ticket/04-recover-private-definer-role`) **ou** re-executar o job **Production migration** na `main` já com o recovery mergeado.
+2. Ainda como `postgres`, executar **uma vez** o membership que só o criador do role pode conceder:
 
-3. O job roda `pnpm db:recover:foundation` (recovery generalizado), marca a 002 como `rolled-back` somente se o papel existir e não houver artefatos residuais da 002, e então `pnpm db:migrate:deploy` reaplica a 002 — o bloco `IF NOT EXISTS` pula o `CREATE ROLE` e conclui grants, policies e `private.resolve_user_workspaces`.
+```sql
+GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE;
+```
 
-**Sem o SQL do passo 1**, o recovery aborta fail-closed e o deploy não prossegue.
+3. Mesclar o PR de recovery (`ticket/06-recover-private-definer-grant`) e re-executar o job **Production migration** na `main` já com o recovery mergeado.
+
+4. O job roda `pnpm db:recover:foundation`, marca a 002 como `rolled-back` somente se o papel existir, o membership estiver concedido e não houver artefatos residuais da 002, e então `pnpm db:migrate:deploy` reaplica a 002 — os blocos `IF NOT EXISTS` pulam `CREATE ROLE` e `GRANT`, e concluem grants, policies e `private.resolve_user_workspaces`.
+
+**Sem o SQL do passo 2**, o recovery aborta fail-closed e o deploy não prossegue.
 
 ## Adiável para tickets 07 / 15
 

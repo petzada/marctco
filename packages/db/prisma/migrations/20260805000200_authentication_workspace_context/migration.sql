@@ -10,7 +10,20 @@ BEGIN
 END
 $roles$;
 
-GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE;
+DO $grant_migrator$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_auth_members AS member
+    INNER JOIN pg_roles AS role ON role.oid = member.roleid
+    INNER JOIN pg_roles AS member_role ON member_role.oid = member.member
+    WHERE role.rolname = 'marctco_private_definer'
+      AND member_role.rolname = 'marctco_migrator'
+  ) THEN
+    GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE;
+  END IF;
+END
+$grant_migrator$;
 -- PostgreSQL requires CREATE on the containing schema while ownership is
 -- transferred. It is revoked immediately after the function is owned.
 GRANT USAGE, CREATE ON SCHEMA private TO marctco_private_definer;
