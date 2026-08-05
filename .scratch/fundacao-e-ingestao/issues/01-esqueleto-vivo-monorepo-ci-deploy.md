@@ -14,52 +14,52 @@ O item **A7 deixa de ser risco de premissa**: com Postgres local, `prisma migrat
 
 **Monorepo**
 
-- [ ] Monorepo pnpm com `apps/web`, `apps/worker`, `packages/domain`, `packages/db`, sem Turborepo
-- [ ] Prisma vive em `packages/db`; o client é gerado **antes** do build dos apps
-- [ ] `.env.example` documenta as variáveis sem conter segredo
+- [x] Monorepo pnpm com `apps/web`, `apps/worker`, `packages/domain`, `packages/db`, sem Turborepo
+- [x] Prisma vive em `packages/db`; o client é gerado **antes** do build dos apps
+- [x] `.env.example` documenta as variáveis sem conter segredo
 
 **Ambiente local**
 
-- [ ] `docker-compose.yml` sobe Postgres e Redis descartáveis, com um comando
-- [ ] `prisma migrate dev` funciona contra o Postgres local, com shadow database
-- [ ] Primeira migração cria `Workspace` (com `slug` UUIDv4 único) e `WorkspaceMember`
-- [ ] Testes puros e prova de RLS rodam localmente antes do push
+- [x] `docker-compose.yml` sobe Postgres e Redis descartáveis, com um comando
+- [x] `prisma migrate dev` funciona contra o Postgres local, com shadow database
+- [x] Primeira migração cria `Workspace` (com `slug` UUIDv4 único) e `WorkspaceMember`
+- [x] Testes puros e prova de RLS rodam localmente antes do push
 
 **Verificações mecânicas (A7)**
 
-- [ ] `SET LOCAL` funciona dentro de `$transaction` do Prisma
-- [ ] Prepared statements funcionam com o pooler em transaction mode (`pgbouncer=true` ou porta de session mode)
-- [ ] **Comportamento de `$transaction` diante de erro capturado**: confirmar que a violação de unicidade aborta a transação e que `INSERT ... ON CONFLICT DO NOTHING RETURNING id` permite seguir na mesma transação. É o que sustenta o ticket 11 — melhor descobrir aqui ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
-- [ ] **Schema `private` não declarado na datasource não aparece como drift** no `migrate diff` ([ADR-0010](../../../docs/adr/0010-migrations-e-ci-cd.md) guard 6)
+- [x] `SET LOCAL` funciona dentro de `$transaction` do Prisma
+- [x] Prepared statements funcionam com o pooler em transaction mode (`pgbouncer=true` ou porta de session mode)
+- [x] **Comportamento de `$transaction` diante de erro capturado**: confirmar que a violação de unicidade aborta a transação e que `INSERT ... ON CONFLICT DO NOTHING RETURNING id` permite seguir na mesma transação. É o que sustenta o ticket 11 — melhor descobrir aqui ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
+- [x] **Schema `private` não declarado na datasource não aparece como drift** no `migrate diff` ([ADR-0010](../../../docs/adr/0010-migrations-e-ci-cd.md) guard 6)
 
 Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **antes** de seguir.
 
 **Papéis e autoverificação**
 
-- [ ] Papéis criados **dentro das migrations**, idempotentes e prefixados: `marctco_migrator` (dono, DDL), `marctco_app` e `marctco_worker` (sem `BYPASSRLS`)
-- [ ] **Nenhuma senha em arquivo de migration** — o repositório é público ao time; a senha é definida por `ALTER ROLE`, fora do versionamento
-- [ ] O mesmo caminho de criação vale para Docker local, CI e produção — uma fonte, três ambientes
-- [ ] **App e worker abortam o boot** se o papel conectado for superusuário, tiver `BYPASSRLS` ou for dono de tabela de negócio ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 10). É a única defesa contra a connection string errada no Railway, porque nenhum CI sabe qual string está lá
-- [ ] A mensagem de recusa diz **qual** condição falhou, para o diagnóstico não virar adivinhação
+- [x] Papéis criados **dentro das migrations**, idempotentes e prefixados: `marctco_migrator` (dono, DDL), `marctco_app` e `marctco_worker` (sem `BYPASSRLS`)
+- [x] **Nenhuma senha em arquivo de migration** — o repositório é público ao time; a senha é definida por `ALTER ROLE`, fora do versionamento
+- [x] O mesmo caminho de criação vale para Docker local, CI e produção — uma fonte, três ambientes
+- [x] **App e worker abortam o boot** se o papel conectado for superusuário, tiver `BYPASSRLS` ou for dono de tabela de negócio ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 10). É a única defesa contra a connection string errada no Railway, porque nenhum CI sabe qual string está lá
+- [x] A mensagem de recusa diz **qual** condição falhou, para o diagnóstico não virar adivinhação
 
 **PII fora da telemetria**
 
-- [ ] Serializador central com **lista de permissão**, não de bloqueio: passam `workspace_id`, `integration_event_id`, `source`, `external_lead_id`, mensagem e stack. Bloqueio falharia no primeiro campo desconhecido, e o contrato `v1` preserva de propósito "propriedades desconhecidas" ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 12)
-- [ ] `beforeSend` do Sentry e serializers/`redact` do `pino` usam esse serializador — **uma configuração, dois consumidores**
-- [ ] Configurado **antes da primeira rota existir**: depois, cada lugar novo é uma chance de esquecer
-- [ ] Teste que **falha** se payload cru, `Person` ou submissão inteira aparecerem num evento de erro
+- [x] Serializador central com **lista de permissão**, não de bloqueio: passam `workspace_id`, `integration_event_id`, `source`, `external_lead_id`, mensagem e stack. Bloqueio falharia no primeiro campo desconhecido, e o contrato `v1` preserva de propósito "propriedades desconhecidas" ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 12)
+- [x] `beforeSend` do Sentry e serializers/`redact` do `pino` usam esse serializador — **uma configuração, dois consumidores**
+- [x] Configurado **antes da primeira rota existir**: depois, cada lugar novo é uma chance de esquecer
+- [x] Teste que **falha** se payload cru, `Person` ou submissão inteira aparecerem num evento de erro
 
 **Rate limit**
 
-- [ ] Contador **em memória do processo**, sem Redis — limiter com Redis faria a queda da fila recusar lead, derrotando a outbox por um controle acessório ([ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na-url.md))
-- [ ] **Falha aberta**: erro no próprio limiter deixa a requisição passar
-- [ ] Aplicado só em falha de autenticação (por IP), endpoint de LP (por token) e tentativa de workspace alheio. Tráfego autenticado da Pluga **não** é limitado, e **nenhum caminho novo devolve 429**
-- [ ] Ponto de chamada é **uma função só**, para trocar a implementação sem caçar chamadas
+- [x] Contador **em memória do processo**, sem Redis — limiter com Redis faria a queda da fila recusar lead, derrotando a outbox por um controle acessório ([ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na-url.md))
+- [x] **Falha aberta**: erro no próprio limiter deixa a requisição passar
+- [x] Aplicado só em falha de autenticação (por IP), endpoint de LP (por token) e tentativa de workspace alheio. Tráfego autenticado da Pluga **não** é limitado, e **nenhum caminho novo devolve 429**
+- [x] Ponto de chamada é **uma função só**, para trocar a implementação sem caçar chamadas
 
 **Guards**
 
-- [ ] `prisma migrate dev`, `prisma db push` e `--force-reset` proibidos contra qualquer banco remoto; produção aceita apenas `prisma migrate deploy`
-- [ ] Migrações rodam com a string de conexão do papel **dono**, distinta da do app
+- [x] `prisma migrate dev`, `prisma db push` e `--force-reset` proibidos contra qualquer banco remoto; produção aceita apenas `prisma migrate deploy`
+- [x] Migrações rodam com a string de conexão do papel **dono**, distinta da do app
 - [ ] String do papel de migrations existe **só** no GitHub Environment de produção e nunca é exposta a workflow de PR; string da aplicação existe só no Railway; nenhuma vive em `.env` de desenvolvimento
 
 **Push e PR**
@@ -80,5 +80,5 @@ Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **
 
 **Fora deste ticket, por decisão registrada**
 
-- [ ] Fixtures sintéticas e caminho de upgrade da `main` ficam adiados até produção ter dado real do piloto ([ADR-0010](../../../docs/adr/0010-migrations-e-ci-cd.md) §Riscos aceitos)
-- [ ] Preflight existe como **regra** (guard 8), não como infraestrutura: a primeira migration que depender de dados existentes constrói o seu
+- [x] Fixtures sintéticas e caminho de upgrade da `main` ficam adiados até produção ter dado real do piloto ([ADR-0010](../../../docs/adr/0010-migrations-e-ci-cd.md) §Riscos aceitos)
+- [x] Preflight existe como **regra** (guard 8), não como infraestrutura: a primeira migration que depender de dados existentes constrói o seu
