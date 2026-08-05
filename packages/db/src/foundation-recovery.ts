@@ -39,6 +39,9 @@ export function decideFoundationRecovery(
   state: FoundationRecoveryState
 ): FoundationRecoveryDecision {
   if (!state.history_table_exists) {
+    if (artifactCount(state.artifacts) !== 0) {
+      return { action: "abort", reason: "foundation artifacts exist without migration history" };
+    }
     return { action: "none", reason: "migration history does not exist yet" };
   }
 
@@ -47,6 +50,9 @@ export function decideFoundationRecovery(
   );
   if (unresolved.length === 0) {
     return { action: "none", reason: "no unresolved failed migration" };
+  }
+  if (artifactCount(state.artifacts) !== 0) {
+    return { action: "abort", reason: "foundation artifacts exist beside failed history" };
   }
   if (unresolved.length !== 1) {
     return { action: "abort", reason: "more than one unresolved migration exists" };
@@ -59,9 +65,5 @@ export function decideFoundationRecovery(
   if (!failed.logs?.includes(EXPECTED_FAILURE)) {
     return { action: "abort", reason: "the foundation migration failed for a different reason" };
   }
-  if (artifactCount(state.artifacts) !== 0) {
-    return { action: "abort", reason: "foundation artifacts remain after the failed migration" };
-  }
-
   return { action: "resolve-rolled-back", migration_name: FOUNDATION_MIGRATION_NAME };
 }

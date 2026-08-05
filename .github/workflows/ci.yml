@@ -98,6 +98,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:migrations
       - run: pnpm db:migrate:deploy
+      - run: pnpm db:migrate:dev
       - run: pnpm db:drift
       - run: pnpm test:db
       - run: pnpm test:a7

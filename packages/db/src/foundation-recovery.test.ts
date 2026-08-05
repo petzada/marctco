@@ -56,4 +56,33 @@ describe("foundation migration recovery", () => {
   ])("aborts when production has $name", ({ state }) => {
     expect(decideFoundationRecovery(state).action).toBe("abort");
   });
+
+  it.each(["roles", "schemas", "types", "tables"] as const)(
+    "aborts on %s without migration history",
+    (artifact) => {
+      const state: FoundationRecoveryState = {
+        history_table_exists: false,
+        migrations: [],
+        artifacts: { roles: [], schemas: [], types: [], tables: [], [artifact]: ["residual"] }
+      };
+      expect(decideFoundationRecovery(state).action).toBe("abort");
+    }
+  );
+
+  it("does not treat artifacts from an applied migration as residual", () => {
+    const state: FoundationRecoveryState = {
+      history_table_exists: true,
+      migrations: [{ ...pristine_failure.migrations[0]!, finished_at: new Date() }],
+      artifacts: {
+        roles: ["marctco_app", "marctco_migrator", "marctco_worker"],
+        schemas: ["private"],
+        types: ["workspace_role"],
+        tables: ["public.workspace_members", "public.workspaces"]
+      }
+    };
+    expect(decideFoundationRecovery(state)).toEqual({
+      action: "none",
+      reason: "no unresolved failed migration"
+    });
+  });
 });
