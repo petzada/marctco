@@ -1,0 +1,271 @@
+/*
+ * Design tokens — extracted from ../../../DESIGN.md, the lei visual of this
+ * product. Every value below is copied verbatim from that file; nothing here
+ * is invented. When DESIGN.md changes, this is the only file that should
+ * change with it.
+ *
+ * `{token.refs}` mapping (how a DESIGN.md reference becomes a Tailwind class):
+ *
+ *   {colors.foo}      -> --color-foo      -> bg-foo / text-foo / border-foo / ring-foo / fill-foo
+ *   {typography.foo}  -> --text-foo       -> text-foo   (bundles font-size + line-height +
+ *                                                          letter-spacing + font-weight in one class)
+ *   {spacing.foo}     -> --spacing-foo    -> p-foo / px-foo / gap-foo / m-foo / w-foo / h-foo / top-foo ...
+ *   {rounded.foo}     -> --radius-foo     -> rounded-foo
+ *   {shadow.foo}      -> --shadow-foo     -> shadow-foo
+ *
+ * Components consume these classes; a component that writes a literal hex or
+ * a literal px for spacing/radius is violating DESIGN.md ("Iteration Guide" #3).
+ *
+ * Single light theme. No dark mode, no `dark:` variant, no toggle — DESIGN.md
+ * "Known Gaps" documents dark mode as explicitly out of scope, and the
+ * absence of any `prefers-color-scheme: dark` override in this file is the
+ * whole implementation of that decision. Do not add one.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* ---------------------------------------------------------------------
+   * Colors
+   * DESIGN.md "Colors". The default Tailwind palette (red-500, slate-900,
+   * ...) is removed on purpose: this system has exactly one chromatic
+   * accent and a closed set of surfaces/semantics, and leaving the stock
+   * palette available would let a component reach for `bg-blue-600`
+   * instead of `bg-primary` — the same violation as an inline hex, just
+   * spelled differently.
+   * --------------------------------------------------------------------- */
+  --color-*: initial;
+
+  /* Brand & Accent */
+  --color-primary: #0066cc;
+  --color-primary-hover: #0055aa;
+  --color-primary-pressed: #004c99;
+  --color-primary-focus: #0071e3;
+  --color-primary-subtle: #e8f1fb;
+  --color-on-primary: #ffffff;
+
+  /* Surface (the four-step light ladder) */
+  --color-canvas: #ffffff;
+  --color-canvas-sunken: #f5f5f7;
+  --color-surface-inset: #fafafc;
+  --color-surface-ink: #1d1d1f;
+  --color-overlay-scrim: rgba(0, 0, 0, 0.4);
+  --color-surface-chip-translucent: rgba(210, 210, 215, 0.64);
+
+  /* Text */
+  --color-ink: #1d1d1f;
+  --color-ink-secondary: #3d3d41;
+  --color-ink-muted: #6e6e73;
+  --color-ink-disabled: #a1a1a6;
+  --color-ink-inverse: #ffffff;
+
+  /* Hairlines & Borders */
+  --color-hairline-soft: #f0f0f0;
+  --color-hairline: #e0e0e0;
+  --color-hairline-strong: #c7c7cc;
+
+  /* Semantic — status only, never a CTA, never a section fill.
+   * Info reuses --color-primary / --color-primary-subtle: DESIGN.md
+   * documents no separate info hue, so none is invented here. */
+  --color-success: #27a644;
+  --color-success-ink: #1a7f37;
+  --color-success-surface: #e6f4ea;
+  --color-warning: #c76a00;
+  --color-warning-ink: #8a4b00;
+  --color-warning-surface: #fdf3e6;
+  --color-danger: #d70015;
+  --color-danger-ink: #b3000f;
+  --color-danger-surface: #fdecec;
+
+  /* ---------------------------------------------------------------------
+   * Typography — Font family
+   * DESIGN.md "Typography > Font Family". Serif is dropped: this is a
+   * one-family system end to end.
+   * --------------------------------------------------------------------- */
+  --font-*: initial;
+  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Weight ladder is 400 / 500 / 600 only — DESIGN.md "Typography >
+   * Principles": 300 and 700 are deliberately absent. font-normal /
+   * font-medium / font-semibold keep their usual Tailwind names. */
+  --font-weight-*: initial;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* ---------------------------------------------------------------------
+   * Typography — Hierarchy
+   * DESIGN.md "Typography > Hierarchy" table, one `--text-*` entry per row.
+   * Each entry bundles size + line-height + letter-spacing (em, per the
+   * "tracking is em-relative" principle) + weight, so `text-body` alone
+   * reproduces the whole table row — no separate `leading-*`/`tracking-*`
+   * class needed alongside it.
+   * --------------------------------------------------------------------- */
+  --text-*: initial;
+
+  --text-display-xl: 64px;
+  --text-display-xl--line-height: 1.05;
+  --text-display-xl--letter-spacing: -0.03em;
+  --text-display-xl--font-weight: 600;
+
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 1.08;
+  --text-display-lg--letter-spacing: -0.028em;
+  --text-display-lg--font-weight: 600;
+
+  --text-display-md: 36px;
+  --text-display-md--line-height: 1.15;
+  --text-display-md--letter-spacing: -0.024em;
+  --text-display-md--font-weight: 600;
+
+  --text-headline: 28px;
+  --text-headline--line-height: 1.2;
+  --text-headline--letter-spacing: -0.02em;
+  --text-headline--font-weight: 600;
+
+  --text-title: 22px;
+  --text-title--line-height: 1.27;
+  --text-title--letter-spacing: -0.015em;
+  --text-title--font-weight: 600;
+
+  --text-subhead: 20px;
+  --text-subhead--line-height: 1.4;
+  --text-subhead--letter-spacing: -0.01em;
+  --text-subhead--font-weight: 400;
+
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 1.5;
+  --text-body-lg--letter-spacing: -0.01em;
+  --text-body-lg--font-weight: 400;
+
+  --text-body: 16px;
+  --text-body--line-height: 1.5;
+  --text-body--letter-spacing: -0.005em;
+  --text-body--font-weight: 400;
+
+  --text-body-strong: 16px;
+  --text-body-strong--line-height: 1.5;
+  --text-body-strong--letter-spacing: -0.005em;
+  --text-body-strong--font-weight: 600;
+
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.45;
+  --text-body-sm--letter-spacing: 0em;
+  --text-body-sm--font-weight: 400;
+
+  --text-label: 13px;
+  --text-label--line-height: 1.3;
+  --text-label--letter-spacing: 0em;
+  --text-label--font-weight: 500;
+
+  --text-button: 14px;
+  --text-button--line-height: 1.2;
+  --text-button--letter-spacing: 0em;
+  --text-button--font-weight: 500;
+
+  /* The one positive-tracking entry in the system — marks taxonomy, not headline. */
+  --text-eyebrow: 13px;
+  --text-eyebrow--line-height: 1.3;
+  --text-eyebrow--letter-spacing: 0.03em;
+  --text-eyebrow--font-weight: 500;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0em;
+  --text-caption--font-weight: 400;
+
+  --text-mono: 13px;
+  --text-mono--line-height: 1.5;
+  --text-mono--letter-spacing: 0em;
+  --text-mono--font-weight: 400;
+
+  --text-micro-legal: 10px;
+  --text-micro-legal--line-height: 1.3;
+  --text-micro-legal--letter-spacing: 0em;
+  --text-micro-legal--font-weight: 400;
+
+  /* ---------------------------------------------------------------------
+   * Spacing
+   * DESIGN.md "Layout > Spacing System": "Base unit: 4px. Every structural
+   * value is a multiple." Tailwind's own default `--spacing` multiplier is
+   * already 0.25rem (4px at the default root size), so it is left
+   * untouched rather than re-declared in px — re-basing it would trade
+   * rem's user-font-size scaling for a fixed pixel value on every numeric
+   * utility (`p-1`, `gap-2`, ...) app-wide, which DESIGN.md never asks for.
+   * The nine named steps below are added on top of that scale: `p-4`
+   * (the numeric multiplier) and `p-md` (this token) both resolve to
+   * 16px, and both are token-driven — neither is an inline px.
+   * --------------------------------------------------------------------- */
+  --spacing-xxs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-section: 80px;
+  --spacing-section-lg: 96px;
+
+  /* ---------------------------------------------------------------------
+   * Border radius
+   * DESIGN.md "Shapes > Border Radius Scale". Grammar: 8px controls, 12px
+   * cards, 16px panels, pill only for state. The default Tailwind radius
+   * scale (rem-based, no `pill`) is removed so nothing outside this
+   * grammar is reachable, and radii can't mix within it.
+   * --------------------------------------------------------------------- */
+  --radius-*: initial;
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-xxl: 24px;
+  --radius-pill: 9999px;
+  --radius-full: 50%;
+
+  /* ---------------------------------------------------------------------
+   * Shadow
+   * DESIGN.md "Elevation & Depth > Shadow philosophy": exactly two shadows
+   * exist in the entire system. The default Tailwind shadow scale
+   * (shadow-sm..shadow-2xl, shadow-inner) is removed so a third can't
+   * silently appear.
+   * --------------------------------------------------------------------- */
+  --shadow-*: initial;
+  --shadow-overlay: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-product: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/*
+ * `tabular-nums` needs no setup: Tailwind ships it as a core
+ * font-variant-numeric utility regardless of theme configuration. Apply the
+ * `tabular-nums` class to every column of currency, percentage, or date, per
+ * DESIGN.md "Typography > Font Family > OpenType features" and "Do's".
+ */
+
+/*
+ * Known gaps — this file has no token for any of these. Do not invent one;
+ * the specifics (interim numbers, rationale) live only in DESIGN.md's own
+ * "Known Gaps" section, so they aren't restated here and can't drift out of
+ * sync with it:
+ *
+ * - Motion and transition timing.
+ * - Data visualization (categorical) palette — do not improvise one from
+ *   the semantic success/warning/danger tones above.
+ * - Density — table/card sizing is documented at one height only.
+ *
+ * The surface-for-disclosure gap (popover/tooltip) is registered directly
+ * in DESIGN.md's "Known Gaps" section, not here — see that file.
+ */
+
+/*
+ * On the `--color-*: initial` reset above: it removes Tailwind's default
+ * color palette (including the bare `white`/`black` keys — DESIGN.md's
+ * white and near-black already have names, `{colors.canvas}` /
+ * `{colors.ink}`, and a stray `bg-white` would bypass that). It does NOT
+ * remove `transparent` or `currentColor` — verified by compiling this file
+ * with the Tailwind CLI: `bg-transparent`, `border-transparent`, and
+ * `text-current` all still emit, because Tailwind treats those two as
+ * built-in keyword values, not entries in the `--color-*` theme namespace.
+ */
