@@ -25,6 +25,22 @@ BEGIN
 END
 $grant_migrator$;
 
+DO $schema_owner$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_namespace AS namespace
+    INNER JOIN pg_roles AS owner ON owner.oid = namespace.nspowner
+    WHERE namespace.nspname = 'private'
+      AND owner.rolname = 'marctco_migrator'
+  ) THEN
+    RETURN;
+  END IF;
+
+  ALTER SCHEMA private OWNER TO marctco_migrator;
+END
+$schema_owner$;
+
 SET ROLE marctco_migrator;
 
 -- Schema private is created in the foundation migration before SET ROLE, so in
