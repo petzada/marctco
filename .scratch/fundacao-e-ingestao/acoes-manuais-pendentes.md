@@ -1,36 +1,16 @@
 # Ações manuais pendentes — fundação e ingestão
 
-> Atualizado após run 31029997919 (2026-08-05).
+> Atualizado no fechamento do gate 06 (2026-08-05). Production migration verde:
+> https://github.com/petzada/marctco/actions/runs/31031305105 — schema up to date (9/9).
 
-## Ticket 06 — Production migration 002 (CRÍTICO)
+## Já resolvido — Ticket 06 / Production migration 002
 
-A migration `20260805000200_authentication_workspace_context` falhou em produção com `permission denied for schema private`. Os passos 1 e 2 (CREATE ROLE + GRANT membership) já foram bootstrapados manualmente; o schema `private` continua owned by `postgres` porque a foundation o criou antes de `SET ROLE marctco_migrator`.
+Bootstrap humano + recoveries (#11/#12/#13) concluídos:
 
-**Ordem obrigatória:**
-
-1. No **Supabase SQL Editor**, autenticado como `postgres`, confirmar que o papel existe (passo do PR #11 — **não recriar** se já existir):
-
-```sql
-CREATE ROLE marctco_private_definer NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-```
-
-2. Ainda como `postgres`, confirmar o membership (passo do PR #12 — **não reexecutar** se já existir):
-
-```sql
-GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE;
-```
-
-3. Ainda como `postgres`, executar **uma vez** a transferência de ownership do schema:
-
-```sql
-ALTER SCHEMA private OWNER TO marctco_migrator;
-```
-
-4. Mesclar o PR de recovery (`ticket/06-recover-private-schema-grant`) e re-executar o job **Production migration** na `main` já com o recovery mergeado.
-
-5. O job roda `pnpm db:recover:foundation`, marca a 002 como `rolled-back` somente se o papel existir, o membership estiver concedido, `private` for owned by `marctco_migrator`, e não houver artefatos residuais da 002; então `pnpm db:migrate:deploy` reaplica a 002 — os blocos idempotentes pulam role/membership já bootstrapados, e concluem grants de schema, policies e `private.resolve_user_workspaces`.
-
-**Sem o SQL do passo 3**, o recovery aborta fail-closed e o deploy não prossegue.
+1. `CREATE ROLE marctco_private_definer ...`
+2. `GRANT marctco_private_definer TO marctco_migrator WITH INHERIT FALSE, SET TRUE`
+3. `ALTER SCHEMA private OWNER TO marctco_migrator`
+4. Production migration aplicou migrations `002`–`009`
 
 ## Adiável para tickets 07 / 15
 

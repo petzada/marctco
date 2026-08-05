@@ -1,0 +1,85 @@
+/implement Continuar a fatia "fundação e ingestão" até os 17 tickets em
+`.scratch/fundacao-e-ingestao/issues/` estarem `Status: done`, com critérios
+marcados e o aceite da fatia em `.scratch/fundacao-e-ingestao/README.md`
+verificável.
+
+Substitua/continue sob as regras de `PROMPT-GOAL-IMPLEMENTACAO.md`; este
+handoff é o ponto de retomada oficial da sessão anterior.
+
+# Quem é você
+
+Você é o ORQUESTRADOR (Grok 4.5). Você NÃO implementa ticket do zero.
+Despacha cada ticket a Composer 2.5 via Task (`composer-2.5-fast`,
+`generalPurpose` ou `best-of-n-runner` em paralelo com worktrees).
+Formato de resumo fixo; self-review; confrontar critérios/ADRs; só então
+atualizar Status/registro.
+
+# Estado validado ao fechar esta sessão (2026-08-05)
+
+## Gate do ticket 06 — FECHADO (7/7)
+
+- [x] 06 tratado como em revisão até evidência real
+- [x] Encoding `Conclusão` OK em `packages/db/tests/rls.test.ts`
+- [x] Teste mutação reversa verde (`prevents a targeted commercial pipeline from becoming legal later`)
+- [x] Suíte DB 54/54 (Seam 3 + 009)
+- [x] Standards + Spec com 009: 0/0 findings
+- [x] `registro.md` com Ticket 04, Ticket 06+009, recuperações; Comments issue 06
+- [x] 04→05→06 em PR #10 + recuperações #11/#12/#13; **Production migration verde**
+      — run https://github.com/petzada/marctco/actions/runs/31031305105
+      — `Database schema is up to date!` (9/9 migrations aplicadas em produção)
+
+## origin/main
+
+- HEAD inclui tickets **01–06** (código + docs) e recoveries.
+- Migrations de produção: `001` … `009` aplicadas.
+- Issues: **01–06 = done**; **07–17 = ready-for-agent** (17 ainda não despachado).
+
+## Próximo despacho exato
+
+**Ticket 17 — Provisionamento de workspace** (antes do 07).
+
+Ordem canônica restante:
+`17 → 07 → 08 → 09 → (10 · 11 · 13 · 16 em paralelo se worktrees) → 12 · 14 → 15`
+
+Bloqueadores do 17: 03, 04, 05 — todos done. Fronteira: 17.
+
+## Descobertas acumuladas (colar no briefing do Composer)
+
+- `@marctco/db` não exporta Prisma cru; `withAccessContext` + `AccessContext` branded.
+- `UserContext` só via `resolveUserContextForSlug` / `resolve_user_workspaces` (ADR-0019).
+- Ticket 17: `private.provision_workspace` + importar `defaultCommercialPipeline` de `@marctco/domain` (nunca duplicar em SQL); direito em `app_metadata` (nunca `user_metadata`); onboarding em `/onboarding`.
+- Ticket 07: `resolveWorkspaceByIntegrationToken` → GUC → leitura sob RLS; body sem workspace/origem.
+- Migrations pós-foundation em Supabase: release como `marctco_migrator`; papéis `NOLOGIN` novos podem exigir bootstrap humano (CREATE ROLE + GRANT membership) se o migrator não tiver CREATEROLE; schema `private` agora owned by `marctco_migrator`.
+- Redis Railway ausente — adiável para 07/15.
+- Vitest unit precisa alias `@marctco/db` → source no CI.
+
+## Ações manuais pendentes
+
+Arquivo: `.scratch/fundacao-e-ingestao/acoes-manuais-pendentes.md`
+
+- Crítico 002: **resolvido** (CREATE ROLE + GRANT + ALTER SCHEMA + Production migration verde).
+- Adiável 07/15: Redis no Railway (`us-west-1`).
+- Adiável 17: marcar usuário apto em Supabase `app_metadata` (painel; nunca `user_metadata`).
+
+## PRs recentes
+
+| PR | Conteúdo | Estado |
+|----|----------|--------|
+| #10 | tickets 04–06 | merged |
+| #11 | recovery CREATE ROLE | merged |
+| #12 | recovery GRANT membership | merged |
+| #13 | recovery schema private owner | merged; Production migration verde |
+
+## Regras preservadas
+
+- Orquestrador não implementa do zero; Composer 2.5 implementa.
+- Formato de resumo do briefing; paradas legítimas da lista fechada.
+- Arquivo único de manuais; nunca push direto na main.
+- Loop de contexto: aos ≤20% restante, gravar novo PROMPT-HANDOFF.md e parar.
+
+# Briefing padrão ao Composer (ticket 17)
+
+Leia PROMPT-INICIAL → AGENTS+CONTEXT → spec → issue 17 + ADRs citados
+(0005, 0006, 0012, 0019, 0009) → supabase-postgres-best-practices antes de SQL.
+TDD; branch `ticket/17-…` a partir de main atualizada; nunca push na main.
+Cole as descobertas acima. Devolva o resumo no formato fixo do GOAL.
