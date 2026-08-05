@@ -1,5 +1,7 @@
 > **Documento de entrada (análise arquitetural).** Decisões consolidadas em [sintese-final.md](../../sintese-final.md).
 
+> **Supersessão:** deduplicação por telefone, payload livre e publicação direta em fila são apenas hipóteses históricas. Valem hoje: múltiplos contatos e revisão manual, `IntegrationEvent` como outbox ([ADR-0007](../adr/0007-ingestao-idempotencia.md)) e contrato canônico `v1` com LP servidor-servidor ([ADR-0008](../adr/0008-fronteira-conector-dominio.md)).
+
 É viável — principalmente para começar com esse escritório específico. Você consegue construir seu CRM, deixar a autenticação com Meta e Google dentro da Pluga e receber os leads no seu backend por HTTP Request, sem criar inicialmente um aplicativo próprio na Meta Developers nem um projeto OAuth próprio no Google.
 
 Arquitetura recomendada

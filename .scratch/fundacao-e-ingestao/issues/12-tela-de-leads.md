@@ -1,6 +1,6 @@
 # 12 — Tela de Leads
 
-**Blocked by:** 09, 04, 02, 10
+**Blocked by:** 09, 04, 02, 10, 11
 
 **Status:** ready-for-agent
 
@@ -15,9 +15,16 @@ Na UI o card se chama **Lead**; no domínio é sempre Oportunidade. Não existe 
 ## Acceptance criteria
 
 - [ ] Tabela paginada mostrando exclusivamente leads do workspace do usuário
-- [ ] Colunas: nome, contato, produto, banco, origem e data de chegada
-- [ ] Numerais tabulares em qualquer coluna de data
-- [ ] Duas oportunidades abertas da mesma pessoa são **distinguíveis** na tabela — `banco` é o discriminador, e ele já chega do formulário de anúncio
+- [ ] Colunas: nome, contatos, tipo de financiamento, instituição, origem e data de chegada
+- [ ] Numerais tabulares em qualquer coluna de data ou valor
+- [ ] Duas oportunidades abertas da mesma Pessoa usam o conjunto de dados disponível do financiamento para se distinguir; instituição isolada não é prova
+- [ ] Leads com revisão pendente **aparecem normalmente** na tabela, com marcador de identidade em conflito ou possível duplicado — nunca escondidos numa fila
+- [ ] Contador-filtro de pendências na própria tabela, no mesmo padrão do contador de "sem telefone"
+- [ ] Abrir um lead com possível duplicado mostra a outra Oportunidade e seu responsável
+- [ ] **A resolução acontece aqui**, não em Integrações: possível duplicado oferece `NEW_FINANCING`, `SAME_FINANCING` e `INVALID_OR_SPAM`; conflito de identidade oferece mesclar numa candidata ou confirmar pessoas distintas
+- [ ] A UI nunca oferece "excluir duplicado" — só as resoluções auditáveis do ticket 11
+- [ ] Comparação lado a lado do envio, Pessoas candidatas e Oportunidade semelhante, para o gestor decidir
+- [ ] Oportunidades com `merged_into_opportunity_id` preenchido não aparecem na tabela
 - [ ] Origem (Meta, Google ou landing page) visível no registro
 - [ ] Contador de leads sem telefone que **filtra a própria tabela**, em vez de levar para outra tela
 - [ ] Edição dos dados do lead dentro do card

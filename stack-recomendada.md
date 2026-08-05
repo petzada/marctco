@@ -55,10 +55,13 @@ Status: **travada**. Alternativas rejeitadas (NestJS split, Clerk, Better Auth, 
 Pluga / LP / WhatsMiau / Clicksign / DocuSign / OpenRouter
         │  POST (Bearer / apikey / HMAC)
         ▼
-Next.js (Railway)  ──► 202 + integration_events
-        │
-        ▼
-   Redis (Railway) + BullMQ
+Next.js (Railway)  ──► commit integration_events/outbox ──► 200
+                              │
+                              ▼
+                    dispatcher independente
+                              │
+                              ▼
+                    Redis (Railway) + BullMQ
         │
         ▼
    Worker Node (Railway)
@@ -68,20 +71,21 @@ Next.js (Railway)  ──► 202 + integration_events
 Supabase Postgres (RLS)     Cloudflare R2 (arquivos)
 ```
 
-- Webhooks **nunca** processam regra de negócio de forma síncrona: respondem rápido, enfileiram.
+- Webhooks **nunca** processam regra de negócio de forma síncrona: autenticam, persistem a outbox e respondem. O dispatcher enfileira depois.
 - Tenant identificado pelo **token** da integração — nunca aceitar `workspace_id` livre no JSON.
-- `service_role` só no servidor (app/worker); client usa sessão + RLS.
+- App e worker usam papel PostgreSQL sem bypass e rodam sob RLS. `service_role` fica restrito a ferramenta administrativa interna, nunca ao fluxo normal nem ao browser.
 
 ---
 
-## 3. Workspace, produtos e tags (organização do cliente)
+## 3. Workspace, funis, financiamento e tags
 
 **Modelo do piloto:** o cliente (dono da consultoria) tem **uma empresa mãe / grupo**. Dentro do grupo há filiais e times comerciais/jurídicos. Tudo isso vive em **um Workspace** (tenant).
 
 | Conceito | Papel no MVP |
 |----------|--------------|
 | **Workspace** | Tenant do grupo (empresa mãe). Isolamento RLS, Pluga, trial, flags. |
-| **Produto** | Funis comerciais **separados e editáveis** por produto (já decidido). |
+| **Funil** | Fluxo operacional criado pelo cliente, sempre tipado como Comercial ou Jurídico, com etapa de entrada e de conclusão. Um comercial por workspace é o padrão da ingestão. Não pertence ao tipo de financiamento. |
+| **Tipo de financiamento** | Veículo, imóvel, empréstimo pessoal ou outro; atributo opcional da Oportunidade, sem bloquear a ingestão. |
 | **Área** | Comercial vs jurídica = funis + `area` na oportunidade + roles — **não** workspaces separados. |
 | **Tag** | Rótulo livre no workspace para **filial / time / carteira**; aplica-se a membros e, se útil, a oportunidades. Ex.: `Filial Campinas`, `Comercial Veículos`, `Jurídico EP`. |
 | **Roles** | OWNER · ADMIN · MANAGER · ATTENDANT · VIEWER (no `workspace_members`). |
@@ -100,7 +104,7 @@ Detalhe: [ADR-0002](./docs/adr/0002-workspace-tags-times.md) · glossário: [CON
 
 | Lib | Uso |
 |-----|-----|
-| `zod` | Contratos Pluga/LP/WA/assinatura/forms |
+| `zod` | Contrato canônico `v1` de Pluga/LP, WA, assinatura e forms |
 | `bullmq` + `ioredis` | Filas; Redis Railway |
 | `jose` | Só se necessário (JWT/JWE de integração) |
 | `pino` | Logs estruturados no worker/app (se útil) |
@@ -154,8 +158,8 @@ Detalhe: [ADR-0002](./docs/adr/0002-workspace-tags-times.md) · glossário: [CON
 
 | Integração | Papel |
 |------------|--------|
-| **Pluga** | Meta + Google Lead Form → `POST` CRM (Bearer por workspace) |
-| **Webhook LP** | Mesmo pipeline de normalização |
+| **Pluga** | Meta + Google Lead Form → De→Para → HTTP Request para o contrato `v1` do CRM (Bearer por conexão) |
+| **Webhook LP** | Servidor-servidor, token próprio e o mesmo contrato canônico de dados |
 | **WhatsMiau** | Instância por workspace; send + webhooks → timeline (sem inbox) |
 | **Clicksign** | Envelope + eventos HMAC |
 | **DocuSign** | Envelope + Connect HMAC |
@@ -188,7 +192,7 @@ Adapters conceituais: `LeadSourceConnector` · `MessagingProvider` · `Signature
 | Kafka, K8s, microserviços, GraphQL federation | Overengineering |
 | Inbox WA, VoIP, OAuth Ads nativo, billing in-app | Escopo produto |
 | Compliance LGPD completa | Adiado pós-validação |
-| Workspace por filial | Tags + funis por produto |
+| Workspace por filial | Tags + funis operacionais no workspace |
 
 ---
 
@@ -219,7 +223,7 @@ UI: `npx shadcn@latest init` + componentes sob demanda · skill **design-taste-f
 
 ## 10. Checklist de validação técnica (quando implementar)
 
-1. Pluga fake → 202 → BullMQ → Pessoa + Oportunidade + UNIQUE idempotente  
+1. Pluga fake → commit da outbox → 200 → dispatcher/BullMQ → Pessoa ou revisão → Oportunidade + UNIQUE idempotente
 2. RLS: workspace A não lê B  
 3. WhatsMiau sendText + webhook → timeline  
 4. Clicksign ou DocuSign sandbox → HMAC → Kanban  
@@ -232,7 +236,7 @@ UI: `npx shadcn@latest init` + componentes sob demanda · skill **design-taste-f
 
 ## 11. Veredito
 
-**Monólito modular TS:** Next.js + worker + Prisma + Supabase (Auth/Postgres/RLS) + BullMQ/Redis no Railway + R2 + shadcn/dnd-kit/Zod — com Pluga, WhatsMiau, Clicksign, DocuSign e score DeepSeek/Gemini via OpenRouter. Um workspace por grupo cliente; filiais/times via **tags**; funis por **produto**.
+**Monólito modular TS:** Next.js + worker + Prisma + Supabase (Auth/Postgres/RLS) + BullMQ/Redis no Railway + R2 + shadcn/dnd-kit/Zod — com Pluga, WhatsMiau, Clicksign, DocuSign e score DeepSeek/Gemini via OpenRouter. Um workspace por grupo cliente; filiais/times via **tags**; funis operacionais Comercial/Jurídico; tipo de financiamento como atributo opcional.
 
 ---
 

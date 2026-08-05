@@ -21,7 +21,7 @@ ADRs: [0001 stack](../adr/0001-stack-monolito-modular-ts.md) · [0002 workspace/
 
 ## MVP em uma frase
 
-Pluga/LP → WhatsMiau (template) → funil comercial por produto → assinatura (Clicksign/DocuSign) → handoff idempotente ao funil jurídico · score LLM opcional (OpenRouter) · 1 workspace/grupo + tags de time/filial.
+Pluga/LP servidor-servidor → contrato `v1` + outbox → funil comercial configurado → WhatsMiau → assinatura → handoff humano idempotente ao funil jurídico · financiamento opcional · 1 workspace/grupo + tags.
 
 ---
 

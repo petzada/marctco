@@ -18,13 +18,18 @@ arquitetura já foi decidida e travada numa sessão de grelha anterior.
    com a tabela de mapeamento canônica. Model sem linha nessa tabela é model com
    nome improvisado.
 4. `docs/plano-de-construcao.md` — as 8 fases e os itens registrados como abertos.
-5. `.scratch/fundacao-e-ingestao/spec.md` — a spec desta fatia: 61 user stories,
+5. `.scratch/fundacao-e-ingestao/spec.md` — a spec desta fatia: user stories,
    decisões de implementação e os 3 seams de teste.
 6. `.scratch/fundacao-e-ingestao/README.md` — grafo de dependências dos tickets.
 
-Leia os ADRs 0006 a 0011 conforme o ticket em que estiver mexendo. Eles contêm
-os modos de falha silenciosos deste stack — em especial o ADR-0006, que explica
-por que Supabase RLS + Prisma não encaixam sozinhos.
+Leia o ADR correspondente ao ticket em que estiver mexendo. Eles contêm os modos
+de falha silenciosos deste stack — em especial o ADR-0006, que explica por que
+Supabase RLS + Prisma não encaixam sozinhos. Os vinculantes desta fatia são
+0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010 e 0011; o 0004 rege o ticket 16
+(catálogo de flags) e o 0002, workspace e tags.
+
+Ao tocar UI, `DESIGN.md` é lei visual — e o ticket 02 existe justamente porque o
+arquivo de tokens que ele referencia ainda não existe no repositório.
 
 # Skills
 
@@ -49,6 +54,10 @@ e atualize o `Status:` do arquivo.
 
 Comece pelo ticket 01 (ou 02, que também não tem bloqueador).
 
+**Sempre branch, nunca push direto na `main`.** O ticket 01 estabelece esse fluxo
+— branch, push que abre PR automático, CI verde, merge — e ele passa a valer para
+todo ticket seguinte, inclusive para você.
+
 # Regras que não se re-litigam
 
 As decisões abaixo foram tomadas deliberadamente, com alternativas descartadas
@@ -57,30 +66,55 @@ propor mudança — e traga a proposta a mim em vez de mudar por conta própria.
 
 - Código em inglês, UI em PT-BR, sem acento em identificador.
 - O worker roda SOB RLS, não com service_role.
-- `prisma migrate dev` e `prisma db push` são PROIBIDOS: resetam o banco. Só
-  `prisma migrate deploy`. Migrações são autoradas sem banco, com `migrate diff`.
-- Não existe ambiente local nem banco de staging. Um banco só: produção.
+- Desenvolvimento contra Postgres e Redis em Docker local. `prisma migrate dev`
+  é PERMITIDO contra o local e PROIBIDO contra qualquer banco remoto.
+- Contra produção, só `prisma migrate deploy`. Não existe Supabase local nem
+  staging; o único projeto Supabase é produção.
+- Workflow de PR não recebe nenhum secret nem connection string de produção.
+- No PR: migrate deploy do zero, drift check, varredura de DDL destrutiva, RLS.
+- Após o merge: job de release serializado aplica a migration; só então o Railway
+  faz deploy, com Wait for CI. Railway nunca antecede a migration verde.
+- Fixtures e caminho de upgrade estão ADIADOS por decisão (A13). Não construa.
 - `packages/domain` não importa Prisma e não faz I/O.
-- O endpoint de ingestão responde 202 sempre; nunca 409.
+- O endpoint de ingestão responde 200 sempre; nunca 409.
 - Nenhum campo de negócio é obrigatório na ingestão.
+- `IntegrationEvent` é a outbox: commit no PostgreSQL → 200; dispatcher publica
+  no BullMQ depois. Redis indisponível não muda a resposta nem perde o evento.
+- LP envia servidor-servidor; segredo de integração nunca vai para o navegador.
+- CRM é dono do contrato canônico `v1`; Pluga faz o De→Para de Meta/Google. Isso
+  foi VERIFICADO: o HTTP Request da Pluga monta JSON livre, sem envelope próprio.
+  O modelo Meta já tem campos confirmados; o Google espera teste em conta real.
+- Funil é fluxo operacional COMERCIAL/LEGAL, criado pelo cliente. Tipo de
+  financiamento é atributo opcional da Oportunidade e NUNCA escolhe o funil.
+- Todo funil em uso tem uma `ENTRY` e ao menos uma `CLOSING`. Destino da ingestão
+  é o funil comercial `is_default`, sobrescrito por `target_pipeline_id`.
+- `CLOSING` é papel de FLUXO, não de resultado: marca onde a jornada em aberto
+  termina. Ganho e perdido continuam sendo `status`, jamais etapas do Kanban.
+- Telefone não decide conflitos. Pessoa preserva múltiplos telefones/e-mails.
+- DÚVIDA NUNCA SEGURA O LEAD. Conflito de identidade cria Pessoa nova; possível
+  duplicado cria a Oportunidade e liga à semelhante. Ambos viram MARCADOR no card,
+  resolvido depois por mesclagem não destrutiva. O único envio que não vira
+  Oportunidade é o sem telefone e sem e-mail, que vai para quarentena.
+- Handoff ao jurídico é ação do gestor, notificado quando o atendente conclui.
+  Nenhum status ou etapa cria card jurídico sozinho.
 - `FORCE ROW LEVEL SECURITY`, não apenas `ENABLE`.
 
 # Atenção especial no ticket 01
 
-Ele embute a verificação do item A7: as migrações precisam ser autoradas sem
-banco local, com `prisma migrate diff`. Se esse fluxo não funcionar como o
-ADR-0010 assume, a premissa "sem ambiente local" racha. Nesse caso: PARE, emende
-o ADR-0010 registrando o que foi descoberto, e me avise antes de seguir para
-qualquer outro ticket.
+Ele monta o ambiente local em Docker e o pipeline inteiro. O item A7 encolheu:
+com Postgres local, `migrate dev` roda onde foi feito para rodar e a autoria de
+migration não é mais aposta. O que resta verificar é mecânico — `SET LOCAL`
+dentro de `$transaction` do Prisma e `pgbouncer=true` para prepared statements em
+pooling transaction-mode. Se algum desses não funcionar, emende o ADR-0010
+registrando o que foi descoberto e me avise antes de seguir.
 
-Verifique também, ainda no 01: `SET LOCAL` dentro de `$transaction` do Prisma, e
-`pgbouncer=true` para prepared statements em pooling transaction-mode.
+# Gatilho que você precisa respeitar
 
-# Gate antes do primeiro deploy em produção
-
-Confirme o que o plano free do Supabase garante de backup (item A6). Sem banco de
-staging, o backup é a única rede sob uma migração em produção, e PITR é add-on
-pago. Isso é decisão minha, não sua — apenas me traga a informação.
+**A6 — backup.** Produção roda SEM rede de backup enquanto o banco estiver vazio.
+Isso é decisão consciente, não esquecimento. Mas há um gatilho objetivo: assim
+que existir o PRIMEIRO lead real de cliente em produção, nenhuma migration nova
+pode ser aplicada sem backup restaurável. Se você chegar num ponto em que vai
+aplicar migration e já existe dado real, PARE e me avise.
 ```
 
 ---
@@ -89,6 +123,6 @@ pago. Isso é decisão minha, não sua — apenas me traga a informação.
 
 **Ele não repete as decisões, aponta para elas.** Um prompt que resumisse os 11 ADRs criaria uma segunda fonte de verdade que envelhece na primeira emenda. O repositório é a fonte; o prompt é o mapa.
 
-**Ele lista as regras que não se re-litigam** porque todas contrariam o reflexo padrão de quem chega sem contexto — e um agente novo tende a "consertar" cada uma delas. Dar service_role ao worker, rodar `migrate dev`, retornar 409 em duplicata e exigir campos obrigatórios são exatamente os quatro atalhos que a grelha descartou com motivo registrado.
+**Ele lista as regras que não se re-litigam** porque todas contrariam o reflexo padrão de quem chega sem contexto — e um agente novo tende a "consertar" cada uma delas. Dar service_role ao worker, apontar `migrate dev` para produção, retornar 409 em duplicata e exigir campos obrigatórios são exatamente os atalhos que a grelha descartou com motivo registrado.
 
-**Ele manda parar no ticket 01 se a premissa rachar**, em vez de improvisar. Se `prisma migrate diff` não autorar sem banco, seguir em frente significa construir 15 tickets sobre uma fundação que precisa mudar.
+**Ele grifa que dúvida não segura lead**, porque o reflexo de quem chega é criar fila de revisão para "não sujar o cadastro". Num CRM de mídia paga, cadastro sujo se limpa e lead frio não esquenta — a fila é o erro caro, não a duplicata.

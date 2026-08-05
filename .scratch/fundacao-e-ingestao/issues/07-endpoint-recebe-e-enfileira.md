@@ -1,4 +1,4 @@
-# 07 — Endpoint recebe e enfileira
+# 07 — Endpoint persiste outbox e dispatcher enfileira
 
 **Blocked by:** 06
 
@@ -6,7 +6,7 @@
 
 ## What to build
 
-A Pluga faz um `POST` por lead e recebe **202 imediatamente**. O payload cru é guardado antes de qualquer interpretação, um job é enfileirado, e o worker consome marcando o evento como processado.
+A Pluga faz um `POST` por lead e recebe **200 depois do commit PostgreSQL**. O payload cru é guardado como outbox antes de qualquer interpretação. Um dispatcher independente publica no BullMQ; indisponibilidade do Redis não muda o aceite nem perde o evento.
 
 Neste ticket o payload ainda **não é interpretado** — nada de Pessoa, Oportunidade ou normalização. O que se prova aqui é o encanamento: autenticação, persistência antes da resposta, fila, e o worker rodando **sob RLS**.
 
@@ -14,15 +14,18 @@ O handler é provider-agnóstico: ele não sabe se aquilo é Meta, Google ou lan
 
 ## Acceptance criteria
 
-- [ ] `POST` no endpoint da Pluga responde **202** para qualquer corpo que seja JSON válido
+- [ ] `POST` no endpoint da Pluga responde **200** com corpo `{"status":"accepted"}` para qualquer corpo que seja JSON válido — **não 202**, porque a Pluga não documenta quais códigos aceita ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md) §Por que 200 e não 202)
 - [ ] **401** quando o token é inválido ou desconhecido
 - [ ] **400** quando o corpo não é JSON
-- [ ] **Nunca 409** — duplicata também recebe 202
+- [ ] **Nunca 409** — duplicata também recebe 200
 - [ ] Nenhum campo de negócio é obrigatório
 - [ ] `workspace_id` presente no corpo é **ignorado**; o tenant vem do token
-- [ ] `IntegrationEvent` persiste o payload cru com status `PENDING` **antes** de enfileirar
-- [ ] A ordem é: resolve token → persiste → enfileira → responde
-- [ ] Falha ao enfileirar deixa o evento em `PENDING` e responde 5xx
+- [ ] `IntegrationEvent` persiste payload cru e despacho `PENDING` em commit **antes** do 200
+- [ ] A ordem do handler é: resolve token → persiste/commit → responde 200; ele não conecta ao Redis
+- [ ] Dispatcher independente busca pendências no PostgreSQL e publica no BullMQ
+- [ ] Redis indisponível mantém o evento pendente e o endpoint continua respondendo 200
+- [ ] `jobId` determinístico derivado de `IntegrationEvent.id`; job carrega IDs, não payload com PII
+- [ ] Evento só é marcado `DISPATCHED` depois da confirmação do BullMQ
 - [ ] O worker consome o job **sob RLS**, com o claim vindo do `workspace_id` do job
 - [ ] O `workspace_id` do job vem do handler autenticado, nunca de campo livre do payload
 - [ ] Job cujo evento pertence a outro workspace lê zero linhas e **falha alto**

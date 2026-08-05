@@ -19,7 +19,7 @@ O marcador significa **exatamente uma coisa**: não dá para chamar no WhatsApp 
 - [ ] Lead em quarentena **não** tem relógio de atendimento, porque não tem Oportunidade
 - [ ] Só e-mail, sem telefone → entra no funil **com** marcador
 - [ ] Tem telefone, sem CPF → entra no funil **sem** marcador
-- [ ] Falta produto ou banco → entra no funil **sem** marcador
+- [ ] Falta tipo de financiamento, instituição ou parcela → entra no funil **sem** marcador
 - [ ] Nenhum payload recebido é descartado, em nenhuma hipótese
 - [ ] O estado de quarentena vive no evento de integração; o marcador vive na Oportunidade — os dois **não** são o mesmo campo
 - [ ] A ação de completar ou liberar lead em quarentena está no ticket 14 (interface)

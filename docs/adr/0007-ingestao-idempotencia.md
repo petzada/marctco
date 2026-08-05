@@ -1,6 +1,8 @@
 # Ingestão de leads e idempotência
 
-Toda origem de lead (Pluga Meta, Pluga Google, webhook de LP) entra por um endpoint autenticado por token que **responde 202 sempre**, persiste o payload bruto em `integration_events` e enfileira. A idempotência tem **dois mecanismos distintos**, em duas tabelas, respondendo a duas perguntas diferentes — e nenhum deles sozinho cobre os casos reais.
+Toda origem de lead (Pluga Meta, Pluga Google, webhook servidor-servidor de LP) entra por endpoint autenticado que **responde 200 depois de persistir** o payload bruto em `integration_events`. Essa tabela é também a outbox: um dispatcher independente publica no BullMQ quando o Redis estiver disponível. A idempotência da transmissão, a identidade da Pessoa e a decisão de criar ou associar Oportunidade são problemas distintos; nenhum pode decidir os demais por atalho.
+
+**Dúvida nunca segura o lead.** Todo envio com pelo menos um contato vira Oportunidade no ato. Conflito de identidade e suspeita de duplicidade viram **pendência anexada à Oportunidade já criada**, resolvida depois por mesclagem não destrutiva. O relógio de atendimento começa na chegada, não na decisão de um humano.
 
 **Status:** accepted · 2026-08-04
 
@@ -18,11 +20,25 @@ Authorization: Bearer <token por IntegrationConnection>
 |---|---|
 | Token inválido ou desconhecido | **401** |
 | Body não é JSON válido | **400** |
-| Qualquer payload que parseie — inclusive duplicata, inclusive incompleto | **202** |
+| Qualquer payload que parseie — inclusive duplicata, inclusive incompleto | **200**, com corpo `{"status":"accepted"}` |
 
 **Nunca 409.** Um pré-check de duplicata no request não elimina a necessidade da constraint — sob concorrência, duas retransmissões simultâneas passam ambas pelo `SELECT`. O pré-check apenas **duplica** a regra em dois lugares, e o que roda no request é o que pode estar errado. Uma regra, um dono.
 
-Além disso, `pluga.md` afirma que a Pluga trata 409 como sucesso, mas isso não está verificado. Se ela registrar como `Falhou`, o painel do cliente enche de vermelho em duplicata legítima e uma assessoria não-técnica abre chamado achando que perdeu lead. 202 sempre não tem esse modo de falha.
+Além disso, `pluga.md` afirma que a Pluga trata 409 como sucesso, mas isso não está verificado. Se ela registrar como `Falhou`, o painel do cliente enche de vermelho em duplicata legítima e uma assessoria não-técnica abre chamado achando que perdeu lead. Aceitar sempre não tem esse modo de falha.
+
+## Por que 200 e não 202
+
+**Supersede o "202 sempre" das versões anteriores deste ADR.** Semanticamente, 202 Accepted é o código correto: o lead foi aceito e será processado depois. A escolha do 200 é deliberadamente conservadora, e o motivo é assimetria de risco.
+
+Duas rodadas de pesquisa na documentação pública da Pluga **não encontraram** qualquer descrição de como ela trata o código de resposta do destino, se retenta 5xx, ou se pausa a automação após falhas. O artigo oficial do HTTP Request cobre métodos, autenticação, headers e parâmetros — e nada sobre códigos. Os artigos de Log e de correção de evento com falha também não.
+
+- **Ganho de usar 202:** pureza semântica. Nenhum comportamento do sistema depende do número.
+- **Custo de errar com 202:** se a Pluga aceitar apenas 200/201, **todo lead entregue com êxito aparece como falha** no painel de um cliente não-técnico. Não é degradação, é o produto parecendo quebrado em 100% dos casos.
+- **Custo de usar 200:** zero funcional. O corpo `{"status":"accepted"}` carrega a semântica que o código deixou de carregar.
+
+Como referência, o n8n documenta que qualquer 2xx é sucesso por padrão, e é provável que a Pluga faça o mesmo — mas "provável" não é base para a decisão mais irreversível do sistema quando a alternativa segura custa nada. Verificar exigiria uma conta paga da Pluga que o piloto ainda não tem; **escolher 200 elimina a dependência em vez de administrá-la**, e por isso o item A14 fecha aqui em vez de virar gate de piloto.
+
+Isso não reabre o 409: duplicata continua recebendo 200, porque a idempotência tem um dono só.
 
 **Nenhum campo de negócio é obrigatório.** O request valida o contrato; o worker decide o negócio.
 
@@ -35,7 +51,7 @@ Além disso, `pluga.md` afirma que a Pluga trata 409 como sucesso, mas isso não
 | Sem telefone **e** sem e-mail | **Quarentena**: persiste `IntegrationEvent`, não cria Person nem Opportunity, aparece em Integrações > Pluga para correção manual ou liberação |
 | Tem contato, falta CPF | Entra no funil, sem marcador |
 | Só e-mail, sem telefone | Entra no funil, **com marcador** |
-| Falta produto/banco | Entra no funil, sem marcador |
+| Falta tipo de financiamento/banco/parcela | Entra no funil comercial, sem marcador |
 
 O marcador significa exatamente uma coisa: **não dá para WhatsApp nem ligar**. Não é rótulo genérico de "falta algo".
 
@@ -49,30 +65,45 @@ Perder lead por mapeamento torto é o pecado capital de quem compra mídia; o ma
 
 `UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission`.
 
-- **`external_lead_id` é `NOT NULL` sempre.** Em Postgres `NULL` não colide com `NULL` num índice único — a constraint não deduplicaria nada quando o campo viesse vazio, e o webhook genérico de LP é um formulário montado pelo cliente que pode não mandar ID nenhum. Retry no navegador criaria oportunidades duplicadas sem que nada reclamasse.
+- **`external_lead_id` é `NOT NULL` sempre.** Em Postgres `NULL` não colide com `NULL` num índice único. Integrações servidor-servidor de LP devem enviar um ID estável; quando uma origem não o fornecer, o conector sintetiza um determinístico para manter a proteção.
 - **Quando a origem não fornece ID, o conector sintetiza** um determinístico: hash do payload normalizado + janela de tempo. Responsabilidade do adapter, não do domínio.
 - **Insert-and-catch, nunca check-then-insert.** A violação de constraint é o caminho normal para duplicata, não um erro.
 
-## Mecanismo 2 — "esta pessoa já tem negócio aberto neste produto?"
+## Mecanismo 2 — "é seguramente o mesmo financiamento?"
 
-Regra de aplicação, **não constraint**. Uma submissão genuinamente nova traz `external_lead_id` novo, então o mecanismo 1 nem dispara.
+**Supersede a regra anterior de anexar por mesma Pessoa + Produto.** Tipo de financiamento é apenas classificação e não identifica contrato: uma Pessoa pode ter dois financiamentos de veículo simultâneos, inclusive no mesmo banco. Similaridade gera **sinal**, nunca associação automática — e nunca bloqueio.
 
-- Oportunidade **fechada** (ganho ou perdido) + nova submissão → **nova Opportunity**. É o caso do cliente que fez novo financiamento e voltou meses depois.
-- **Produto diferente** → sempre nova Opportunity, mesmo com uma aberta.
-- **Oportunidade aberta, mesmo produto** → a ingestão automática **anexa** à existente e marca re-entrada na timeline. Dois cards abertos da mesma pessoa significam dois atendentes ligando para o mesmo sujeito.
-- **Um humano pode criar uma segunda oportunidade aberta do mesmo produto**, com aviso de que já existe negócio aberto.
+- Retransmissão com a mesma chave idempotente continua inerte e permanece associada à mesma Oportunidade. Isso é o mecanismo 1, não este.
+- Uma submissão genuinamente nova **sempre cria Oportunidade**. Nenhum lead espera decisão humana para entrar no funil.
+- Quando já existe Oportunidade semelhante para a mesma Pessoa, a nova nasce **ligada** à anterior por um `IntakeReview(POSSIBLE_DUPLICATE)`, visível nos dois cards. O atendimento pode começar imediatamente em qualquer um dos dois.
+- O gestor resolve quando quiser, com três saídas auditáveis e não destrutivas:
+  1. `NEW_FINANCING`: confirma que são contratos distintos; a ligação some, as duas Oportunidades seguem independentes;
+  2. `SAME_FINANCING`: mescla — a Oportunidade mais nova recebe `merged_into_opportunity_id` apontando para a canônica, sai das vistas ativas, e seu `LeadSubmission` passa a contar como reentrada na timeline da canônica;
+  3. `INVALID_OR_SPAM`: arquiva com motivo, sem exclusão física.
+- `arrived_at` é sempre o `received_at` real do envio. Como nada fica retido, não existe relógio distorcido por tempo em fila.
 
-**Por que não índice único parcial:** `UNIQUE(workspace_id, person_id, product_id) WHERE status = 'OPEN'` tornaria a regra inviolável, mas ela **está errada em revisional** — uma pessoa pode ter dois financiamentos de veículo, dois contratos, duas revisionais legítimas simultâneas. A constraint rígida tornaria o segundo caso impossível de cadastrar inclusive à mão, travando a operação sem saída. Concorrência entre submissões simultâneas se resolve com lock na Person durante a decisão.
+**Considered option (rejeitada): reter o envio em fila antes de criar a Oportunidade.** Mais correto no cadastro e desastroso na operação. A prova de "mesmo financiamento" exigida seria uma referência estável de contrato — que **formulário de Ads não fornece**. Na prática, toda segunda submissão da mesma Pessoa cairia numa fila manual, e lead de mídia paga apodrece em minutos, não em dias. Numa operação cujo SLA começa em `arrived_at`, pôr trabalho humano bloqueante no caminho crítico troca um erro barato e reversível (dois cards que se mesclam) por um caro e invisível (lead quente parado numa tela que o comercial não abre).
+
+**Custo assumido:** mesclar depois é mais trabalho de schema do que decidir antes — exige `merged_into_opportunity_id`, exige que toda listagem ativa filtre mesclados, e aceita duplicata temporária visível. É o preço de nunca segurar um lead.
+
+Não há índice único parcial por Pessoa + tipo de financiamento. Duas Oportunidades abertas da mesma Pessoa são estado legítimo, não anomalia a impedir.
 
 ## Identidade da Pessoa
 
-Cascata **telefone → CPF → e-mail**, com uma correção que a ordem sozinha não expressa: **casa por qualquer chave presente, e telefone decide quando duas chaves apontam para Pessoas diferentes.**
+**Supersede “telefone sempre decide”.** `Person` preserva múltiplos telefones e e-mails em registros próprios; receber um contato novo nunca sobrescreve o anterior.
 
-Cascata estrita ("tenta telefone; se não houver, tenta CPF") duplicaria o cadastro de quem voltou com número novo e mesmo CPF — exatamente o cliente recorrente que o produto quer reconhecer.
+- CPF válido é o identificador mais forte quando presente, mas continua opcional.
+- Telefone pode identificar automaticamente apenas quando aponta de forma inequívoca para uma Pessoa e nenhuma outra chave contradiz essa associação.
+- E-mail isolado permanece chave fraca e não autoriza fusão automática.
+- **Quando as chaves recebidas apontam para Pessoas diferentes, cria-se uma Pessoa nova** com os contatos daquele envio, a Oportunidade nasce nela, e um `IntakeReview(IDENTITY_CONFLICT)` registra as candidatas. Nenhuma chave vence por prioridade fixa, e nenhum vínculo errado é criado — porque nenhum vínculo com cadastro existente é criado.
+- A resolução manual mescla a Pessoa nova numa candidata ou confirma que são pessoas distintas. A mesclagem transfere contatos e Oportunidades para a canônica e deixa `merged_into_person_id` na absorvida; identificadores e histórico permanecem auditáveis, sem exclusão silenciosa.
+- Sem nenhuma chave de contato não se cria Person: o evento permanece em quarentena. Este é o **único** caso em que a ingestão não produz Oportunidade — e ele não é dúvida, é impossibilidade de contato.
 
-E-mail é chave **fraca**: casamento só por e-mail marca *provável duplicata* em vez de fundir Person. Sem nenhuma das três chaves, não cria Person — cadastro sem chave de identidade gera duplicata permanente que ninguém desfaz depois.
+Formulários de Ads raramente trazem CPF; por isso a identidade não depende dele, mas essa ausência também não transforma telefone em autoridade absoluta.
 
-Formulários de Ads raramente trazem CPF. `CONTEXT.md`, `decisoes.md` §Handoff e `pluga.md` assumiam CPF como campo mínimo; a identidade **não pode depender dele**.
+**Considered option (rejeitada): reter o envio antes da Oportunidade quando há conflito.** Mesmo argumento do mecanismo 2 — o conflito é do cadastro, e o cadastro é corrigível a qualquer momento; o lead quente não é. Duplicar uma Pessoa temporariamente é reversível por mesclagem; perder a janela de contato não é.
+
+**Considered option (rejeitada): escolher a Pessoa mais provável e seguir.** Reintroduz "telefone decide" pela porta dos fundos, e o vínculo errado é justamente o que não se desfaz sozinho — o atendente lê histórico de outra pessoa e trata o cliente pelo nome errado.
 
 ## Retransmissão é inerte ao funil
 
@@ -84,35 +115,33 @@ A alternativa é catastrófica: um soluço da Pluga ressuscitaria negócios perd
 
 CRM é fonte de verdade (`sintese-final.md` §17). Telefone em **E.164**, CPF só dígitos com DV validado, e-mail **lowercase**. Normalização é serviço de domínio compartilhado, chamado uma vez — não implementação por adapter, senão três cópias divergem e o default de país (Brasil) vaza para dentro do adapter, que não deveria conhecê-lo.
 
-## Consequência de UX: duas oportunidades abertas da mesma pessoa
+## Consequência de UX: pendência é marcador, não sala de espera
 
-Não travar no banco transfere o peso inteiro para a interface. Este cenário é **mais comum do que os docs supõem** e a UI precisa resolvê-lo explicitamente — item aberto de design, a especificar:
+Como nada fica retido, **não existe fila que esconde leads**. A revisão é um marcador no card, e a tela de Leads é a superfície principal.
 
-- A tabela de Leads **não pode** mostrar duas linhas indistinguíveis de "João Silva · Veículo". Precisa de discriminador humano.
-- **`banco` é o discriminador natural e já chega do formulário Ads** (`pluga.md` §Campos mínimos). Data de chegada e campanha são desempate secundário.
-- Ao atribuir, o gestor precisa ver "esta pessoa tem outra oportunidade aberta, com o atendente X" — senão dois atendentes ligam para o mesmo cliente sobre contratos diferentes e a operação parece amadora.
-- O card precisa deixar claro **qual** financiamento está em discussão.
-- O card da Person mostra todas as oportunidades, abertas e fechadas, com motivo de perda.
+- O lead com pendência **aparece normalmente na tabela de Leads**, com um marcador visível de identidade em conflito ou possível duplicado. Ele pode ser atribuído e atendido antes de qualquer resolução.
+- Um contador-filtro na própria tabela de Leads leva às pendências, no mesmo padrão do contador de "sem telefone" — o gestor resolve no contexto do lead, não numa tela técnica de Integrações.
+- Ao atribuir ou abrir um card com possível duplicado, a UI mostra a outra Oportunidade e o atendente responsável. É isso que impede dois atendentes ligando para o mesmo cliente: **visibilidade, não bloqueio**.
+- A comparação mostra lado a lado o envio bruto/normalizado, Pessoas candidatas e a Oportunidade semelhante.
+- Tipo de financiamento, banco, parcela, data e campanha ajudam o humano, mas não são apresentados como prova quando não forem identificadores confiáveis.
+- A UI nunca oferece “excluir duplicado”. Oferece apenas as resoluções auditáveis definidas acima.
+- A tabela de Leads distingue oportunidades da mesma Pessoa pelo conjunto de dados de financiamento disponível; nenhum campo isolado é discriminador universal.
 
-## Onde a fila começa
+Só a **quarentena** continua vivendo em Integrações, porque ali não há Oportunidade nem card onde pendurar marcador.
 
-O handler faz exatamente três coisas, nesta ordem: **resolve o token → persiste o `IntegrationEvent` → enfileira → responde 202.**
+## Onde a fila começa: `IntegrationEvent` é a outbox
 
-Persistir **antes** de responder é inegociável: 202 com persistência posterior significa que uma queda do processo perde o lead **enquanto o provedor registra sucesso** — perda silenciosa, sem retentativa e sem rastro.
+O handler faz três coisas: **resolve o token → persiste o `IntegrationEvent` em commit PostgreSQL → responde 200**. Ele não depende do Redis para aceitar o lead.
 
-Postgres e Redis não commitam juntos; não existe ordem atômica, só escolha de qual inconsistência se prefere:
+Persistir antes de responder é inegociável. O evento nasce com despacho pendente; um dispatcher independente consulta a outbox, publica no BullMQ e só então marca o despacho. Se o Redis estiver indisponível, o evento continua durável e será publicado quando o serviço voltar.
 
-| Ordem | Falha |
-|---|---|
-| Enfileira → persiste | Worker pega job de evento que ainda não existe |
-| Persiste → 202 → enfileira | Trabalho após a resposta não tem garantia de execução |
-| **Persiste → enfileira → 202** | Redis fora deixa evento órfão em `PENDING` — visível e recuperável |
+- `jobId` é determinístico e derivado do `IntegrationEvent.id`, tornando republicação segura.
+- O job carrega apenas identificadores técnicos e `workspace_id`, nunca o payload com PII; o worker lê o evento no PostgreSQL sob RLS.
+- Marcar como despachado antes da confirmação do BullMQ é proibido. Publicar duas vezes é tolerado pela idempotência do job e do worker.
+- O dispatcher aplica retry com backoff e não depende de um job repetível guardado no próprio Redis para descobrir pendências; sua fonte é o PostgreSQL.
+- O botão “reprocessar” recoloca o evento no mesmo fluxo de despacho, sem caminho paralelo.
 
-**Falha de enfileiramento responde 5xx** com o evento já persistido em `PENDING`. O provedor retenta; a duplicata morre no `LeadSubmission`.
-
-**Varredor de `PENDING`** como job repetível, re-enfileirando eventos parados além de N minutos. Não é peça nova: é o mesmo mecanismo do botão "reprocessar" que `pluga.md` §Tela item 13 já exige. Ele existe porque a Pluga retenta 5xx, mas o **webhook genérico de LP** é um POST de navegador que não retenta nada — sem o varredor, um lead de landing page some se o Redis estiver fora naquele instante.
-
-`IntegrationEvent.status` é a fonte única da tela de Integrações: última sync, histórico e fila morta leem o mesmo campo. Sem estado paralelo no Redis para a UI consultar.
+`IntegrationEvent` é a fonte única da tela de Integrações para recebimento, despacho, processamento, falha e reprocessamento. Estado no Redis é operacional e nunca a fonte de verdade.
 
 ### A resolução do token é cross-tenant por natureza
 
@@ -128,4 +157,4 @@ Railway e Supabase na **mesma região**. Com app e banco em continentes diferent
 
 ## Resiliência
 
-Persistir o bruto **antes** de processar. Dead-letter queue com reprocessamento manual (`sintese-final.md` §11). O histórico de eventos e a última sync aparecem em Integrações > Pluga.
+Persistir o bruto **antes** de responder ou processar. Dispatcher recupera pendências após indisponibilidade do Redis; BullMQ aplica retries aos jobs publicados; processamento esgotado fica visível para reprocessamento manual. O histórico de eventos e a última sync aparecem em Integrações > Pluga.

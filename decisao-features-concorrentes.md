@@ -58,12 +58,12 @@
 | **Q3** | Contrato/assinatura pode ser gerado fora do card; obriga **buscar/selecionar Lead**; pré-preenche; sem órfão/duplicidade | MVP |
 | **Q4** | **Calendário interno** sem sync externo. Atividade com `due_at` no Lead = fonte; Agenda = vista filtrável; criar pela Agenda exige Lead | MVP |
 | **Q5** | **Ranking** (produto): placar de atendentes — atendimentos, fechamentos, valores, aderência ao SLA. Gestor usa para gargalo, premiação e cobrança. Sem XP/medalhas | MVP |
-| **Q6** | **Metas** (produto): gestor define faturamento, atendimentos ou métricas viáveis revisional (sem OKR/cascata). Filtros: período, atendente, funil/produto; comercial e jurídico | MVP |
+| **Q6** | **Metas** (produto SaaS): gestor define faturamento, atendimentos ou métricas viáveis revisional (sem OKR/cascata). Filtros: período, atendente, funil/tipo de financiamento; comercial e jurídico | MVP |
 | **Q7** | Analytics com filtros no MVP (reabre “analytics in-app fora” em `decisoes.md`) | MVP |
 | **Q8** | Jurídico **enxuto**: Kanban + handoff + **notas/tags** para andamento leve. Sem prazos/audiências/intimações (ADVBOX) | MVP |
 | **Q9** | Treinamento fora do app no MVP; **pós**: Academy/playbooks | Fora / Pós |
 | **Q10** | Alerta ao gestor quando lead parado além do **SLA configurável** do workspace. Demais automações = pós. Sem UI Zapier | MVP |
-| **Q11** | Contagem de ganhos por atendente / gestor / equipe (tag) / produto. **Valor** opcional, editável manualmente no funil por produto (ex. pós-contrato). Sem financeiro/ROAS/comissões | MVP |
+| **Q11** | Contagem de ganhos por atendente / gestor / equipe (tag) / tipo de financiamento. **Valor** opcional, editável manualmente na Oportunidade (ex. pós-contrato). Sem financeiro/ROAS/comissões | MVP |
 | **Q12** | Score cabimento + **resumo LLM** estruturado no handoff para o jurídico. Flag `resumo_handoff_llm`. Handoff não bloqueia se LLM falhar | MVP |
 | **Q13** | Menu **Documentos**: consulta rápida; mesmo registro do Lead — sem cópia desconexa | MVP |
 | **Q14** | Sidebar por fluxo; análises centralizadas em Analytics | MVP |
@@ -93,7 +93,7 @@ Funil jurídico: Kanban próprio (Q8), independente da vista comercial.
 
 ```
 Analytics
-├── Operação          ← desempenho comercial/jurídico (filtros: período, atendente, tag, canal, produto…)
+├── Operação          ← desempenho comercial/jurídico (filtros: período, atendente, tag, canal, tipo de financiamento…)
 ├── Ranking           ← placar de atendentes (métricas Q5); apoio a premiação/cobrança
 └── Metas             ← configuração de metas (Q6) + analytics próprios de progresso das metas
                         (separados dos gráficos gerais de Operação)
@@ -160,7 +160,7 @@ Configurações             ← integrações, funis, SLA, flags, template WA
 
 ## 10. Resumo handoff LLM (Q12)
 
-**Entrada:** origem → pessoa/produto → trajetória comercial → tratativas/WA → propostas/contrato/score/status.  
+**Entrada:** origem → pessoa/tipo de financiamento → trajetória comercial → tratativas/WA → propostas/contrato/score/status.
 **Saída:** seções fixas no card jurídico; regenerável; falha da LLM não bloqueia o handoff.  
 Flags: `score_cabimento_llm`, `resumo_handoff_llm`.
 

@@ -10,9 +10,13 @@
 > |---|---|
 > | #19 Analytics fora do MVP | Só **telemetria** (PostHog/Amplitude/Himetrica) fica fora. O **módulo Analytics** do cliente entra — [plano-de-construcao.md](../plano-de-construcao.md#analytics-no-mvp-resolve-o-conflito-c1) |
 > | #5b 1º contato disparado na chegada | Default é **na atribuição** — [ADR-0003](../adr/0003-whatsapp-instancia-unica-gatilho-atribuicao.md) |
-> | §Handoff "Pessoa única: CPF/telefone" | Identidade é **telefone → CPF → e-mail**, casando por qualquer chave presente. Formulários de Ads raramente trazem CPF — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
-> | §Handoff gatilhos "etapa/status `ganho` ou `necessario_juridico`" | `status → WON` **ou** etapa de papel `LEGAL_HANDOFF`. Ganho/perdido são status, não etapas — [ADR-0009](../adr/0009-etapas-editaveis-papeis-e-status.md) |
+> | §Handoff "Pessoa única: CPF/telefone" | Pessoa preserva múltiplos contatos; CPF é forte mas opcional; telefone não vence contradição — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
+> | §Handoff gatilhos "etapa/status `ganho` ou `necessario_juridico`" | Ganho/perda são status, mas nenhum estado cria card jurídico por si só; o gestor confirma o handoff — [ADR-0009](../adr/0009-etapas-editaveis-papeis-e-status.md) |
 > | #9 flags liberando módulos por packaging | Flag só onde **custa dinheiro ou chama terceiro por uso**; catálogo de três entradas — [ADR-0004](../adr/0004-fronteira-flag-configuracao-estado.md) |
+> | #4/#18 funis por produto | Funis são fluxos Comercial/Jurídico; tipo de financiamento é atributo opcional — [ADR-0009](../adr/0009-etapas-editaveis-papeis-e-status.md) |
+> | #12 normalização/deduplicação | Múltiplos contatos por Pessoa; telefone não decide conflito; possível duplicado vira marcador na Oportunidade criada, não retenção — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
+> | #16 “200 + fila” | `IntegrationEvent` é outbox: commit PostgreSQL → 200 → dispatcher/BullMQ — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
+> | Handoff automático por status/etapa | Handoff é ação humana; nunca nasce da ingestão ou de inferência automática — [ADR-0009](../adr/0009-etapas-editaveis-papeis-e-status.md) |
 
 ---
 
@@ -23,23 +27,23 @@
 | 1 | Escopo comercial | Fluxo comercial completo até **Ganho** / “enviar ao jurídico”: lead → atribuição → conversão → documento → assinatura → ganho. |
 | 2 | WhatsApp | **[WhatsMiau](https://whatsmiau.dev/docs/getting-started)**. Sem inbox nativo no MVP (pós). Mensagens + webhooks → timeline no card. |
 | 2b | Ligação voz SDR | **Fora do MVP** — atendente usa app WhatsApp/telefone. VoIP **depois** (sem Meta Cloud API Calling). Ver riscos VoIP abaixo. |
-| 3 | Captação | Meta + Google Lead Form via **Pluga** + **webhook genérico** para LPs nativas/externas. |
-| 4 | Funis | Separados por **produto**, 100% editáveis. Workspace pode ter funis **Comercial** e **Jurídico** (orquestrados). |
+| 3 | Captação | Meta + Google Lead Form via **Pluga HTTP Request**, mapeados para o contrato canônico `v1`; LPs usam webhook servidor-servidor com token próprio e as mesmas chaves. |
+| 4 | Funis | Fluxos operacionais 100% editáveis, sempre tipados como **Comercial** ou **Jurídico**. Não pertencem ao tipo de financiamento; todo lead ingerido nasce no Comercial. |
 | 5 | SLA 1º contato | Relógio = **chegada no CRM**. |
 | 5b | Auto 1º contato | **Template fixo** configurável pelo cliente, disparado na chegada (segurar lead quente). **Sem LLM** nesse disparo no MVP. |
 | 6 | Score de cabimento | **IA/LLM opcional** — tela “Análise de cliente”; provedor **OpenRouter** com **DeepSeek V4** (preferencial) ou **Gemini Flash**. Nunca obrigatório. |
 | 7 | Assinatura | Adaptador **Clicksign + DocuSign**; cliente escolhe no workspace o que já usa. Fluxo: gerar → enviar → eventos (visualizou / assinou / recusou / completo). |
-| 8 | Handoff jurídico | Ao **Ganho** ou etapa **“Necessário setor jurídico”** → cria/atualiza card no **funil jurídico** (se existir e estiver configurado), com dados normalizados + resumo do atendimento comercial. Uma oportunidade jurídica por handoff; sem duplicar pessoa. Gestor jurídico atribui ao time. |
+| 8 | Handoff jurídico | O atendente conclui o atendimento a partir de uma etapa de conclusão, com `WON`/`LOST` e motivo; isso **notifica o gestor in-app**; o gestor libera o envio e o card nasce/atualiza no **funil jurídico**, com dados normalizados + resumo. Nenhum status/etapa dispara sozinho. Uma oportunidade jurídica por handoff. |
 | 9 | Monetização | Fora do app (negociado). MVP = módulos no código + **`workspace_flags`** (liberação comercial/técnico). |
 | 10 | Trial | **30 dias**, comercial acompanha; contas liberadas manualmente. |
 | 11 | ICP | Não travar. Piloto = assessoria comercial/jurídica de redução de parcelas. |
-| 12 | Normalização | **CRM = fonte de verdade**. Evento Ads idempotente; mesmo CPF pode ter **nova** oportunidade em outra data. |
-| 13 | Tela Pluga | URL, secret, teste, logs, última sync. Sem De→Para no CRM. |
+| 12 | Normalização | **CRM = fonte de verdade**. Pessoa preserva múltiplos telefones/e-mails; conflito de identidade e possível duplicado viram marcador na Oportunidade já criada, resolvido depois por mesclagem não destrutiva. Nenhum lead fica retido. |
+| 13 | Tela Pluga | URL, secret, contrato `v1`, modelos Meta/Google, teste real de cada automação, logs e última sync. Sem wizard De→Para no CRM: o mapeamento acontece na Pluga. |
 | 14 | Backlog WA | Assinatura antes de inbox nativo. |
-| 15 | Pluga | Obrigatória para Ads; desenho assume plano alto. LP = webhook genérico à parte. |
-| 16 | Arquitetura ingestão | Pluga = só entrada (1 evento/lead). Processamento **assíncrono** (202 + fila). Conta Pluga **por workspace**. Token identifica tenant — sem `workspace_id` no body. |
+| 15 | Pluga | Obrigatória para Ads; desenho assume plano pago compatível com HTTP Request. LP = webhook servidor-servidor à parte. |
+| 16 | Arquitetura ingestão | Pluga = só entrada (1 evento/lead). `IntegrationEvent` é outbox: commit PostgreSQL → 200 → dispatcher independente → BullMQ. Conta Pluga **por workspace**. Token identifica tenant — sem `workspace_id` no body. |
 | 17 | Stack | **Travada** — monólito modular TS: Next.js + worker + Supabase + Prisma + BullMQ/Redis Railway + R2 + OpenRouter. Ver [stack-recomendada.md](../../stack-recomendada.md) · [ADR-0001](../adr/0001-stack-monolito-modular-ts.md) |
-| 18 | Organização interna | **Um workspace por grupo** (empresa mãe). Filiais/times = **tags** em membros (e opcionalmente oportunidades). Funis por **produto**. Comercial ≠ jurídico via funis/área/roles — não via workspace. [ADR-0002](../adr/0002-workspace-tags-times.md) |
+| 18 | Organização interna | **Um workspace por grupo** (empresa mãe). Filiais/times = **tags** em membros (e opcionalmente oportunidades). Comercial ≠ jurídico via funis/área/roles — não via workspace. Tipo de financiamento é atributo, não estrutura organizacional. [ADR-0002](../adr/0002-workspace-tags-times.md) |
 | 19 | Analytics | Fora do MVP. Pós: considerar **Himetrica**. |
 | 20 | LGPD | MVP = segurança básica (RLS, secrets, HMAC). Sem compliance platform no piloto. |
 
@@ -48,7 +52,7 @@
 ## Score de cabimento (Q6D) — especificação
 
 **Opcional.** Atendente/gestor abre **Análise de cliente**:
-1. Seleciona lead/oportunidade (dados do form já pré-preenchidos: parcela, produto, etc.).
+1. Seleciona lead/oportunidade (dados do form já pré-preenchidos: parcela, tipo de financiamento etc.).
 2. Completa campos faltantes manualmente.
 3. Envia requisição normalizada via **OpenRouter** — modelo **DeepSeek V4** (preferencial) ou **Gemini Flash** — com **prompt/escopo fixo** (elegibilidade revisional).
 4. Recebe **score + justificativa** no card.
@@ -65,12 +69,12 @@ Feature flag: `score_cabimento_llm`.
 ### Regras anti-duplicação / consistência
 | Regra | Comportamento |
 |-------|----------------|
-| Pessoa única | CPF/telefone normalizado; jurídico reutiliza a mesma Pessoa |
+| Pessoa única | Jurídico reutiliza a Pessoa já resolvida; múltiplos contatos são preservados e conflitos exigem revisão |
 | 1 handoff = 1 card jurídico | Idempotência: `oportunidade_comercial_id` → no máximo uma oportunidade jurídica ativa |
 | Retrigger | Se já existe card jurídico aberto para essa origem, **atualiza** resumo (não cria segundo) |
-| Gatilhos | Etapa/status: `ganho` **ou** `necessario_juridico` (configurável) |
+| Ação | Atendente conclui → notificação in-app ao gestor → gestor libera. Ganho, perda ou etapa especial oferecem a ação, mas não criam card jurídico por inferência |
 | Pré-condição | Funil jurídico deve existir e estar ativo no workspace; senão, só marca comercial e avisa admin |
-| Payload | Dados da pessoa + produto + docs/links + envelope assinado + **resumo** do funil comercial (etapas, atendente, notas, score se houver) |
+| Payload | Dados da pessoa + financiamento quando disponível + docs/links + envelope assinado + **resumo** do funil comercial (etapas, atendente, notas, score se houver) |
 | Atribuição | Card jurídico nasce **sem** atendente (ou fila); **gestor jurídico** atribui |
 | Visibilidade | Comercial vê status “enviado ao jurídico”; jurídico vê origem comercial (somente leitura do histórico) |
 
@@ -126,11 +130,11 @@ Ads (Pluga) / LP (webhook)
  → Normalização CRM
  → Template fixo WhatsMiau (se ligado)
  → Atribuição + SLA (desde chegou_em)
- → Funil COMERCIAL do produto
+ → Funil COMERCIAL configurado
  → [Opcional] Análise de cliente → LLM → score
  → Docs / proposta / contrato
  → Clicksign | DocuSign (eventos)
- → Ganho  ou  “Necessário jurídico”
+ → Gestor confirma handoff no fechamento ou no meio
  → Funil JURÍDICO (card único, dados + resumo comercial)
  → Gestor jurídico atribui
 ```
@@ -140,7 +144,7 @@ Ads (Pluga) / LP (webhook)
 ## Escopo fechado — checklist
 
 - [x] Captação Pluga + LP webhook  
-- [x] Funis por produto + funil jurídico orquestrado  
+- [x] Funis operacionais Comercial/Jurídico + financiamento como atributo opcional
 - [x] WhatsMiau mensagens (sem inbox, sem calling)  
 - [x] Template 1º contato fixo  
 - [x] Score LLM opcional (tela Análise)  

@@ -1,4 +1,4 @@
-# 08 — Lead do Meta vira Pessoa
+# 08 — Contrato v1 normaliza e resolve Pessoa
 
 **Blocked by:** 07
 
@@ -6,7 +6,9 @@
 
 ## What to build
 
-O worker passa a interpretar o payload: o conector do Meta Lead Ads converte a forma crua do provedor, o domínio normaliza telefone, CPF e e-mail, e decide se aquela pessoa **já existe** no workspace.
+O worker passa a interpretar o contrato canônico `v1` preenchido pela Pluga. O domínio normaliza telefone, CPF, e-mail e valores financeiros, preserva múltiplos contatos e decide se a Pessoa é inequívoca ou se o envio precisa de revisão de identidade.
+
+**Revisão nunca segura o lead.** Sob conflito, o caminho é criar Pessoa nova e marcar a pendência — não esperar decisão humana. Duplicar Pessoa temporariamente é reversível por mesclagem; perder a janela de contato de um lead de mídia paga não é.
 
 O reconhecimento de pessoa recorrente é o coração deste ticket. O cliente atendido em março que volta em setembro com outro financiamento precisa ser a mesma Pessoa — inclusive quando troca de telefone e mantém o CPF, e inclusive quando o formulário do anúncio não traz CPF nenhum, que é o caso comum.
 
@@ -15,14 +17,18 @@ O reconhecimento de pessoa recorrente é o coração deste ticket. O cliente ate
 ## Acceptance criteria
 
 - [ ] `packages/domain` não importa Prisma e não faz I/O
-- [ ] O conector do Meta vive em `apps/worker`, não em `packages/domain`
+- [ ] O conector `v1` vive em `apps/worker`, não em `packages/domain`
 - [ ] `InboundLead` → `normalize()` → `NormalizedLead`: dois tipos, com Zod como fonte única e tipo TypeScript inferido
 - [ ] Telefone gravado em E.164, com Brasil como país padrão — o país padrão é conhecimento do domínio, não do conector
 - [ ] CPF gravado só com dígitos, com dígito verificador validado
 - [ ] E-mail gravado em minúsculas
-- [ ] A identificação casa por **qualquer chave presente** (telefone, CPF, e-mail)
-- [ ] Quando duas chaves apontam para pessoas diferentes, **o telefone decide**
+- [ ] `PersonPhone` e `PersonEmail` preservam múltiplos valores normalizados por Pessoa
+- [ ] CPF válido é forte, mas opcional; telefone só associa quando não há contradição; e-mail isolado é fraco
+- [ ] Quando chaves apontam para Pessoas diferentes, cria **Pessoa nova** com os contatos do envio e registra `IntakeReview(type: IDENTITY_CONFLICT)` com as candidatas — **nunca** segura o envio
+- [ ] Nenhum vínculo com cadastro existente é criado sob conflito, e nenhuma chave vence por prioridade fixa
+- [ ] `Person.merged_into_person_id` permite mesclagem posterior não destrutiva, preservando histórico e identificadores
 - [ ] Submissão com telefone novo e CPF conhecido reconhece a mesma Pessoa — não cria segunda
-- [ ] Casamento apenas por e-mail marca **provável duplicata** em vez de fundir cadastros
-- [ ] Sem nenhuma das três chaves, **não** cria Pessoa
+- [ ] Casamento apenas por e-mail não funde cadastros automaticamente
+- [ ] Nenhum contato anterior é sobrescrito ao receber um novo
+- [ ] Sem nenhuma das três chaves, **não** cria Pessoa — único caso em que a ingestão não produz Oportunidade
 - [ ] **Seam 1**: casos de borda de telefone brasileiro, CPF inválido, caixa de e-mail e conflito de chaves, sem banco e sem container

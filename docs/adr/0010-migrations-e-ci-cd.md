@@ -1,6 +1,6 @@
-# Migrations e CI/CD: Prisma dono único, Postgres efêmero no CI, Supabase só em produção
+# Migrations e CI/CD: Prisma dono único, Docker local, Postgres efêmero no CI
 
-**Prisma Migrate é dono único do schema** — policies de RLS são SQL escrito à mão dentro dos arquivos de migration. Não existe ambiente local nem projeto Supabase de staging: há **um** banco, o de produção. A rede de segurança é um **Postgres efêmero no GitHub Actions**, criado do zero a cada PR, onde as migrations rodam e o isolamento por RLS é provado antes de qualquer merge.
+**Prisma Migrate é dono único do schema** — policies de RLS são SQL escrito à mão dentro dos arquivos de migration. O desenvolvimento acontece contra **Postgres e Redis em Docker local**, descartáveis. O CI prova cada PR num **Postgres efêmero do GitHub Actions**, sem receber nenhuma credencial de produção. Só depois do merge, um job de release serializado aplica a migration no Supabase e libera o deploy do Railway.
 
 **Status:** accepted · 2026-08-04
 
@@ -14,57 +14,93 @@
 
 **Custo assumido:** as policies não são declarativas. Ninguém abre um arquivo e vê o conjunto atual — é preciso ler o histórico. O teste de isolamento no CI compensa isso melhor do que a declaratividade compensaria, porque pega a tabela nova cuja policy alguém esqueceu, que é o erro que revisão humana deixa passar.
 
-## Sem ambiente local, sem staging
+## Ambiente local em Docker
 
-Existe **um** banco Supabase: produção. Sem Postgres local, sem segundo projeto.
+**Supersede a decisão anterior de não ter ambiente local.** Existe um `docker-compose.yml` com Postgres e Redis descartáveis. Continua não existindo Supabase local nem projeto Supabase de staging: há **um** projeto Supabase, o de produção.
 
-**Como se gera migration sem banco:** `prisma migrate dev` exige um shadow database. Sem banco local, o caminho é **`prisma migrate diff`**, que gera o SQL comparando dois estados de schema sem banco nenhum; as policies são acrescentadas à mão no mesmo arquivo, e o CI prova o conjunto no Postgres efêmero. *(Flags exatas a confirmar antes da Fase 0.)*
+A proibição anterior custava caro e protegia pouco. Ela nascia de um fato exagerado — de que `prisma migrate dev` "reseta o banco ao detectar drift". Ele **pede confirmação** antes de resetar e, em ambiente não-interativo, falha em vez de resetar. O perigo nunca foi o comando; foi o comando **apontado para produção**.
 
-**`prisma migrate dev` é proibido no projeto.** Ele **reseta o banco** ao detectar drift — comportamento documentado, não acidente. Contra o Supabase, apenas `prisma migrate deploy`, que é forward-only e nunca reseta.
+Com Docker local:
 
-**O guard principal é estrutural, não política:** a connection string de produção existe **só** como secret do GitHub Actions e no Railway. Nunca num `.env` de desenvolvimento, nunca acessível a um agente. Sem a string, o comando catastrófico é impossível — não apenas proibido.
+- **`prisma migrate dev` é permitido contra o local**, que é onde ele foi feito para rodar. O shadow database funciona, e a autoria de migration deixa de ser aposta.
+- O ciclo de feedback de uma migration cai de um round-trip de CI para segundos. Com agentes de código gerando migrations, essa é a diferença mais cara do projeto.
+- Testes puros e prova de RLS rodam antes do push.
+
+**O guard que importa não mudou e é estrutural:** a connection string de produção não existe em `.env` de desenvolvimento, não fica acessível a um agente, e vive apenas no GitHub Environment de produção (migrations) e no Railway (aplicação). Sem a string, o comando catastrófico é impossível — não apenas proibido. O banco local é vazio e descartável; resetá-lo não tem consequência.
 
 ## Guards obrigatórios
 
-1. `prisma migrate dev`, `prisma db push` e qualquer `--force-reset` são proibidos contra o remoto.
-2. CI varre o SQL das migrations em busca de DDL destrutiva (`DROP TABLE`, `DROP COLUMN`, `TRUNCATE`, `DELETE` sem `WHERE`) e **falha**, salvo marcador explícito no arquivo declarando o motivo.
+1. Contra qualquer banco remoto: `prisma migrate dev`, `prisma db push` e qualquer `--force-reset` são proibidos. Produção aceita **apenas `prisma migrate deploy`**, que é forward-only, não reseta e também **não detecta drift**.
+2. CI bloqueia `DELETE`, `TRUNCATE`, `DROP COLUMN`, `DROP TABLE` e alterações destrutivas de tipo. `DELETE` e `TRUNCATE` não têm exceção no fluxo de migrations. A única exceção é remover tabela comprovadamente vazia, em migration separada, com aprovação explícita, sem `CASCADE` e com precondição transacional que aborte se existir qualquer linha ou dependência.
 3. **Expand/contract é regra dura.** Nunca `NOT NULL` sem default em um passo; nunca constraint única sem verificar duplicata antes; nunca remover coluna na mesma release que para de usá-la.
 4. Migrations rodam com a connection string do papel **owner**, distinta da do app — se forem a mesma, o `FORCE ROW LEVEL SECURITY` não protege nada.
-5. O seed (funil comercial padrão com sua etapa `ENTRY`) é script de seed do Prisma, não migration.
+5. O seed (funil comercial padrão, com sua etapa `ENTRY` e sua `CLOSING`) é script de seed do Prisma, não migration.
 6. Prisma se limita ao schema `public`; `auth.*` pertence ao Supabase.
+7. **Drift check no CI:** `migrate diff` entre `schema.prisma` e o banco recém-migrado precisa retornar vazio. Sem ele, alguém edita o `schema.prisma` sem gerar a migration correspondente e o CI passa mentindo — erro que agente de código comete com frequência.
+8. Migration cujo sucesso dependa dos dados existentes traz um **preflight** somente-leitura, executado contra produção antes dela no job de release. A regra vale desde já; a infraestrutura se constrói quando a primeira migration assim for escrita.
+9. Migrations de produção rodam uma vez, em job exclusivo e serializado por `concurrency` — nunca no startup do app ou do worker.
+10. Nenhum workflow disparado por `pull_request` recebe secret, token ou connection string de produção.
 
 ## Fluxo
 
 ```
-branch → commit → PR
-  │
-  ├─ GitHub Actions (Postgres + Redis efêmeros, criados do zero)
-  │    typecheck · lint · build
-  │    testes puros: normalização, conectores, síntese de id,
-  │                  quarentena, reúso de Person, schemas Zod
-  │    prisma migrate deploy  ← migrations do zero
-  │    prova de RLS: workspace A não lê B
-  │    varredura de DDL destrutiva
-  │
-  └─ branch protection: sem CI verde, sem merge
-       │
-       merge na main → Railway detecta o push → deploy
+LOCAL
+  docker compose up            Postgres + Redis descartáveis
+  prisma migrate dev           permitido contra local, proibido contra remoto
+  vitest                       testes puros
+
+PUSH
+  pnpm ship                    push da branch + abertura automática do PR
+                               main protegida: push direto bloqueado
+
+PR — GitHub Actions, sem nenhum secret de produção
+  1  install · prisma generate · typecheck · lint · build
+  2  testes puros (Vitest)
+  3  Postgres efêmero: prisma migrate deploy, histórico inteiro do zero
+  4  drift check: migrate diff schema.prisma ↔ banco = vazio
+  5  varredura de DDL destrutiva no SQL das migrations
+  6  prova de RLS: enabled + forced + policy + cross-workspace nega leitura e escrita
+  7  Redis efêmero: ingestão ponta a ponta
+  → branch protection: sem tudo verde, sem merge              ~3 min
+
+MERGE NA MAIN
+  8  job de release, concurrency serializada
+     GitHub Environment de produção — único lugar com a string de migration
+     preflight somente-leitura, quando a migration declarar dependência de dados
+     prisma migrate deploy contra o Supabase
+  9  verificações pós-migration
+  10 Railway (Wait for CI) faz deploy de app e worker           ~1 min
 ```
 
-**A validação roda no PR, antes do merge.** Validar depois do merge é validar código que já está na `main`.
+**Branch sempre, nunca push direto na main.** Os três não cabem juntos: push direto na main, PR automático e branch protection exigindo CI verde. Branch protection na main bloqueia push direto por definição — e é ela que garante o gate. O PR é aberto pelo mesmo script do push, sem infraestrutura adicional.
+
+**No PR, migration roda só no Postgres efêmero.** Aplicar contra produção durante o PR mudaria o schema antes de o código existir na `main`, e um PR fechado deixaria o banco adiantado em relação ao código.
+
+**Railway nunca antecede a migration verde.** Com `Wait for CI`, o deploy espera o job de release. Sem isso, existe uma janela em que o app novo conversa com o schema antigo. Se preflight ou migration falhar, a release para e a versão anterior continua ativa — por isso toda migration que antecede o deploy precisa ser compatível com a versão anterior do código, e remoções pertencem a uma etapa posterior de expand/contract.
 
 ## Testes
 
-O que roda sem tocar produção cobre justamente a lógica mais arriscada — e isso **valida a fronteira do [ADR-0008](./0008-fronteira-conector-dominio.md)**, porque a decisão perigosa ficou toda em função pura: normalização (E.164, DV do CPF, lowercase), mapeamento de cada conector, síntese de `external_lead_id`, decisão de quarentena, decisão de reúso de Person, schemas Zod.
+O que roda sem tocar produção cobre justamente a lógica mais arriscada — e isso **valida a fronteira do [ADR-0008](./0008-fronteira-conector-dominio.md)**, porque a decisão perigosa ficou toda em função pura: validação tolerante do contrato de entrada, normalização (E.164, DV do CPF, lowercase, moeda), síntese de `external_lead_id`, quarentena, detecção de conflito de identidade e de possível duplicado.
 
-O Postgres efêmero acrescenta o que função pura não alcança: migration aplicando limpa do zero, a constraint `UNIQUE` sob insert-and-catch, e a prova de isolamento. Essa prova varre `pg_tables` e `pg_policies` e exige, para toda tabela de negócio: RLS habilitada, RLS **forçada**, ao menos uma policy, e leitura cross-workspace devolvendo zero linhas.
+O Postgres efêmero acrescenta o que função pura não alcança: migration aplicando limpa do zero, drift check, a constraint `UNIQUE` sob insert-and-catch e a prova de isolamento. Essa prova varre `pg_tables` e `pg_policies` e exige, para toda tabela de negócio: RLS habilitada, RLS **forçada**, ao menos uma policy, leitura cross-workspace devolvendo zero linhas e escrita cross-workspace recusada.
 
-**Redis também roda como service container**, pelo mesmo mecanismo. Sem ele, o teste de ingestão precisaria executar o processor inline e deixaria de provar a ordem `persiste → enfileira → 202` que o [ADR-0007](./0007-ingestao-idempotencia.md) travou — uma das decisões mais deliberadas do desenho.
+**Redis também roda como service container.** O teste prova duas fronteiras independentes do [ADR-0007](./0007-ingestao-idempotencia.md): o endpoint confirma `200` após o commit PostgreSQL mesmo com Redis indisponível; depois, com Redis disponível, o dispatcher publica a pendência com `jobId` determinístico e o worker a processa uma única vez no efeito de negócio.
 
-Custo: nenhum além dos minutos normais de Actions — o job fica em ~2–3 min.
+## Custo
+
+| Item | Dinheiro | Tempo |
+|---|---|---|
+| Postgres + Redis em Docker local | R$ 0 | ~10s para subir |
+| GitHub Actions, repositório privado | R$ 0 (2.000 min/mês no free; job de ~3 min) | ~3 min por PR |
+| Service containers no runner | R$ 0 | incluso |
+| Job de release | R$ 0 | ~1 min |
 
 ## Riscos aceitos
 
-1. **Falha de migration dependente de dado.** O Postgres efêmero ensaia contra banco **vazio**: pega sintaxe, ordem e policy faltando, mas não pega `NOT NULL` sobre tabela populada nem índice único sobre dado já duplicado. Migration do Prisma que falha no meio fica marcada como falha e **bloqueia todas as seguintes** até resolução manual. Mitigação: expand/contract (guard 3).
-2. **A rede sob esse risco é o backup do Supabase, e o plano é free.** PITR é add-on pago. **Verificar o que o plano free realmente garante** antes de tratar backup como rede — se não garantir, o risco 1 não tem desfazer.
-3. Migration é aplicada em produção sem ensaio contra dado real. Aceito conscientemente em troca de simplicidade operacional; a decisão deve ser reavaliada quando o volume de dados do piloto tornar a restauração custosa.
+1. **Migration dependente de dado não é ensaiada contra dado real.** O Postgres efêmero e o local ensaiam contra banco vazio: pegam sintaxe, ordem, drift e policy faltando, mas não pegam `NOT NULL` sobre tabela populada nem índice único sobre dado já duplicado. Mitigação: expand/contract (guard 3) e preflight (guard 8) quando a migration depender de dados.
+2. **Fixtures sintéticas e caminho de upgrade ficam adiados**, com gatilho declarado: entram quando produção tiver dado real do piloto. Hoje o banco está vazio — mantê-las custaria sincronização a cada mudança de schema contra risco zero. Enquanto isso, o risco 1 permanece mitigado apenas por disciplina.
+3. **Não existe rede de backup, por decisão consciente.** Enquanto produção estiver vazia, não há o que perder: uma migration ruim se corrige aplicando outra. Preflight não é rollback, e o plano free do Supabase não foi verificado — nada disso importa contra um banco sem dados.
+
+   **Gatilho de reavaliação, obrigatório e verificável: o primeiro lead real de cliente gravado em produção.** A partir desse instante, nenhuma migration nova pode ser aplicada sem que exista backup restaurável — seja `pg_dump` para o R2 dentro do job de release, seja o add-on PITR do Supabase. O gatilho é objetivo justamente para não virar "algum dia": é uma linha na tabela `lead_submissions`.
+4. **Postgres comum não reproduz toda a plataforma Supabase.** Cobre schema `public`, constraints, funções do domínio e o desenho de RLS por GUC. Não prova diferenças de Auth, Data API, Storage ou extensões exclusivas; qualquer uso futuro dessas superfícies exige teste específico.
+5. **`migrate deploy` não detecta drift.** Mudanças manuais no Dashboard podem fazer produção divergir do histórico mesmo com CI verde; mudanças de schema fora das migrations permanecem proibidas.

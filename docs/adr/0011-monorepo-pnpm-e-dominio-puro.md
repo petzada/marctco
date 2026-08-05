@@ -21,7 +21,7 @@ Turborepo resolve orquestração de grafo de tarefas e cache de build. Com dois 
 
 ## Por que `domain` é puro
 
-**Não é preferência arquitetural — é requisito do [ADR-0010](./0010-migrations-e-ci-cd.md).** Aquele ADR trava testes de CI sem banco, e a lista do que roda lá é normalização, mapeamento de conector, síntese de `external_lead_id`, decisão de quarentena e reúso de Person. Se `domain` importasse Prisma, esses testes passariam a exigir banco e o desenho de CI deixaria de fechar.
+**Não é preferência arquitetural — é requisito do [ADR-0010](./0010-migrations-e-ci-cd.md).** Aquele ADR trava testes de CI sem banco, e a lista do que roda lá é contrato `v1`, normalização, síntese de `external_lead_id`, quarentena e decisões de revisão de identidade/duplicidade. Se `domain` importasse Prisma, esses testes passariam a exigir banco e o desenho de CI deixaria de fechar.
 
 Concretamente: `decideReuseOfPerson(candidates, normalizedLead)` recebe os candidatos **já buscados** e devolve a decisão. Quem foi ao banco foi o worker.
 

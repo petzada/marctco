@@ -10,18 +10,19 @@
 
 | Tema | Escolha |
 |------|---------|
-| Comercial | Funil até Ganho / “Necessário jurídico” |
+| Comercial | Funil até fechamento; gestor pode confirmar handoff ao Jurídico no fechamento ou no meio |
 | Jurídico | Funil separado orquestrado (handoff sem duplicar) |
 | Ads | Pluga (Meta + Google Lead Form) |
-| LP | Webhook genérico |
-| Funis produto | Separados + editáveis |
+| LP | Webhook servidor-servidor |
+| Funis | Comercial/Jurídico editáveis; independentes do financiamento |
+| Ingestão | Contrato `v1` → outbox PostgreSQL → 200 → dispatcher/BullMQ |
 | SLA | Desde **chegada no CRM** |
 | 1º contato | Template fixo WhatsMiau (sem LLM) |
 | Score | LLM **opcional** (DeepSeek V4 / Gemini Flash via OpenRouter) na tela Análise |
 | WhatsApp | WhatsMiau; sem inbox; sem calling |
 | Assinatura | Clicksign **e** DocuSign (cliente escolhe) |
 | Monetização | `workspace_flags` no código; preço fora |
-| Organização | 1 workspace/grupo; **tags** filial/time; funis por produto |
+| Organização | 1 workspace/grupo; **tags** filial/time; financiamento como atributo opcional |
 | Stack | Travada — [stack-recomendada.md](../../stack-recomendada.md) |
 | Trial | 30 dias, liberação manual |
 
@@ -29,7 +30,7 @@
 
 ## 2. Tese
 
-CRM para assessoria de revisional: captura (Pluga/LP) → aquecimento WA → funil comercial por produto → assinatura → **handoff para funil jurídico** com histórico intacto. Score por IA é ferramenta opcional do closer, não gargalo do funil.
+CRM para assessoria de revisional: captura (Pluga/LP servidor-servidor) → funil comercial configurado → aquecimento WA → assinatura → **handoff humano para funil jurídico** com histórico intacto. Score por IA é ferramenta opcional do closer, não gargalo do funil.
 
 ---
 
@@ -37,13 +38,13 @@ CRM para assessoria de revisional: captura (Pluga/LP) → aquecimento WA → fun
 
 ```
 Meta / Google (Pluga)  ─┐
-LP (webhook genérico)  ─┴─► Normalização CRM
+LP (servidor-servidor) ─┴─► Contrato v1 / outbox CRM
                               │
                     Template fixo WhatsMiau (opcional)
                               │
                     Atribuição + SLA (chegou_em)
                               │
-                    Funil COMERCIAL (por produto, editável)
+                    Funil COMERCIAL configurado
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
@@ -51,7 +52,7 @@ LP (webhook genérico)  ─┴─► Normalização CRM
                          Análise LLM     Clicksign|
                          score           DocuSign
                               │
-                    Ganho  ou  Necessário jurídico
+                    Gestor confirma handoff
                               │
                     Funil JURÍDICO (1 card / handoff)
                     + resumo comercial + docs
@@ -60,7 +61,7 @@ LP (webhook genérico)  ─┴─► Normalização CRM
 ```
 
 ### Orquestração comercial → jurídico
-- Gatilho: status `ganho` ou etapa `necessario_juridico`.
+- Ação humana: gestor confirma o handoff; nenhum status ou etapa cria card jurídico automaticamente.
 - Reutiliza **mesma Pessoa**; cria **uma** oportunidade jurídica por origem comercial (idempotente).
 - Payload: dados normalizados + links de docs/contrato + resumo do atendimento comercial.
 - Se funil jurídico não existir: não duplica; notifica admin.
@@ -100,7 +101,7 @@ Eventos: enviado → visualizou → assinou → recusou → completo → atualiz
 
 ## 7. Núcleo de produto
 
-- Funis por produto + funil jurídico (flags).  
+- Funis operacionais Comercial/Jurídico; financiamento como atributo.
 - Kanban atividade-first + estagnação (SLA desde `chegou_em` / etapa).  
 - Atribuição comercial e jurídica separadas.  
 - Docs, proposta rastreável, motivo de perda.  
@@ -114,7 +115,7 @@ Eventos: enviado → visualizou → assinou → recusou → completo → atualiz
 ```
 Workspace (flags, trial, timezone America/Sao_Paulo)
  ├── WorkspaceMembers (role, tags[])
- ├── Funis[] (tipo: comercial|juridico, produto?, etapas[])
+ ├── Funis[] (tipo: comercial|juridico, etapas[])
  ├── Integrações (Pluga, LP webhook, WhatsMiau, Clicksign, DocuSign, OpenRouter/LLM)
  ├── Pessoa
  └── Oportunidade
@@ -134,7 +135,7 @@ Organização: um workspace = grupo/empresa mãe; filiais/times = tags — [ADR-
 
 | # | Entrega |
 |---|---------|
-| 1 | Workspace, tags, flags, funis editáveis (comercial por produto + jurídico) |
+| 1 | Workspace, tags, flags, funis editáveis Comercial/Jurídico |
 | 2 | Pluga + webhook LP + normalização |
 | 3 | WhatsMiau + template 1º contato + SLA + atribuição comercial |
 | 4 | Kanban comercial + docs + proposta |
@@ -161,9 +162,9 @@ Organização: um workspace = grupo/empresa mãe; filiais/times = tags — [ADR-
 ## 11. Sucesso do piloto (30 dias)
 
 1. Leads Ads/LP no CRM.  
-2. Template WA + SLA + funil comercial por produto.  
+2. Template WA + SLA + funil comercial configurado.
 3. Contrato assinado (Clicksign ou DocuSign).  
-4. Ganho gera card no funil jurídico sem duplicar.  
+4. Handoff confirmado gera/atualiza card jurídico sem duplicar.
 5. (Opcional) Análise LLM usada pelo time em alguns leads.  
 
 Escopo de pesquisa/síntese: **fechado**. Stack: **travada** ([stack-recomendada.md](../../stack-recomendada.md)).  

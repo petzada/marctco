@@ -12,12 +12,14 @@ Este ticket contém a única consulta do sistema que legitimamente **não tem co
 
 ## Acceptance criteria
 
-- [ ] `IntegrationConnection` com `provider`, `token_hash` e `status`
+- [ ] `IntegrationConnection` com `provider`, `contract_version`, `token_hash`, `status` e `target_pipeline_id` anulável
+- [ ] `target_pipeline_id` nulo significa "usar o funil comercial padrão do workspace"; preenchido, precisa apontar para funil comercial do mesmo workspace
 - [ ] O token é gerado com entropia adequada e o valor em claro é exibido **uma única vez**
 - [ ] Só o hash é persistido; o valor em claro nunca é armazenado nem registrado em log
 - [ ] Função `SECURITY DEFINER` em schema privado resolve o workspace a partir do hash
 - [ ] `EXECUTE` revogado de todo papel que não seja o do app
 - [ ] Busca por índice sobre o hash, **sem cache** — token revogado precisa parar de funcionar imediatamente
 - [ ] Token de workspace desativado não resolve
+- [ ] Pluga e LP usam conexões/tokens distintos; a origem confiável vem da conexão autenticada, não do body
 - [ ] Script de seed cria uma conexão utilizável pelos tickets seguintes
 - [ ] A interface de gerenciamento está fora deste ticket (é o 14)

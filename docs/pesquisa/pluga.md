@@ -8,12 +8,30 @@
 >
 > | Aqui | Vale hoje |
 > |---|---|
-> | §Respostas HTTP: **409 = duplicata** | O CRM **nunca responde 409**. 202 sempre; só 401 e 400 são síncronos. Idempotência tem um dono só: a constraint + o worker — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
-> | §Tela item 6: "campos obrigatórios (nome + telefone ou CPF)" | **Nenhum campo de negócio é obrigatório.** Sem telefone e sem e-mail vai para quarentena; o resto entra no funil — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
-> | §Campos mínimos: CPF no formulário | CPF raramente chega. A identidade da Pessoa **não pode depender dele** — cascata telefone → CPF → e-mail |
+> | §Respostas HTTP: **409 = duplicata** e **"200/201/202 = aceito"** | O CRM **nunca responde 409** e responde **200 sempre**; só 401 e 400 são síncronos. A tabela abaixo afirmava que a Pluga aceita qualquer 2xx — isso **não se confirmou** em pesquisa e não deve ser usado como base — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
+> | §Tela item 6: "campos obrigatórios (nome + telefone ou CPF)" | **Nenhum campo de negócio é obrigatório no HTTP.** Sem contato vai para quarentena; conflitos/possíveis duplicados vão para revisão; o restante entra no Comercial — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
+> | §Campos mínimos: CPF no formulário | CPF raramente chega. Pessoa preserva múltiplos contatos e qualquer conflito vai para revisão; telefone não vence — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
 > | §Contrato: `Idempotency-Key` no header | Aceito se vier, mas a chave autoritativa é `source` + `external_lead_id` no corpo |
+> | Exemplos de payload | O CRM é dono do contrato canônico `v1`; a Pluga faz De→Para via HTTP Request. Não existe “payload universal da Pluga” — [ADR-0008](../adr/0008-fronteira-conector-dominio.md) |
+> | LP por POST do navegador | Superado: somente servidor-servidor, com token separado e segredo fora do JavaScript — [ADR-0008](../adr/0008-fronteira-conector-dominio.md) |
 >
 > §Tela Integrações > Pluga e §Pricing permanecem válidos como referência.
+
+> **Verificação em documentação pública (2026-08-04).** O que foi confirmado com fonte, o que não foi, e o que só se resolve em conta real:
+>
+> | Item | Situação |
+> |---|---|
+> | HTTP Request monta o JSON livremente, sem envelope da Pluga | **Confirmado.** Campos "Corpo da requisição (JSON)", "Cabeçalhos (JSON)", "Parâmetros de busca (JSON)"; métodos POST/GET/PUT/PATCH/DELETE — [doc](https://pluga.co/ferramentas/http-request/integracao/) |
+> | HTTP Request é **recurso Premium**, exige plano pago | **Confirmado.** Tier mínimo = **Basic**, verificado manualmente na conta (2026-08-04) — ver §Custo abaixo |
+> | Campos do gatilho são fixos por ferramenta, independentes do destino | **Confirmado** comparando páginas de integração com destinos diferentes |
+> | Campos Meta Lead Ads: lead id, `ad_id`/`ad_name`, `adset_id`/`adset_name`, `campaign_id`/`campaign_name`, `form_id`/`form_name`, `platform`, `is_organic`, data em 3 formatos | **Confirmado.** Base do modelo de mapeamento — [ADR-0008](../adr/0008-fronteira-conector-dominio.md) |
+> | Nome, telefone, e-mail e perguntas do formulário Meta | **Não confirmado.** Ausentes da lista pública; provavelmente dinâmicos por formulário, visíveis só com conta conectada. Primeira coisa a verificar no teste de onboarding |
+> | Campos Google Lead Form | **Não confiável.** Lista pública truncada (3 itens, sem IDs e sem contato). Nenhum campo Google é presumido |
+> | Tratamento de códigos de resposta; retry de 5xx | **Não encontrado em fonte pública**, em duas rodadas de pesquisa. Por isso o CRM responde **200**, não 202 — decisão fechada em [ADR-0007](../adr/0007-ingestao-idempotencia.md), que remove a dependência em vez de testá-la |
+> | Preços e limites de evento; ao estourar, automação **pausa** e dados ficam retidos | **Confirmado** — ver §Custo abaixo, com valores verificados na conta |
+> | 1 lead = 1 evento | **Confirmado pela definição da Pluga**: evento é "o ato de transferir um dado da Ferramenta A para a B". No desenho do CRM — uma automação, uma ação, um POST — cada lead consome exatamente um |
+>
+> Nota metodológica: parte da central de ajuda da Pluga bloqueia acesso direto (403), então alguns pontos vieram de snippets de busca. O que não pôde ser confirmado está marcado como tal, sem inferência.
 
 ---
 
@@ -27,7 +45,7 @@ A Pluga é a iPaaS brasileira no-code (~130+ ferramentas, +10.000 empresas) que 
 | Make / n8n | Velocidade no-code sem curva de fluxo complexo |
 | Conector nativo Meta/Google no CRM | Time-to-market: não reinventar OAuth/Lead Ads no MVP |
 
-**Decisão de produto:** o CRM **não** precisa de conector nativo Meta/Google no dia 1. Expõe um **webhook autenticado idempotente**; a Pluga faz a ponte Ads → CRM. Decisões travadas: [decisoes.md](./decisoes.md) (Pluga obrigatória para Ads; webhook genérico separado para LPs).
+**Decisão atual:** o CRM não precisa de conector nativo Meta/Google no dia 1. Expõe endpoints autenticados; a Pluga mapeia Ads para o contrato `v1` e LPs usam conexão servidor-servidor separada. Decisões vinculantes: [ADR-0007](../adr/0007-ingestao-idempotencia.md) e [ADR-0008](../adr/0008-fronteira-conector-dominio.md).
 
 **Tela Integrações > Pluga (MVP):** URL do webhook · secret · teste · logs · última sync. **Sem** wizard De→Para no CRM (mapeamento fica na Pluga). UX para usuário não técnico.
 
@@ -37,19 +55,27 @@ A Pluga é a iPaaS brasileira no-code (~130+ ferramentas, +10.000 empresas) que 
 
 Fonte: [pluga.co/precos](https://pluga.co/precos/)
 
-| Plano | Mensal | Automações | Eventos/mês | Polling |
-|-------|--------|------------|-------------|---------|
-| Free | R$ 0 | 3 | 100 | 15 min |
-| Basic | R$ 89 | 6 | 1.000 | 5 min |
-| Pro | R$ 209 | 15 | 4.000 | 5 min |
-| Ultimate | R$ 359 | Ilimitado | 12.000 | 5 min |
+## Custo da Pluga para o cliente (dimensionamento)
 
-- Trial 7 dias com recursos Ultimate.
-- **Webhooks, HTTP Request, Formatador, Roteador, Filtros, Loop, Delay, Code, Kit IA** = workflow **premium** (não entram no Free).
-- Log de eventos: **90 dias**; retentativa inteligente em erros temporários.
-- Evento = transferência A→B.
+**Valores verificados manualmente na conta em 2026-08-04.** Divergem dos que aparecem em leitura automática da página pública (R$89 / R$209 / R$359) — prevalecem os verificados.
 
-**Recomendação ao cliente do CRM:** volume baixo (~≤1.000 leads/mês) → **Basic**; multi-form + margem → **Pro**; alto volume ou investimento relevante em mídia → **Ultimate** (evita pausa por quota). Ver também [sintese-manual.md § Qual plano](./sintese-manual.md).
+| Plano | Mensal | Eventos/mês | Custo por lead | HTTP Request |
+|-------|--------|-------------|----------------|--------------|
+| Free | R$ 0 | 100 | — | ❌ **não tem** |
+| Basic | R$ 73,87 | 1.000 | R$ 0,074 | ✅ |
+| Pro | R$ 173,47 | 4.000 | R$ 0,043 | ✅ |
+| Ultimate | R$ 297,97 | 12.000 | R$ 0,025 | ✅ |
+| Enterprise | sob consulta | >12.000 | — | ✅ |
+
+**O Free não serve para este CRM.** Ele não inclui HTTP Request, webhooks, agendador, formatador, roteador nem automatizações premium. **O piso de entrada do cliente é o Basic** — sem plano pago, não há ingestão de Ads.
+
+**1 lead = 1 evento.** A Pluga define evento como "o ato de transferir um dado da Ferramenta A para a B"; no desenho do CRM (uma automação, uma ação, um POST) cada lead consome exatamente um. Meta e Google em automações separadas não dobram o custo: cada lead passa por uma só.
+
+**Ao estourar a quota, a automação PAUSA** — os dados ficam retidos e são reenviados após upgrade. Não há perda, mas há atraso, e lead de mídia paga esfria. Para operação com investimento relevante em mídia, vale margem de eventos em vez do plano justo.
+
+Trial de 7 dias com recursos Ultimate. Log de eventos: 90 dias.
+
+> **Insumo comercial, não decisão técnica** (item A16). A monetização do CRM é negociada fora do app pelo time comercial. O que precisa estar claro na proposta: este custo é do cliente, é recorrente, o CRM não o controla, e o piso é o Basic. Ver também [sintese-manual.md § Qual plano](./sintese-manual.md).
 
 ---
 
@@ -142,7 +168,7 @@ Google Lead Form ─(webhook push)───┘
                                     │
                          Filtros (mínimos OK?)
                                     │
-                         Roteador (origem / produto)
+                    Mapeamento (origem / tipo de financiamento)
                                     │
               ┌─────────────────────┼─────────────────────┐
               ▼                     ▼                     ▼
@@ -196,7 +222,10 @@ Idempotency-Key: {source}:{external_lead_id}
 ```
 
 ### Respostas HTTP
-| Código | Significado | Efeito |
+
+> ⚠️ **Esta tabela é hipótese de 2026, não achado verificado.** Duas rodadas de pesquisa na documentação pública da Pluga não encontraram nada sobre quais códigos ela considera sucesso, se retenta, quantas vezes, nem se pausa a automação. A coluna "Efeito" abaixo era suposição razoável e **não deve embasar decisão**. O que vale hoje: o CRM responde **200** sempre, justamente para não depender disto — [ADR-0007](../adr/0007-ingestao-idempotencia.md).
+
+| Código | Significado | Efeito (SUPOSTO, não verificado) |
 |--------|-------------|--------|
 | 200 / 201 / 202 | Aceito | Sucesso na Pluga |
 | 409 | Duplicata (idempotente) | Tratar como sucesso no CRM |

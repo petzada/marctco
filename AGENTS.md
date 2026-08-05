@@ -36,10 +36,10 @@ Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sess
 | [0004](./docs/adr/0004-fronteira-flag-configuracao-estado.md) | Fronteira entre feature flag, configuração de workspace e estado |
 | [0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md) | **Código em inglês, UI e glossário em PT-BR** — contém o mapeamento canônico de nomes |
 | [0006](./docs/adr/0006-rls-duas-camadas-guc-worker.md) | Isolamento multi-tenant: duas camadas, GUC, worker sob RLS |
-| [0007](./docs/adr/0007-ingestao-idempotencia.md) | **Ingestão de leads e idempotência** — o ponto mais irreversível do sistema |
-| [0008](./docs/adr/0008-fronteira-conector-dominio.md) | Fronteira entre conector de origem e domínio |
-| [0009](./docs/adr/0009-etapas-editaveis-papeis-e-status.md) | Etapas editáveis: papel separado do rótulo, status ortogonal |
-| [0010](./docs/adr/0010-migrations-e-ci-cd.md) | Migrations e CI/CD: Prisma dono único, Postgres efêmero no CI |
+| [0007](./docs/adr/0007-ingestao-idempotencia.md) | **Ingestão, outbox, identidade e duplicidade** — o ponto mais irreversível do sistema |
+| [0008](./docs/adr/0008-fronteira-conector-dominio.md) | Contrato canônico `v1` e fronteira conector/domínio |
+| [0009](./docs/adr/0009-etapas-editaveis-papeis-e-status.md) | Funis independentes do financiamento, papéis de etapa, roteamento e handoff humano |
+| [0010](./docs/adr/0010-migrations-e-ci-cd.md) | Migrations e CI/CD: Docker local, Postgres efêmero no CI, release serializado |
 | [0011](./docs/adr/0011-monorepo-pnpm-e-dominio-puro.md) | Monorepo pnpm e pacote de domínio puro |
 
 **Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.

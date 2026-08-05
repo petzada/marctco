@@ -9,8 +9,10 @@
 > |---|---|
 > | **§13 Prioridade de construção** | **Substituída** por [docs/plano-de-construcao.md](docs/plano-de-construcao.md) — 8 fases, incluindo Agenda, Atividade, Equipe, Contratos, Documentos, Analytics e tags, que §13 desconhecia |
 > | §3 e §11 "analytics in-app fora do MVP" | Só **telemetria** fica fora; o módulo Analytics do cliente entra |
-> | §5.3 "responder 202, idempotência `UNIQUE`" | Correto, e detalhado: **202 sempre, nunca 409**, com dois mecanismos de idempotência distintos — [ADR-0007](docs/adr/0007-ingestao-idempotencia.md) |
-> | §5.4 Deduplicação | Refinada: identidade **telefone → CPF → e-mail**, quarentena, retransmissão inerte ao funil — [ADR-0007](docs/adr/0007-ingestao-idempotencia.md) |
+> | §5.3 "responder 202, idempotência `UNIQUE`" | Idempotência correta, código não: é **200 sempre, nunca 409**. A Pluga não documenta quais códigos aceita, e 202 traria só ganho semântico contra risco de todo lead virar falha no painel — [ADR-0007](docs/adr/0007-ingestao-idempotencia.md) |
+> | §5.4 Deduplicação | Telefone não vence conflitos; múltiplos contatos por Pessoa; conflito e possível duplicado viram marcador na Oportunidade já criada, nunca retenção — [ADR-0007](docs/adr/0007-ingestao-idempotencia.md) |
+> | “Funis por produto” | **Superado.** Funil é fluxo Comercial/Jurídico; tipo de financiamento é atributo opcional da Oportunidade — [ADR-0009](docs/adr/0009-etapas-editaveis-papeis-e-status.md) |
+> | §5 processamento “202 + fila” | `IntegrationEvent` é a outbox: commit PostgreSQL → 200 → dispatcher independente → BullMQ — [ADR-0007](docs/adr/0007-ingestao-idempotencia.md) |
 > | §6 1º contato "disparo na chegada do lead" | Default é **na atribuição** — [ADR-0003](docs/adr/0003-whatsapp-instancia-unica-gatilho-atribuicao.md) |
 > | **§10 Modelo de dados** | Nomes em PT-BR e mistos (`pipeline_stage_id`, `assigned_user_id`, `chegou_em`). O schema real é **EN**, com mapeamento canônico em [ADR-0005](docs/adr/0005-idioma-codigo-en-ui-pt-br.md). `Oportunidade` ganha `status: OPEN\|WON\|LOST` ortogonal à etapa |
 > | §12 "todos os módulos no código, liberação via `workspace_flags`" | Flags só onde custa dinheiro ou chama terceiro; sem flag por módulo para packaging — [ADR-0004](docs/adr/0004-fronteira-flag-configuracao-estado.md) |
@@ -21,7 +23,7 @@
 
 CRM de vendas para assessorias de **revisional de juros abusivos** (financiamento veicular, imobiliário e empréstimo pessoal) que captam leads via **Meta Lead Ads** e **Google Lead Form**, com operação comercial e jurídica no mesmo workspace.
 
-**Tese:** capturar lead quente → aquecer via WhatsApp → converter no funil comercial por produto → assinar contrato → entregar ao funil jurídico com histórico intacto. A Pluga é apenas o adaptador de entrada de Ads; toda a inteligência comercial fica no CRM.
+**Tese:** capturar lead quente → entrar no funil comercial configurado → aquecer via WhatsApp → classificar o financiamento quando disponível → assinar contrato → realizar handoff humano ao funil jurídico com histórico intacto. A Pluga é apenas a camada de entrada e De→Para de Ads; toda a inteligência comercial fica no CRM.
 
 **Referências de mercado:** [Ploomes](docs/pesquisa/ploomes.md) · [clieent](docs/pesquisa/clieent.md) · [ADVBOX](docs/pesquisa/advbox.md) · [PipeRun](docs/pesquisa/piperun.md) · [Pipedrive](docs/pesquisa/pipedrive.md)
 
@@ -33,9 +35,9 @@ CRM de vendas para assessorias de **revisional de juros abusivos** (financiament
 |------|-----------|
 | ICP formal | Não travado no MVP — time comercial vende caso a caso |
 | Cliente piloto | Assessoria comercial + jurídica de redução de parcelas (veículo, imóvel, EP) |
-| Captação | Meta Ads + Google Ads (Lead Form) via Pluga; LPs nativas/externas via webhook |
+| Captação | Meta Ads + Google Ads (Lead Form) via Pluga; LPs nativas/externas via webhook servidor-servidor |
 | Trial | 30 dias, acompanhado pelo comercial; contas liberadas manualmente pelo dono |
-| Organização | **1 workspace = grupo/empresa mãe**; filiais/times via **tags**; funis por produto; comercial/jurídico no mesmo workspace |
+| Organização | **1 workspace = grupo/empresa mãe**; filiais/times via **tags**; funis operacionais Comercial/Jurídico; financiamento como atributo |
 
 ---
 
@@ -44,8 +46,10 @@ CRM de vendas para assessorias de **revisional de juros abusivos** (financiament
 ### Dentro
 
 - Multi-workspace desde o primeiro cliente (tenant = workspace = **grupo/empresa mãe**; filiais/times = **tags**, não workspaces)
-- Captação: Pluga (Meta + Google Lead Form) + webhook genérico para landing pages
-- Funis **separados por produto**, 100% editáveis (Comercial e Jurídico)
+- Captação: Pluga (Meta + Google Lead Form) + webhook servidor-servidor para landing pages
+- Funis operacionais editáveis dos tipos Comercial e Jurídico, independentes do tipo de financiamento
+- Contrato canônico de entrada `v1`, com modelos de mapeamento Meta/Google na Pluga
+- Revisão manual de conflitos de identidade e possíveis duplicados como marcador na Oportunidade, sem reter lead
 - Fluxo comercial até **Ganho** ou etapa **“Necessário setor jurídico”**
 - Handoff idempotente comercial → jurídico (1 card jurídico por origem comercial)
 - WhatsApp via [WhatsMiau](https://whatsmiau.dev/docs/getting-started): mensagens + webhooks → timeline (sem inbox nativo)
@@ -54,7 +58,7 @@ CRM de vendas para assessorias de **revisional de juros abusivos** (financiament
 - Assinatura digital: **Clicksign** e **DocuSign** (cliente escolhe no workspace)
 - Score de cabimento por **LLM opcional** (DeepSeek V4 / Gemini Flash via OpenRouter; tela Análise de cliente)
 - Feature flags no código + `workspace_flags`; liberação manual comercial/técnico; preço **fora do app**
-- Um **workspace por grupo** (empresa mãe); filiais/times via **tags** + funis por produto
+- Um **workspace por grupo** (empresa mãe); filiais/times via **tags** + funis operacionais
 - Normalização de dados no CRM como fonte de verdade absoluta
 - Tela Integrações > Pluga: URL, secret, teste, logs, última sync (sem De→Para no CRM)
 
@@ -72,22 +76,24 @@ Detalhes e riscos VoIP futuro: [decisoes.md](docs/pesquisa/decisoes.md)
 Meta Lead Ads ──┐
                 ├── Pluga ──► POST /v1/integrations/pluga/leads
 Google Lead Form┘              │
-LP (webhook) ──────────────────┤
+LP (backend/provedor) ─ servidor-servidor ─┤
                                ▼
-                    Normalização + fila assíncrona
+               commit outbox → 200 → dispatcher/BullMQ
+                               │
+                 normalização + revisão se necessária
                                │
               Template fixo WhatsMiau (opcional, feature flag)
                                │
                     Atribuição + SLA (desde chegou_em)
                                │
-                    Funil COMERCIAL (por produto, editável)
+                    Funil COMERCIAL configurado
                                │
          ┌─────────────────────┼─────────────────────┐
          ▼                     ▼                     ▼
     Docs/proposta      [Opcional] Análise LLM    Assinatura
                        → score cabimento         Clicksign | DocuSign
                                │
-              Ganho  ou  Necessário setor jurídico
+       Gestor confirma handoff (no fechamento ou no meio)
                                │
               Funil JURÍDICO (1 card / handoff idempotente)
               + dados normalizados + resumo comercial + docs
@@ -99,8 +105,8 @@ LP (webhook) ──────────────────┤
 
 | Regra | Comportamento |
 |-------|---------------|
-| Gatilhos | Status `ganho` ou etapa `necessario_juridico` (configurável) |
-| Pessoa | Reutiliza mesma Pessoa (CPF/telefone normalizado) |
+| Ação | Handoff confirmado por um gestor; nunca nasce da ingestão nem de inferência automática |
+| Pessoa | Reutiliza a Pessoa da Oportunidade comercial; se houver revisão de identidade pendente, o gestor a resolve como parte da decisão de enviar — ela não bloqueou o atendimento até aqui |
 | Idempotência | `oportunidade_comercial_id` → no máximo 1 oportunidade jurídica ativa |
 | Retrigger | Se card jurídico aberto existe → atualiza resumo, não duplica |
 | Pré-condição | Funil jurídico ativo no workspace; senão notifica admin |
@@ -116,19 +122,19 @@ Especificação completa: [decisoes.md § Handoff](docs/pesquisa/decisoes.md#han
 
 A Pluga autentica Meta/Google do cliente; o CRM **nunca** recebe credenciais OAuth do cliente.
 
-**Arquitetura correta:** Pluga faz **apenas** POST no CRM (1 lead ≈ 1 evento Pluga). WhatsApp, notificações, funil e assinatura rodam **dentro do CRM** — não na Pluga.
+**Arquitetura correta:** Pluga captura Meta/Google, faz o De→Para e usa HTTP Request para enviar o contrato `v1` ao CRM (1 lead ≈ 1 evento Pluga). WhatsApp, notificações, funil e assinatura rodam **dentro do CRM** — não na Pluga.
 
 ```
 Meta Lead Ads ───────┐
                      ├── Pluga ──► CRM (1 POST/lead)
 Google Lead Form ────┘                │
                                       ▼
-                              Fila interna → funil, WA, tarefas
+                       Outbox → dispatcher/BullMQ → funil, WA, tarefas
 ```
 
-**Conta Pluga:** uma conta **por workspace/cliente** (não centralizar todos os escritórios). Onboarding gera URL, token, modelo JSON e tutoriais Meta/Google.
+**Conta Pluga:** uma conta **por workspace/cliente** (não centralizar todos os escritórios). Onboarding gera URL, token, contrato `v1`, dois modelos de mapeamento e teste real de cada automação Meta/Google.
 
-**Plano Pluga:** depende do volume — ver [pluga.md § Pricing](docs/pesquisa/pluga.md#pricing-impacto-no-cliente-do-crm). Operações com alto investimento em mídia devem preferir margem de eventos (Ultimate) para evitar pausa de automação.
+**Plano Pluga:** **piso é o Basic** — o Free não tem HTTP Request nem webhooks, então sem plano pago não há ingestão de Ads. Basic R$73,87/mês (1.000 eventos), Pro R$173,47 (4.000), Ultimate R$297,97 (12.000); 1 lead = 1 evento. Ao estourar, a automação **pausa** e os dados ficam retidos até upgrade. Operações com alto investimento em mídia devem preferir margem de eventos. Como a monetização do CRM é negociada fora do app, esse custo do cliente precisa estar explícito na proposta — dimensionamento em [pluga.md](docs/pesquisa/pluga.md#custo-da-pluga-para-o-cliente-dimensionamento).
 
 **Latência:** Meta via Pluga = polling ~5 min (planos pagos); Google Lead Form = push imediato para Pluga. Não prometer “lead instantâneo” sem teste operacional. SLA comercial conta desde `chegou_em` no CRM.
 
@@ -145,14 +151,16 @@ Google Lead Form ────┘                │
 
 Contrato HTTP, payload, tela de integração: [pluga.md](docs/pesquisa/pluga.md)
 
-### 5.2 Landing pages (webhook genérico)
+### 5.2 Landing pages (webhook servidor-servidor)
 
 ```
 POST /v1/integrations/webhooks/leads
 Authorization: Bearer <secret_por_workspace>
 ```
 
-Mesma camada de normalização (`LeadSourceConnector`); origem `LANDING_PAGE`.
+Mesma camada de normalização (`LeadSourceConnector`); origem `LANDING_PAGE`. A chamada é exclusivamente servidor-servidor: segredo nunca fica no navegador. LP e Pluga usam as mesmas chaves de dados, mas endpoint/token separados preservam autenticação e origem.
+
+A tela de Integrações entrega **receitas por plataforma** para o dev da LP — snippet PHP para WordPress (que é backend PHP, com hook em Contact Form 7, WPForms e Elementor Forms), webhook nativo para builders modernos, e exemplo server-side/serverless para stack própria.
 
 ### 5.3 Endpoint canônico Pluga
 
@@ -163,15 +171,16 @@ Content-Type: application/json
 ```
 
 - Workspace identificado **pelo token** — nunca aceitar `workspace_id` livre no JSON
-- Responder **202** rapidamente; processar em fila
+- Persistir `IntegrationEvent`/outbox e responder **200** sem depender do Redis
 - Idempotência: `UNIQUE(workspace_id, source, external_lead_id)`
 - Persistir evento bruto antes de processar (`integration_events`)
+- Dispatcher independente publica no BullMQ com `jobId` determinístico
 
 Camada de conectores (desacoplar domínio da Pluga):
 
 ```
-PlugaMetaConnector · PlugaGoogleConnector · LandingPageWebhookConnector
-→ NormalizedLead → domínio (funil, distribuição, relatórios)
+PlugaV1Connector · LandingPageV1Connector
+→ InboundLead → NormalizedLead → domínio (identidade, revisão, funil)
 ```
 
 Evolução futura: `MetaDirectConnector`, `GoogleDirectConnector`, `CsvImportConnector` — [sintese-manual § Caminho de evolução](docs/pesquisa/sintese-manual.md)
@@ -181,8 +190,12 @@ Evolução futura: `MetaDirectConnector`, `GoogleDirectConnector`, `CsvImportCon
 | Cenário | Comportamento |
 |---------|---------------|
 | Retransmissão Pluga (mesmo `external_lead_id`) | Atualiza envio; **não** cria segunda oportunidade |
-| Nova submissão (novo `external_lead_id`), mesma pessoa | Nova **Oportunidade**; reutiliza **Pessoa** |
-| Mesmo CPF em datas diferentes | Permitido — novo negócio comercial |
+| Nova submissão, identificação confiável do mesmo financiamento | Associa à Oportunidade existente e registra reentrada |
+| Mesma Pessoa/tipo, sem prova do mesmo financiamento | Cria a Oportunidade **e** liga à semelhante como **possível duplicado** |
+| Identificadores apontam para Pessoas diferentes | Cria Pessoa nova + Oportunidade, marca **revisão de identidade**; telefone não decide |
+| Gestor confirma financiamento distinto | Desfaz a ligação; as duas Oportunidades seguem independentes |
+| Gestor confirma o mesmo financiamento | Mescla sem excluir; a mais nova aponta para a canônica e vira reentrada |
+| Gestor confirma inválido/spam | Arquiva com motivo, sem apagar o envio |
 
 Modelo: **Pessoa** (única) · **Oportunidade** (negócio) · **EnvioLead** (cada formulário recebido)
 
@@ -227,7 +240,8 @@ Especificação: [decisoes.md § Score](docs/pesquisa/decisoes.md#score-de-cabim
 
 | Módulo | Descrição |
 |--------|-----------|
-| Funis | Por produto; tipos `comercial` e `juridico`; etapas editáveis |
+| Funis | Tipos `comercial` e `juridico`; etapas editáveis com entrada e conclusão; um comercial padrão por workspace; independentes do financiamento |
+| Pendências | Revisão de identidade e possível duplicado como marcador na tela de Leads; só quarentena vive em Integrações |
 | Kanban | Atividade-first; detecção de estagnação; SLA desde `chegou_em` |
 | Atribuição | Comercial e jurídica separadas; gestor atribui |
 | Documentos | Solicitação, proposta rastreável, contrato |
@@ -248,14 +262,16 @@ Workspace (flags, trial, timezone America/Sao_Paulo)
  ├── WorkspaceMembers (role, tags[])     ← tags = filial / time / carteira
  ├── Tags[] (rótulos do workspace)
  ├── IntegrationConnection (provider, token_hash, status)
- │    └── IntegrationEvent (payload_json, status, attempts)
- ├── Funis[] (tipo: comercial|juridico, produto?, etapas[])
+ │    └── IntegrationEvent/outbox (payload_json, status, dispatch_status, attempts)
+ ├── Funis[] (tipo: comercial|juridico, etapas[])
  ├── Integrações (Pluga, LP, WhatsMiau, Clicksign, DocuSign, LLM/OpenRouter)
- ├── Pessoa (CPF, telefone E.164, email lowercase)
+ ├── Pessoa (CPF?, telefones[], emails[], merged_into_person_id?)
  ├── EnvioLead (external_lead_id, source, raw, received_at)
+ │    └── RevisãoIngestão? (conflito_identidade|possível_duplicado, resolução, motivo)
  └── Oportunidade
       ├── area: comercial | juridica
-      ├── produto, pipeline_stage_id, assigned_user_id
+      ├── financing_type?, financial_institution?, installment_amount?
+      ├── stage_id, assigned_user_id, merged_into_opportunity_id?
       ├── tags[]?                       ← opcional (filial/carteira)
       ├── origem_comercial_id?  ← handoff
       ├── score_cabimento?
@@ -264,7 +280,7 @@ Workspace (flags, trial, timezone America/Sao_Paulo)
 ```
 
 Isolamento: `workspace_id` em todas as tabelas de negócio; RLS no PostgreSQL.  
-Organização interna do grupo: **um workspace** + funis por produto + **tags** (filial/time) — ver [ADR-0002](docs/adr/0002-workspace-tags-times.md).
+Organização interna do grupo: **um workspace** + funis operacionais + **tags** (filial/time); tipo de financiamento não organiza o tenant — ver [ADR-0002](docs/adr/0002-workspace-tags-times.md).
 
 ---
 
@@ -320,9 +336,9 @@ Fonte de verdade técnica: [stack-recomendada.md](./stack-recomendada.md) · [AD
 ## 14. Sucesso do piloto (30 dias)
 
 1. Leads Meta/Google/LP chegam no CRM com atribuição de campanha
-2. Template WA + SLA + funil comercial por produto operando
+2. Template WA + SLA + funil comercial configurado operando
 3. Contrato assinado (Clicksign ou DocuSign) reflete no Kanban
-4. Ganho ou “Necessário jurídico” gera card no funil jurídico **sem duplicar**
+4. Handoff confirmado pelo gestor gera/atualiza card jurídico **sem duplicar**
 5. (Opcional) Time usa Análise de cliente / score em leads selecionados
 
 ---
@@ -367,6 +383,7 @@ Escala Pluga: excelente para 1–10 clientes; padronizar onboarding até ~30; 30
 6. Assinatura com eventos refletidos no funil  
 7. Módulos por feature flag; preço fora do app  
 8. CRM = fonte de verdade dos dados normalizados  
+9. Nenhum conflito de identidade ou financiamento é resolvido por atalho destrutivo
 
 ---
 

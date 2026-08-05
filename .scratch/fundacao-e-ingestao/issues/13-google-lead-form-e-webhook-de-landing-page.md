@@ -6,17 +6,21 @@
 
 ## What to build
 
-As outras duas origens de lead entram pelo mesmo caminho já provado: o conector do Google Lead Form e um endpoint genérico para landing pages próprias ou de terceiros.
+As outras origens entram pelo contrato `v1`: a Pluga mapeia Google Lead Form para o HTTP Request do CRM, e landing pages próprias ou de terceiros enviam servidor-servidor com conexão separada.
 
-O problema específico deste ticket é a landing page. O formulário é montado pelo cliente e **pode não mandar identificador nenhum** — e em Postgres `NULL` não colide com `NULL` num índice único, então a constraint de idempotência não deduplicaria nada. Um visitante que recarrega a página após enviar criaria lead duplicado sem que nada reclamasse. A responsabilidade de sintetizar o identificador é do **conector**, não do domínio.
+O segredo nunca vai no JavaScript do formulário. O gestor entrega URL e token ao provedor/gestor de tráfego, que configura o backend ou webhook da LP. Se a plataforma não suportar isso, usa-se uma ponte server-side. Quando a origem não fornece identificador, o conector sintetiza um determinístico.
 
 ## Acceptance criteria
 
-- [ ] Conector do Google Lead Form convertendo a forma do provedor
-- [ ] Endpoint genérico de landing page com **o mesmo contrato** do endpoint da Pluga: 202 sempre, 401, 400, tenant pelo token
+- [ ] Modelo de mapeamento Google Lead Form → contrato `v1` para configurar no HTTP Request da Pluga
+- [ ] **O modelo Google só se escreve após teste em conta real.** A documentação pública da Pluga expõe uma lista truncada e não confiável para esse gatilho; nenhum ID nem campo de contato é presumido ([ADR-0008](../../../docs/adr/0008-fronteira-conector-dominio.md))
+- [ ] Endpoint de landing page com as mesmas chaves canônicas e contrato HTTP: 200, 401, 400, tenant pelo token
+- [ ] Endpoint de LP aceita apenas servidor-servidor; CORS/browser não é um modo suportado e segredo nunca é público
+- [ ] **Receitas prontas por plataforma**, não uma "ponte" genérica: snippet PHP para WordPress (Contact Form 7 / WPForms / Elementor Forms), instrução de webhook nativo para builders modernos, e exemplo server-side/serverless para stack própria
+- [ ] A tela explica em linguagem não técnica por que o token não pode ir para o JavaScript, para que ninguém "resolva" colando no front
 - [ ] Origem registrada como landing page, distinta de Meta e Google
 - [ ] Quando a origem não fornece identificador, o conector **sintetiza um determinístico** a partir do payload normalizado mais janela de tempo
-- [ ] Reenvio pelo navegador da mesma submissão de landing page **não** gera lead duplicado
+- [ ] Reenvio servidor-servidor da mesma submissão de landing page **não** gera lead duplicado
 - [ ] Meta e Google ficam simétricos no registro: mesma normalização, mesmas regras, mesmo funil
 - [ ] Origem do lead visível no card e na tabela
 - [ ] Os três conectores compartilham o domínio: nenhum deles normaliza por conta própria
