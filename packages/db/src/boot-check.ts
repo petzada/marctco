@@ -1,6 +1,10 @@
 import { createPrismaClient } from "./client.js";
 import type { RuntimeDatabaseEndpoint } from "./runtime-database-url.js";
-import { formatRuntimeDatabaseEndpoint, inspectRuntimeDatabaseUrl } from "./runtime-database-url.js";
+import {
+  formatRuntimeDatabaseEndpoint,
+  inspectRuntimeDatabaseUrl,
+  redactRuntimeDatabaseSecrets
+} from "./runtime-database-url.js";
 
 interface DatabaseRoleRow {
   role_name: string;
@@ -14,14 +18,14 @@ interface AssertSafeDatabaseRoleOptions {
   database_url?: string;
 }
 
-function describeErrorCode(cause: unknown): string {
-  if (typeof cause === "object" && cause !== null && "code" in cause) {
-    const code: unknown = (cause as { code?: unknown }).code;
-    if (typeof code === "string") {
-      return ` code=${code}`;
-    }
-  }
-  return "";
+function describeCause(cause: unknown, database_url: string): string {
+  const record = cause as { code?: unknown; errorCode?: unknown; message?: unknown };
+  const code = [record?.code, record?.errorCode].find((value) => typeof value === "string");
+  const reason = typeof record?.message === "string" ? record.message : String(cause);
+  return `${code === undefined ? "" : ` code=${code}`} :: ${redactRuntimeDatabaseSecrets(
+    reason.replace(/\s+/g, " ").trim(),
+    database_url
+  )}`;
 }
 
 export async function assertSafeDatabaseRole(
@@ -57,8 +61,8 @@ export async function assertSafeDatabaseRole(
       `;
     } catch (cause: unknown) {
       throw new Error(
-        `${options.process_name}: database connection failed${describeErrorCode(cause)} ` +
-          `(${formatRuntimeDatabaseEndpoint(endpoint)})`
+        `${options.process_name}: database connection failed ` +
+          `(${formatRuntimeDatabaseEndpoint(endpoint)})${describeCause(cause, database_url)}`
       );
     }
     const role = rows[0];

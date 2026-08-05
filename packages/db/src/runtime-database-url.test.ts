@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inspectRuntimeDatabaseUrl } from "./runtime-database-url.js";
+import { inspectRuntimeDatabaseUrl, redactRuntimeDatabaseSecrets } from "./runtime-database-url.js";
 
 const project_ref = "abcdefghijklmnopqrst";
 const encoded_password = "not-a-secret%40value";
@@ -57,5 +57,25 @@ describe("runtime database URL", () => {
     `postgresql://marctco_worker:${encoded_password}@db.${project_ref}.supabase.co:5432/postgres`
   ])("accepts session or direct mode without the PgBouncer flag", (url) => {
     expect(() => inspectRuntimeDatabaseUrl(url, "worker")).not.toThrow();
+  });
+
+  it("redacts both the encoded and decoded password from a driver message", () => {
+    const url = `postgresql://marctco_worker:${encoded_password}@db.${project_ref}.supabase.co:5432/postgres`;
+    const message = `connection to ${encoded_password} refused; retried with not-a-secret@value`;
+
+    const redacted = redactRuntimeDatabaseSecrets(message, url);
+
+    expect(redacted).not.toContain(encoded_password);
+    expect(redacted).not.toContain("not-a-secret@value");
+    expect(redacted).toBe("connection to <redacted> refused; retried with <redacted>");
+  });
+
+  it("returns the message untouched when the URL carries no password", () => {
+    const message = "connection refused";
+
+    expect(
+      redactRuntimeDatabaseSecrets(message, `postgresql://marctco_worker@localhost:5432/marctco`)
+    ).toBe(message);
+    expect(redactRuntimeDatabaseSecrets(message, "not-a-url")).toBe(message);
   });
 });

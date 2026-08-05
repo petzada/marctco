@@ -42,6 +42,30 @@ export function formatRuntimeDatabaseEndpoint(endpoint: RuntimeDatabaseEndpoint)
   ].join(" ");
 }
 
+export function redactRuntimeDatabaseSecrets(text: string, database_url: string): string {
+  let password: string;
+  try {
+    password = new URL(database_url).password;
+  } catch {
+    return text;
+  }
+  if (password === "") {
+    return text;
+  }
+
+  const variants = new Set([password]);
+  try {
+    variants.add(decodeURIComponent(password));
+  } catch {
+    // A malformed percent sequence only means there is no decoded variant to hide.
+  }
+
+  return [...variants].reduce(
+    (redacted, secret) => redacted.split(secret).join("<redacted>"),
+    text
+  );
+}
+
 export function inspectRuntimeDatabaseUrl(
   database_url: string,
   process_name: RuntimeProcessName
