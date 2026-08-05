@@ -15,7 +15,8 @@ Onde a escolha mora é o [ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na
 ## Acceptance criteria
 
 - [ ] Login e logout por Supabase Auth
-- [ ] `WorkspaceMember` registra papel: `OWNER`, `ADMIN`, `MANAGER`, `ATTENDANT`, `VIEWER`
+- [ ] `WorkspaceMember` registra papel: **`ATTENDANT`, `SUPERVISOR`, `MANAGER`, `OWNER`** — quatro, e nenhum a mais. `ADMIN` e `VIEWER` saem: papel no enum sem escopo declarado é papel que alguém atribui para depois descobrir que o comportamento é indefinido ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
+- [ ] Rótulos de UI em PT-BR: Atendente · Supervisor · Gestão · Direção
 - [ ] Toda rota autenticada vive sob `/workspace/:slug`; `slug` é o UUIDv4 do `Workspace`
 - [ ] O GUC é resolvido no servidor **a cada requisição**, validando o `slug` da URL contra a associação do usuário
 - [ ] `slug` que não corresponde a uma associação do usuário devolve **404** — nunca 403, que confirmaria a existência do workspace alheio

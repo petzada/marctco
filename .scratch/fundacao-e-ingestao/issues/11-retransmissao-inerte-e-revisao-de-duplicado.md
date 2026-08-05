@@ -20,7 +20,7 @@ Isto **não** é constraint de banco, deliberadamente: uma pessoa pode ter dois 
 
 - [ ] A duplicata é detectada por **`INSERT ... ON CONFLICT DO NOTHING RETURNING id`**, não capturando a violação: em Postgres um erro aborta a transação inteira, e todos os critérios abaixo são comandos que vêm **depois** da detecção, na mesma transação. Capturar a exceção faria o caminho normal deste ticket quebrar com um erro que nem menciona duplicata ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
 - [ ] `RETURNING` vazio é o sinal de retransmissão
-- [ ] Retransmissão atualiza `raw` e a contagem de tentativas no registro de submissão
+- [ ] Retransmissão aponta `last_integration_event_id` para o evento novo e incrementa a contagem de tentativas — **não** reescreve payload. Além de eliminar a segunda cópia, evita reescrever um blob JSON a cada reenvio ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))
 - [ ] Retransmissão registra "reenvio recebido" na linha do tempo da Oportunidade
 - [ ] Retransmissão **não** altera etapa, responsável, situação nem `arrived_at`
 - [ ] Card que já avançou permanece na etapa em que estava

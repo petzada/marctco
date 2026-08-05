@@ -34,5 +34,9 @@ O mapeamento De→Para acontece **na Pluga**, não aqui. A tela fornece o contra
 - [ ] O tempo em quarentena continua medível pela diferença entre liberação e recebimento, e é ele que alimenta o alerta próprio da quarentena
 - [ ] **Só a quarentena vive aqui.** Revisão de identidade e possível duplicado são marcadores na tela de Leads, e a resolução deles acontece lá (ticket 12) — aqui não há card onde morar
 - [ ] Toda a tela lê a situação do evento de integração como fonte única — sem estado paralelo
+- [ ] A tela explica, em linguagem não técnica, que o **conteúdo** de eventos com mais de 90 dias não fica guardado — só o registro de que chegaram ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))
+- [ ] "Reprocessar" **recusa com explicação** evento cujo payload expirou, em vez de falhar obscuro
+- [ ] Payload expirado e payload que nunca existiu são estados **distinguíveis** na tela
+- [ ] Gerar e rotacionar segredo, ativar e desativar integração são exclusivos da **Direção** (`OWNER`); histórico, reprocessar e quarentena são da **Gestão** para cima ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
 - [ ] Usa os tokens do ticket 02
 - [ ] **Não** existe assistente de mapeamento De→Para

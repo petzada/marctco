@@ -19,6 +19,9 @@ Ver [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md). Atenção
 - [ ] Policies keiam em `app.workspace_id`, com a leitura do GUC envolta em subselect — sem isso a função é avaliada por linha
 - [ ] Índice em `workspace_id` em toda tabela de negócio
 - [ ] Helper de transação em `packages/db` faz `SET LOCAL` (nunca `SET`) e é o único caminho de acesso a dado
+- [ ] **O helper recebe o papel do usuário junto com o `workspace_id`.** É o ponto único onde o escopo por perfil mora — nenhuma consulta consegue ser escrita sem que o autor decida ali o que aquele papel enxerga ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
+- [ ] Uma regra implementada nesta fatia: **`ATTENDANT` enxerga apenas oportunidade atribuída a si**. O restante da matriz é especificação, não código
+- [ ] **Nenhum estado mutável em escopo de módulo** em `apps/web` nem em `apps/worker`: workspace resolvido, papel e flag jamais em singleton ou cache sem chave de workspace. A RLS não pega esse vazamento — a leitura foi legítima, o que vaza é o resultado dentro do processo ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 11)
 - [ ] Nenhuma transação envolve chamada de rede externa
 - [ ] **Seam 3**: varredura de `pg_tables` e `pg_policies` reprova qualquer tabela de negócio sem RLS habilitada, sem `FORCE` ou sem policy
 - [ ] Teste: leitura cross-workspace devolve zero linhas

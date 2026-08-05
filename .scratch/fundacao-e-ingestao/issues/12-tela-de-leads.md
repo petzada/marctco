@@ -15,6 +15,16 @@ Na UI o card se chama **Lead**; no domínio é sempre Oportunidade. Não existe 
 ## Acceptance criteria
 
 - [ ] Tabela paginada mostrando exclusivamente leads do workspace do usuário, na rota `/workspace/:slug/leads` ([ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na-url.md))
+- [ ] **Leitura em Server Component**, chamando o helper de transação; **nenhum endpoint** para a listagem ([ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md))
+- [ ] Filtros, cursor e marcador ativo vivem na **URL** via `nuqs` — de quebra, toda vista vira link compartilhável com o time
+- [ ] **Paginação keyset por `(arrived_at, id)`**, nunca `OFFSET`. Com lead entrando no topo a cada poucos minutos, `OFFSET` faz a lista deslocar entre uma página e outra: o gestor revê um lead e **nunca vê** o que caiu na fronteira. É correção, não desempenho
+- [ ] Sem "página N de M" e sem `COUNT(*)` de total geral — o keyset não precisa deles
+- [ ] Índice parcial da lista: `(workspace_id, arrived_at DESC, id DESC) WHERE merged_into_opportunity_id IS NULL`
+- [ ] Um índice parcial **por marcador**, servindo filtro e contador: contar sobre subconjunto é barato, contar a tabela toda não é
+- [ ] Índice em `IntakeReview (workspace_id, opportunity_id)` para as não resolvidas — os marcadores não moram todos no mesmo lugar e o ícone único precisa dos três
+- [ ] Página e contadores buscados em paralelo, com a tabela transmitindo antes dos agregados
+- [ ] Indicador de **"N novos leads — atualizar"** por consulta periódica de contagem; a lista **não** se remexe sozinha sob o cursor. Realtime do Supabase não é opção aqui ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 8)
+- [ ] `ATTENDANT` vê nesta tela apenas oportunidade atribuída a si ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
 - [ ] Colunas: nome, contatos, tipo de financiamento, instituição, origem e data de chegada
 - [ ] Numerais tabulares em qualquer coluna de data ou valor
 - [ ] Duas oportunidades abertas da mesma Pessoa usam o conjunto de dados disponível do financiamento para se distinguir; instituição isolada não é prova

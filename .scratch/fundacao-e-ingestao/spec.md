@@ -36,7 +36,9 @@ O isolamento entre workspaces é garantido pelo banco, não por disciplina de c�
 3. Como membro de mais de um workspace (acesso de suporte da marctco), quero um seletor de workspace, para alternar entre clientes — e quero que cada aba mantenha o seu contexto, para não agir num cliente achando que estou noutro.
 4. Como dono da assessoria, quero que meu workspace represente o grupo inteiro — matriz e filiais — para não multiplicar contas, integrações e configuração.
 5. Como dono da assessoria, quero que meus dados sejam invisíveis a qualquer outra assessoria cliente da marctco, mesmo que haja um erro de programação numa consulta.
-6. Como membro, quero que meu papel (OWNER, ADMIN, MANAGER, ATTENDANT, VIEWER) fique registrado na minha associação ao workspace, para que as permissões possam se apoiar nele.
+6. Como membro, quero que meu perfil — Atendente, Supervisor, Gestão ou Direção — fique registrado na minha associação ao workspace, e que o escopo dele seja aplicado no servidor.
+6b. Como atendente entre dezenas, quero enxergar apenas os leads atribuídos a mim, para não navegar na carteira inteira da empresa nem editar o cliente de um colega.
+6c. Como dono da assessoria, quero que só a Direção gere e rotacione o segredo da integração, enquanto a Gestão continua vendo o histórico e reprocessando, porque credencial e operação não são a mesma coisa.
 7. Como equipe técnica da marctco, quero criar **o usuário** no painel do Supabase e marcá-lo como apto a provisionar, porque não há cadastro autônomo nem cobrança no aplicativo.
 7b. Como dono da assessoria, quero que meu primeiro acesso crie meu workspace já utilizável — com meu vínculo de dono e um funil comercial padrão —, para não receber uma plataforma vazia que não aceita lead.
 7c. Como equipe técnica da marctco, quero que um usuário que apenas perdeu a associação **não** provisione workspace novo, para que ex-colaborador demitido não vire dono de um workspace fantasma.
@@ -103,6 +105,8 @@ O isolamento entre workspaces é garantido pelo banco, não por disciplina de c�
 ### Tela de Leads
 
 45. Como gestor, quero uma tabela paginada com todos os leads do workspace, porque o volume é alto e um quadro Kanban global não serve para triagem.
+45b. Como gestor, quero que avançar de página **não** me mostre de novo um lead que já vi nem esconda um que chegou no meio — porque com lead entrando o dia inteiro, uma lista que desloca faz lead sumir da triagem em silêncio.
+45c. Como gestor, quero ser avisado de que chegaram leads novos e decidir **quando** atualizar, em vez de a lista se remexer sob o meu cursor enquanto eu trabalho.
 46. Como gestor, quero ver na tabela o nome, contatos, tipo de financiamento, instituição, origem e data de chegada, para decidir a quem atribuir.
 47. Como gestor, quero distinguir na tabela dois leads da mesma pessoa, porque uma pessoa pode ter dois financiamentos legítimos em revisional.
 48. Como gestor, quero ver a origem do lead (Meta, Google ou landing page) no próprio registro, para saber que campanha está produzindo.
@@ -151,7 +155,7 @@ Entidades da fatia:
 | Model | Notas |
 |---|---|
 | `Workspace` | Tenant do grupo; timezone America/Sao_Paulo; `slug` UUIDv4 único, usado no caminho da URL ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)) |
-| `WorkspaceMember` | `role: OWNER \| ADMIN \| MANAGER \| ATTENDANT \| VIEWER` |
+| `WorkspaceMember` | `role: ATTENDANT \| SUPERVISOR \| MANAGER \| OWNER` — quatro, e nenhum a mais ([ADR-0015](../../docs/adr/0015-perfis-de-acesso-e-escopo.md)) |
 | `WorkspaceSettings` | Configuração operacional do gestor |
 | `WorkspaceFlag` | Liberação por workspace; ausência significa desligado |
 | `FinancingType` | Enum opcional da Oportunidade: `VEHICLE \| REAL_ESTATE \| PERSONAL_LOAN \| OTHER` |
@@ -161,7 +165,7 @@ Entidades da fatia:
 | `IntegrationEvent` | payload cru/outbox, estado de despacho e processamento |
 | `Person` | `cpf` opcional; contatos em `PersonPhone`/`PersonEmail`; `merged_into_person_id` |
 | `PersonPhone` / `PersonEmail` | Múltiplos contatos normalizados por Pessoa, sem sobrescrita |
-| `LeadSubmission` | `source`, `external_lead_id`, `raw`, `received_at` |
+| `LeadSubmission` | `source`, `external_lead_id`, `received_at`, `last_integration_event_id` — **sem `raw`**: o payload é guardado uma vez, no evento ([ADR-0014](../../docs/adr/0014-copia-unica-e-retencao-do-payload.md)) |
 | `IntakeReview` | `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE`, resolução e motivo auditáveis; marcador, nunca bloqueio |
 | `Opportunity` | `status`, `area`, `stage_id`, `arrived_at`, `assigned_user_id`, `missing_phone`, `merged_into_opportunity_id`, financiamento opcional |
 
@@ -224,14 +228,14 @@ O adapter conhece a **forma canônica**; o domínio conhece o **significado**. A
 
 Dois mecanismos, em duas tabelas, respondendo perguntas diferentes ([ADR-0007](../../docs/adr/0007-ingestao-idempotencia.md)):
 
-1. **`UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission`** — "já recebi esta transmissão?". Sob concorrência só a constraint arbitra, nunca um `SELECT` anterior. O mecanismo é **`INSERT ... ON CONFLICT DO NOTHING RETURNING id`**, e não capturar a violação: em Postgres um erro aborta a transação inteira, e o worker precisa continuar depois — atualizar `raw`, incrementar tentativas, registrar o reenvio. `RETURNING` vazio **é** o sinal de retransmissão. A chave começa por `workspace_id`, então o conflito é sempre intra-tenant.
+1. **`UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission`** — "já recebi esta transmissão?". Sob concorrência só a constraint arbitra, nunca um `SELECT` anterior. O mecanismo é **`INSERT ... ON CONFLICT DO NOTHING RETURNING id`**, e não capturar a violação: em Postgres um erro aborta a transação inteira, e o worker precisa continuar depois — apontar para o evento novo, incrementar tentativas, registrar o reenvio. `RETURNING` vazio **é** o sinal de retransmissão. A chave começa por `workspace_id`, então o conflito é sempre intra-tenant.
 2. **Duas Oportunidades em aberto da mesma Pessoa sempre se ligam** por um `POSSIBLE_DUPLICATE`, com ou sem dado de financiamento. Financiamento é discriminador na tela, nunca gatilho — este mesmo desenho declara que esses campos não são prova, e o que não basta para o humano concluir não basta para a máquina decidir se o humano será avisado. O gestor resolve depois como `NEW_FINANCING`, `SAME_FINANCING` (mescla por `merged_into_opportunity_id`) ou `INVALID_OR_SPAM`, sem apagar dados. Mesclar **Pessoas** reavalia a duplicidade entre as Oportunidades que a canônica passa a ter.
 
 Identidade da Person: CPF válido é forte mas opcional; telefone só associa sem contradição; e-mail isolado é fraco. Chaves que apontam para Pessoas diferentes criam **Pessoa nova** e registram `IDENTITY_CONFLICT` com as candidatas. `Person` preserva múltiplos telefones/e-mails. Sem contato, não cria Person.
 
 **Pendência é marcador, não portão.** O único envio que não vira Oportunidade é o sem telefone e sem e-mail. Reter lead antes da Oportunidade foi considerado e rejeitado: a prova de "mesmo financiamento" não existe em formulário de Ads, e lead de mídia paga apodrece em minutos ([ADR-0007](../../docs/adr/0007-ingestao-idempotencia.md)).
 
-Retransmissão atualiza `raw` e tentativas, registra na linha do tempo, e **não toca** etapa, responsável, status nem `arrived_at`.
+Retransmissão aponta `last_integration_event_id` para o evento novo, incrementa tentativas, registra na linha do tempo, e **não toca** etapa, responsável, status nem `arrived_at`.
 
 ### Quarentena
 
@@ -273,6 +277,8 @@ Prisma Client é gerado em `packages/db`; o `postinstall` precisa garantir `pris
 
 Toda rota autenticada vive sob `/workspace/:slug` ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)); `/onboarding` fica fora do prefixo, porque ali ainda não há workspace.
 
+**Fluxo de dados** ([ADR-0013](../../docs/adr/0013-fluxo-de-dados-no-app.md)): leitura em Server Component chamando o helper de transação; filtro e cursor na URL via `nuqs`; escrita em route handler sob `/workspace/:slug/...`, não em Server Action — o tenant precisa continuar estrutural também no caminho de escrita. Paginação **keyset**, nunca `OFFSET`. `@tanstack/react-query` entra na Fase 2, no Kanban e na remoção otimista da linha atribuída.
+
 ---
 
 ## Testing Decisions
@@ -308,6 +314,7 @@ Mais três varreduras, todas da mesma natureza — invariantes que nenhuma rota 
 - **Atributos de papel:** o papel do app não é superusuário, não tem `BYPASSRLS` e não é dono de tabela de negócio.
 - **Lista fechada de `SECURITY DEFINER`:** enumerar as funções do banco e **reprovar qualquer uma fora das três** nomeadas no [ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9. Sem esta varredura a lista é comentário, e a quarta função entra sem ninguém notar.
 - **Nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela.
+- **Toda tabela de negócio tem índice que sirva à sua listagem**, não só o `workspace_id` da policy.
 
 Este seam é deliberadamente independente da fatia: seu propósito é reprovar a tabela que alguém criar daqui a meses e esquecer a policy, ou a que a Fase 5 acrescentar sem tratar mesclagem. Um teste de feature nunca pega isso, porque nenhuma rota toca a combinação.
 

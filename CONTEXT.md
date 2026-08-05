@@ -18,8 +18,12 @@ _Avoid_: Conta, tenant solto, organização Clerk, workspace por filial
 Nascimento de um Workspace, em ato único e indivisível: o tenant, o vínculo do primeiro membro como dono e o funil comercial padrão com suas etapas passam a existir juntos ou não existem. Acontece no primeiro acesso de quem tem direito a provisionar, nunca por edição manual de banco.
 _Avoid_: Criar workspace sem funil, semear funil por script de desenvolvimento em cliente real, workspace válido pela metade, provisionar quem apenas perdeu a associação
 
+**Perfil de acesso**:
+O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. São quatro, e nenhum a mais — **Atendente** responde pelos leads atribuídos a ele; **Supervisor**, pelo time ou filial; **Gestão**, pela operação inteira; **Direção**, pela operação e pela conta. O escopo é aplicado no servidor, num lugar só.
+_Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, confundir com tag de time
+
 **Tag**:
-Rótulo configurável no workspace para identificar filial, time ou carteira; aplica-se a membros e, se útil, a oportunidades.
+Rótulo configurável no workspace para identificar filial, time ou carteira; aplica-se a membros e, se útil, a oportunidades. É o que define o time de um Supervisor.
 _Avoid_: Sub-workspace, departamento como tenant, “empresa” no sentido de workspace
 
 **Tipo de financiamento**:
@@ -79,8 +83,12 @@ Adaptador que conhece a forma do payload de uma origem de lead e a converte para
 _Avoid_: Conector que normaliza ou decide regra de negócio, integração como sinônimo de conector
 
 **Evento de integração**:
-Payload bruto recebido de uma origem, persistido transacionalmente como outbox antes da resposta HTTP e reprocessável. Um dispatcher independente o entrega ao BullMQ quando o Redis estiver disponível.
-_Avoid_: Confundir com EnvioLead (que já é lead interpretado), publicar no Redis antes do commit, descartar o bruto após processar
+Payload bruto recebido de uma origem, persistido transacionalmente como outbox antes da resposta HTTP e reprocessável. Um dispatcher independente o entrega ao BullMQ quando o Redis estiver disponível. É a **única** cópia do payload; o EnvioLead aponta para a transmissão mais recente em vez de repetir o conteúdo.
+_Avoid_: Confundir com EnvioLead (que já é lead interpretado), publicar no Redis antes do commit, descartar o bruto antes de processar, guardar o mesmo payload em dois lugares
+
+**Expiração do payload**:
+Passados 90 dias, o conteúdo bruto do Evento de integração é apagado e a linha permanece: some o dado pessoal, fica o fato de que aquele lead chegou, de onde, quando e no que deu. Evento em quarentena não expira enquanto estiver em quarentena, porque é justamente o payload que o gestor precisa ler para completar.
+_Avoid_: Apagar a linha do evento, expirar payload de quarentena, guardar payload sem prazo, confundir bruto expirado com bruto que nunca existiu
 
 **Handoff**:
 Passagem idempotente da oportunidade comercial para uma oportunidade jurídica (no máximo uma ativa por origem), sempre acionada pelo gestor. O atendente conclui o atendimento; o gestor é notificado e decide o envio.

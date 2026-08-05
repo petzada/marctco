@@ -24,3 +24,11 @@ O varredor **não é peça nova**: é o mesmo mecanismo do botão "reprocessar" 
 - [ ] O varredor não reprocessa evento já processado
 - [ ] Evento reprocessado depois de o Redis voltar **não** cria segunda Oportunidade — o `external_lead_id` derivado do `IntegrationEvent.id` é estável sob qualquer reprocessamento (ticket 13)
 - [ ] A descoberta de pendências não depende de um repeatable job armazenado no próprio Redis
+
+**Expiração do payload**
+
+- [ ] Rotina periódica no **worker** (não `pg_cron`, que o plano do Supabase não tem) apaga o conteúdo de `IntegrationEvent.raw` com mais de **90 dias**
+- [ ] A **linha permanece**: origem, instante, estado de despacho e de processamento continuam respondendo "quantos leads entraram, de onde, quantos falharam"
+- [ ] **Evento em quarentena não expira** enquanto estiver em quarentena — é o payload que o gestor precisa ler para completar e liberar
+- [ ] A rotina roda **sob RLS**, em lotes, sem prender transação longa
+- [ ] Sem esta rotina, um cliente de 1.000 leads/dia acumula ~1 GB/ano de JSON sem consumidor ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))

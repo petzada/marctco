@@ -88,7 +88,7 @@ Supabase Postgres (RLS)     Cloudflare R2 (arquivos)
 | **Tipo de financiamento** | Veículo, imóvel, empréstimo pessoal ou outro; atributo opcional da Oportunidade, sem bloquear a ingestão. |
 | **Área** | Comercial vs jurídica = funis + `area` na oportunidade + roles — **não** workspaces separados. |
 | **Tag** | Rótulo livre no workspace para **filial / time / carteira**; aplica-se a membros e, se útil, a oportunidades. Ex.: `Filial Campinas`, `Comercial Veículos`, `Jurídico EP`. |
-| **Roles** | OWNER · ADMIN · MANAGER · ATTENDANT · VIEWER (no `workspace_members`). |
+| **Roles** | ~~OWNER · ADMIN · MANAGER · ATTENDANT · VIEWER~~ — **superado pelo [ADR-0015](./docs/adr/0015-perfis-de-acesso-e-escopo.md)**: quatro perfis, `ATTENDANT · SUPERVISOR · MANAGER · OWNER`. `ADMIN` sobrepunha `MANAGER` sem fronteira e `VIEWER` não tinha consumidor |
 
 **Lógica:** filiais e “times” **não** viram workspaces no MVP (explodiria Pluga, flags e onboarding). Tags + atribuição (`assigned_user_id`) + filtros no Kanban bastam para o dono organizar gestores/atendentes por filial/time. Multi-workspace no SaaS = **várias consultorias clientes**, não filiais do mesmo grupo.
 
@@ -121,7 +121,7 @@ Detalhe: [ADR-0002](./docs/adr/0002-workspace-tags-times.md) · glossário: [CON
 | shadcn/ui + Tailwind | UI — **obrigatório** seguir [design-taste-frontend](./.agents/skills/design-taste-frontend/SKILL.md) na implementação |
 | `@dnd-kit/core` + `sortable` + `utilities` | Kanban |
 | `react-hook-form` + `@hookform/resolvers` + Zod | Forms |
-| `@tanstack/react-query` | Fetch/cache |
+| `@tanstack/react-query` | Fetch/cache — **[ADR-0013](./docs/adr/0013-fluxo-de-dados-no-app.md) supersede seu uso como padrão de leitura**: quem lê é Server Component. Entra na Fase 2, no Kanban e na atualização otimista |
 | `nuqs` | Estado de URL (filtros/etapa) — usar se agregar valor sem complexidade |
 | `recharts` | Dashboard comercial |
 | `lucide-react` | Ícones |

@@ -16,7 +16,7 @@ A idempotência tem um dono só: a constraint mais o worker. Nunca um pré-check
 
 ## Acceptance criteria
 
-- [ ] `LeadSubmission` com `source`, `external_lead_id`, `raw` e `received_at`
+- [ ] `LeadSubmission` com `source`, `external_lead_id`, `received_at` e **`last_integration_event_id`** — **sem `raw`**. O payload é guardado uma vez, no `IntegrationEvent`; a submissão aponta para a transmissão mais recente em vez de repetir o conteúdo ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))
 - [ ] `external_lead_id` é `NOT NULL` — em Postgres `NULL` não colide com `NULL`, e sem valor a constraint não deduplicaria nada
 - [ ] `UNIQUE(workspace_id, source, external_lead_id)`
 - [ ] A constraint arbitra, nunca um `SELECT` anterior — mas o mecanismo é **`INSERT ... ON CONFLICT DO NOTHING RETURNING id`**, não capturar a violação: em Postgres o erro aborta a transação inteira e o worker precisa seguir depois ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)). `RETURNING` vazio é o sinal de duplicata

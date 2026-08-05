@@ -137,7 +137,7 @@ Formulários de Ads raramente trazem CPF; por isso a identidade não depende del
 
 ## Retransmissão é inerte ao funil
 
-Retransmissão atualiza `raw` e contagem de tentativas no `LeadSubmission`, registra "reenvio recebido" na timeline da Opportunity, e **para aí**. Não toca etapa, responsável, status nem `arrived_at`.
+Retransmissão aponta `last_integration_event_id` para o evento novo, incrementa a contagem de tentativas no `LeadSubmission`, registra "reenvio recebido" na timeline da Opportunity, e **para aí**. Não toca etapa, responsável, status nem `arrived_at`. O payload não é reescrito: ele já está guardado no evento novo, uma vez só ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)).
 
 A alternativa é catastrófica: um soluço da Pluga ressuscitaria negócios perdidos, zeraria relógios de SLA e devolveria à fila leads já descartados. Um card perdido que volta sozinho destrói a confiança da operação no funil mais rápido que um lead perdido.
 

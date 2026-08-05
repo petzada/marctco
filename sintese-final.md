@@ -247,7 +247,7 @@ Especificação: [decisoes.md § Score](docs/pesquisa/decisoes.md#score-de-cabim
 | Documentos | Solicitação, proposta rastreável, contrato |
 | Perdas | Motivo de perda obrigatório |
 | Dashboard | Canal, formulário, tempo até 1º contato, taxa assinatura, conversão |
-| Permissões | OWNER · ADMIN · MANAGER · ATTENDANT · VIEWER; tags de filial/time nos membros |
+| Permissões | ~~OWNER · ADMIN · MANAGER · ATTENDANT · VIEWER~~ — **superado pelo [ADR-0015](docs/adr/0015-perfis-de-acesso-e-escopo.md)**: Atendente · Supervisor · Gestão · Direção, com escopo por tela; tags de filial/time nos membros definem o time do Supervisor |
 | Auditoria | Log de ações sensíveis (mínimo no MVP; LGPD completa pós-validação) |
 | Feature flags | Catálogo no código + `workspace_flags`; liberação comercial/técnico |
 

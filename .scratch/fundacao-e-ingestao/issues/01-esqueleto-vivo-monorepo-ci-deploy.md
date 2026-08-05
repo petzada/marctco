@@ -42,6 +42,20 @@ Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **
 - [ ] **App e worker abortam o boot** se o papel conectado for superusuário, tiver `BYPASSRLS` ou for dono de tabela de negócio ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 10). É a única defesa contra a connection string errada no Railway, porque nenhum CI sabe qual string está lá
 - [ ] A mensagem de recusa diz **qual** condição falhou, para o diagnóstico não virar adivinhação
 
+**PII fora da telemetria**
+
+- [ ] Serializador central com **lista de permissão**, não de bloqueio: passam `workspace_id`, `integration_event_id`, `source`, `external_lead_id`, mensagem e stack. Bloqueio falharia no primeiro campo desconhecido, e o contrato `v1` preserva de propósito "propriedades desconhecidas" ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 12)
+- [ ] `beforeSend` do Sentry e serializers/`redact` do `pino` usam esse serializador — **uma configuração, dois consumidores**
+- [ ] Configurado **antes da primeira rota existir**: depois, cada lugar novo é uma chance de esquecer
+- [ ] Teste que **falha** se payload cru, `Person` ou submissão inteira aparecerem num evento de erro
+
+**Rate limit**
+
+- [ ] Contador **em memória do processo**, sem Redis — limiter com Redis faria a queda da fila recusar lead, derrotando a outbox por um controle acessório ([ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na-url.md))
+- [ ] **Falha aberta**: erro no próprio limiter deixa a requisição passar
+- [ ] Aplicado só em falha de autenticação (por IP), endpoint de LP (por token) e tentativa de workspace alheio. Tráfego autenticado da Pluga **não** é limitado, e **nenhum caminho novo devolve 429**
+- [ ] Ponto de chamada é **uma função só**, para trocar a implementação sem caçar chamadas
+
 **Guards**
 
 - [ ] `prisma migrate dev`, `prisma db push` e `--force-reset` proibidos contra qualquer banco remoto; produção aceita apenas `prisma migrate deploy`

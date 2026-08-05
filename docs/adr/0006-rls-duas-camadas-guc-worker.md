@@ -43,7 +43,11 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
    Ignorar e validar não são a mesma regra. Escrever "o browser não escolhe seu workspace" sem essa distinção proíbe o próprio seletor. Onde a escolha mora é decisão do [ADR-0012](./0012-contexto-de-tenant-na-url.md).
 
-8. **O browser nunca acessa o Postgres direto.** TanStack Query chama rotas do Next; as rotas usam Prisma. Supabase Auth é **autenticação e nada mais**, não camada de dados. É o que permite um mecanismo único de isolamento valendo igual no app e no worker.
+8. **O browser nunca acessa o Postgres direto.** Supabase Auth é **autenticação e nada mais**, não camada de dados. É o que permite um mecanismo único de isolamento valendo igual no app e no worker.
+
+   *Emendado pelo [ADR-0013](./0013-fluxo-de-dados-no-app.md).* A redação anterior — "TanStack Query chama rotas do Next; as rotas usam Prisma" — respondia bem à pergunta desta regra e mal a outra: ela não menciona Server Component, e lida ao pé da letra obrigava endpoint + hook por tela. O que continua valendo aqui é só o princípio: **o acesso a dado é sempre servidor**. Qual peça do servidor faz isso é do ADR-0013.
+
+   Consequência direta: **Supabase Realtime é incompatível com este desenho.** As policies keiam no GUC, não em `auth.uid()`; uma conexão Realtime do navegador nunca passa pelo `SET LOCAL`, então `current_setting('app.workspace_id', true)` volta `NULL` e a policy nega tudo. Fazer funcionar exigiria um segundo conjunto de policies em `auth.jwt()` — duas fontes de verdade para isolamento.
 
 9. **`SECURITY DEFINER` só em schema privado, e a lista é fechada.** Existem consultas que precisam acontecer **antes** de haver tenant, e por isso não podem passar por policy keiada no GUC. Elas não justificam bypass para o app inteiro: cada uma vira uma função `SECURITY DEFINER` em schema `private`, com superfície mínima, `EXECUTE` revogado de todo papel que não seja o do app, e `search_path` fixado na própria função.
 
@@ -62,6 +66,20 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
     Por isso, no boot, cada processo consulta o papel com que se conectou e **aborta a inicialização** se for superusuário, se tiver `BYPASSRLS`, ou se for dono de alguma tabela de negócio. É a mesma lógica com que o [ADR-0010](./0010-migrations-e-ci-cd.md) mantém a string de produção fora do `.env`: transformar o erro provável em **impossível de servir**, não apenas em proibido.
 
     O CI não consegue fazer essa verificação — ele não sabe qual string está no Railway. Só o processo em produção sabe, e ele é o único que pode se recusar a atender.
+
+11. **Nada de estado mutável em escopo de módulo, nem no worker nem no app.** O `ticket 16` já escreveu esta regra para o worker — *"nenhum valor de flag resolvido em escopo de módulo, singleton ou cache sem chave de workspace: o worker processa vários tenants no mesmo processo"*. Com renderização no servidor, `apps/web` adquire **exatamente o mesmo formato**: um processo Node servindo requisições de tenants diferentes.
+
+    Uma variável de módulo guardando workspace resolvido, papel do usuário ou resultado de flag serve os dados do cliente A para o cliente B. **A RLS não pega**: a leitura foi legítima e dentro do tenant certo; o que vazou foi o resultado, depois do banco, dentro do processo. É o guia do Vercel na regra `server-no-shared-module-state`, e aqui não é performance — é isolamento.
+
+    Cache por requisição (`React.cache()`) é seguro porque o escopo morre com a requisição. Cache entre requisições exige `workspace_id` na chave, sem exceção — e continua **proibido** para o lookup de token.
+
+12. **PII não sai do tenant por telemetria.** Sentry é a observabilidade travada e `pino` o log estruturado; o comportamento **padrão** de ambos é capturar contexto de erro e serializar o objeto inteiro. O sistema guarda CPF, telefone e situação financeira de pessoa real, e o worker erra com o payload cru no escopo — o primeiro erro de normalização mandaria o lead completo para um serviço terceiro, com retenção própria e acesso por login.
+
+    Isso anularia um cuidado que o [ADR-0007](./0007-ingestao-idempotencia.md) já teve deliberadamente: manter PII **fora do job** do BullMQ. Não adianta blindar a fila e vazar pelo relatório de erro três linhas depois.
+
+    A regra é **lista de permissão, nunca de bloqueio**. Bloqueio é o reflexo — `cpf`, `telefone`, `email` — e falha na primeira ocasião, porque o contrato `v1` preserva *"respostas adicionais e propriedades desconhecidas"*: campos cujo nome ninguém conhece de antemão. Um formulário de anúncio perguntando "qual seu CPF?" cria uma chave que nenhum bloqueio previu. Com permissão, campo novo nasce fora.
+
+    Passa: `workspace_id`, `integration_event_id`, `source`, `external_lead_id`, mensagem e stack. **Nunca** o payload cru, nunca `Person`, nunca a submissão inteira. Quem precisa do conteúdo tem o lugar certo — a tela de Integrações, sob RLS, dentro do tenant.
 
 ## Verificar antes da Fase 0
 

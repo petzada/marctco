@@ -9,7 +9,7 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 | # | Documento | Autoridade sobre |
 |---|-----------|------------------|
 | 1 | [CONTEXT.md](./CONTEXT.md) + [docs/adr/](./docs/adr/) | Nomes de domínio e decisões irreversíveis. Vence tudo; se outro doc contradiz, o outro doc está com bug. Autoridade sobre **código/schema**, não sobre rótulo de UI |
-| 2 | [stack-recomendada.md](./stack-recomendada.md) | Técnica: libs, deploy, ORM, fila, auth, isolamento |
+| 2 | [stack-recomendada.md](./stack-recomendada.md) | Técnica: libs, deploy, ORM, fila, auth, isolamento. **Os ADRs 0013 a 0015 supersedem** o que ela diz sobre TanStack Query como padrão de leitura, sobre os cinco papéis e sobre guardar o `raw` sem prazo |
 | 3 | [decisao-features-concorrentes.md](./decisao-features-concorrentes.md) | Escopo de features, navegação, UX |
 | 4 | [sintese-final.md](./sintese-final.md) + [docs/pesquisa/decisoes.md](./docs/pesquisa/decisoes.md) | Fluxo de produto e regras de negócio não tocadas pelo degrau 3. Mesmo nível: `decisoes.md` detalha `sintese-final.md`, não rivaliza com ele |
 | 5 | [docs/pesquisa/](./docs/pesquisa/) (pluga, sintese-manual, concorrentes) | **Nada.** Evidência e referência, nunca autoridade — `pluga.md` descreve o que a Pluga faz, não o que o CRM responde |
@@ -41,7 +41,10 @@ Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sess
 | [0009](./docs/adr/0009-etapas-editaveis-papeis-e-status.md) | Funis independentes do financiamento, papéis de etapa, roteamento e handoff humano |
 | [0010](./docs/adr/0010-migrations-e-ci-cd.md) | Migrations e CI/CD: Docker local, Postgres efêmero no CI, release serializado |
 | [0011](./docs/adr/0011-monorepo-pnpm-e-dominio-puro.md) | Monorepo pnpm e pacote de domínio puro |
-| [0012](./docs/adr/0012-contexto-de-tenant-na-url.md) | Contexto de tenant no segmento de URL, `slug` UUIDv4, 404 uniforme |
+| [0012](./docs/adr/0012-contexto-de-tenant-na-url.md) | Contexto de tenant no segmento de URL, `slug` UUIDv4, 404 uniforme, rate limit em memória |
+| [0013](./docs/adr/0013-fluxo-de-dados-no-app.md) | **Fluxo de dados:** Server Component lê, route handler escreve, paginação keyset, condição arbitra escrita concorrente |
+| [0014](./docs/adr/0014-copia-unica-e-retencao-do-payload.md) | Cópia única do payload e expiração em 90 dias |
+| [0015](./docs/adr/0015-perfis-de-acesso-e-escopo.md) | **Perfis de acesso:** Atendente, Supervisor, Gestão, Direção — escopo por tela |
 
 **Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.
 
