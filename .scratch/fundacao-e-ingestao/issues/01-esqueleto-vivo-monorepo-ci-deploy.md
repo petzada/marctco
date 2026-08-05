@@ -60,7 +60,7 @@ Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **
 
 - [x] `prisma migrate dev`, `prisma db push` e `--force-reset` proibidos contra qualquer banco remoto; produção aceita apenas `prisma migrate deploy`
 - [x] Migrações rodam com a string de conexão do papel **dono**, distinta da do app
-- [ ] String do papel de migrations existe **só** no GitHub Environment de produção e nunca é exposta a workflow de PR; string da aplicação existe só no Railway; nenhuma vive em `.env` de desenvolvimento
+- [x] String do papel de migrations existe **só** no GitHub Environment de produção e nunca é exposta a workflow de PR; string da aplicação existe só no Railway; nenhuma vive em `.env` de desenvolvimento
 
 **Push e PR**
 
@@ -75,7 +75,7 @@ Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **
 **Release**
 
 - [x] Após merge na `main`, job exclusivo e serializado por `concurrency` aplica `prisma migrate deploy` uma única vez e verifica o resultado
-- [ ] Railway usa **Wait for CI** e faz deploy de app e worker como serviços separados; migration **não** roda no startup dos serviços
+- [x] Railway usa **Wait for CI** e faz deploy de app e worker como serviços separados; migration **não** roda no startup dos serviços
 - [ ] Railway e Supabase na **mesma região**
 
 **Fora deste ticket, por decisão registrada**
