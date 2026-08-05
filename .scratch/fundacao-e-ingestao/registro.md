@@ -175,3 +175,15 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **Descobertas que afetam tickets seguintes:** Ticket 07 chama `resolveWorkspaceByIntegrationToken`, cria o contexto/GUC com o `workspace_id` devolvido e então lê provider/versão/destino sob RLS; não aceita origem nem workspace no body. Redis Railway ainda ausente — adiável para 07/15 (`acoes-manuais-pendentes.md`).
 - **Documentos emendados:** issue 06 (Comments gate), `acoes-manuais-pendentes.md` (novo), este registro; ADR novo não era necessário, pois 0007/0019 já determinam o contrato.
 - **Precisa de mão humana:** Merge do PR após CI verde; provisionar Redis no Railway antes do ticket 07.
+
+### Recuperação production migration 002 — PARCIAL
+
+- **O que foi construído:** Recovery fail-closed generalizado para a falha exata `permission denied to create role` na migration `20260805000200_authentication_workspace_context`. O CLI de release audita ausência de `private.resolve_user_workspaces` e das policies definer, exige `marctco_private_definer` pré-criado no Supabase, marca `rolled-back` e deixa o `migrate deploy` reaplicar a 002 com `IF NOT EXISTS` no `CREATE ROLE`.
+- **Arquivos-chave criados/alterados:** `packages/db/src/foundation-recovery.ts` — `decideAuthWorkspaceRecovery` e `decideMigrationRecovery`.<br>`packages/db/src/recover-foundation-cli.ts` — auditoria dos artefatos da 002.<br>`packages/db/src/foundation-recovery.test.ts` — casos foundation + auth workspace.<br>`docs/adr/0010-migrations-e-ci-cd.md` — bootstrap CREATEROLE para papéis técnicos pós-foundation.<br>`.scratch/fundacao-e-ingestao/acoes-manuais-pendentes.md` — SQL humano obrigatório.
+- **Critérios de aceite:** Recovery cobre o cenário de produção documentado; aborta sem o papel; resolve quando pré-condições satisfeitas; workflow `pnpm db:recover:foundation` intacto.
+- **Testes:** `foundation-recovery.test.ts` expandido; suíte local a validar no PR.
+- **Branch / PR:** `ticket/04-recover-private-definer-role`; PR a abrir após CI verde.
+- **Decisões que tomei sozinho:** Foundation recovery passa a retornar `none` (não `abort`) quando a migration unresolved não é a 001, delegando à handler da 002. Mantive o nome do script `db:recover:foundation` para não quebrar o workflow.
+- **Descobertas que afetam tickets seguintes:** Qualquer migration futura que crie papel `NOLOGIN` além dos três iniciais precisará do mesmo bootstrap humano enquanto o secret de release for `marctco_migrator`. O CI não reproduz essa falha porque o Postgres efêmero usa `postgres` com `CREATEROLE`.
+- **Documentos emendados:** ADR-0010, `acoes-manuais-pendentes.md`, este registro.
+- **Precisa de mão humana:** 1. Executar no Supabase SQL Editor como `postgres` o `CREATE ROLE marctco_private_definer ...` documentado em `acoes-manuais-pendentes.md`. 2. Mesclar o PR de recovery e re-run do job Production migration **somente depois** do passo 1.
