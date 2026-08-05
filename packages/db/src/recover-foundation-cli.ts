@@ -43,6 +43,14 @@ try {
       EXISTS(SELECT 1 FROM pg_roles WHERE rolname = 'marctco_private_definer') AS private_definer_role_exists,
       EXISTS(
         SELECT 1
+        FROM pg_auth_members AS member
+        INNER JOIN pg_roles AS role ON role.oid = member.roleid
+        INNER JOIN pg_roles AS member_role ON member_role.oid = member.member
+        WHERE role.rolname = 'marctco_private_definer'
+          AND member_role.rolname = 'marctco_migrator'
+      ) AS migrator_private_definer_membership,
+      EXISTS(
+        SELECT 1
         FROM pg_proc AS proc
         INNER JOIN pg_namespace AS namespace ON namespace.oid = proc.pronamespace
         WHERE namespace.nspname = 'private'
@@ -66,6 +74,7 @@ try {
   };
   const authArtifacts = auth_rows[0] ?? {
     private_definer_role_exists: false,
+    migrator_private_definer_membership: false,
     resolve_user_workspaces_exists: false,
     definer_policies: []
   };

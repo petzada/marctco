@@ -3,10 +3,26 @@ export const AUTH_WORKSPACE_MIGRATION_NAME =
   "20260805000200_authentication_workspace_context";
 
 const FOUNDATION_EXPECTED_FAILURE = 'permission denied to set role "marctco_migrator"';
-const AUTH_WORKSPACE_EXPECTED_FAILURE = "permission denied to create role";
+const AUTH_WORKSPACE_CREATE_ROLE_FAILURE = "permission denied to create role";
+const AUTH_WORKSPACE_GRANT_ROLE_FAILURE = "permission denied to grant role";
 
 export const PRIVATE_DEFINER_ROLE = "marctco_private_definer";
 export const PRIVATE_DEFINER_BOOTSTRAP_SQL = `CREATE ROLE ${PRIVATE_DEFINER_ROLE} NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;`;
+export const PRIVATE_DEFINER_GRANT_SQL = `GRANT ${PRIVATE_DEFINER_ROLE} TO marctco_migrator WITH INHERIT FALSE, SET TRUE;`;
+
+function isAuthWorkspaceExpectedFailure(logs: string | null | undefined): boolean {
+  if (!logs) {
+    return false;
+  }
+  return (
+    logs.includes(AUTH_WORKSPACE_CREATE_ROLE_FAILURE) ||
+    logs.includes(AUTH_WORKSPACE_GRANT_ROLE_FAILURE)
+  );
+}
+
+function isAuthWorkspaceGrantRoleFailure(logs: string | null | undefined): boolean {
+  return logs?.includes(AUTH_WORKSPACE_GRANT_ROLE_FAILURE) ?? false;
+}
 
 export interface FailedMigrationState {
   migration_name: string;
@@ -24,6 +40,7 @@ export interface FoundationArtifacts {
 
 export interface AuthWorkspaceArtifacts {
   private_definer_role_exists: boolean;
+  migrator_private_definer_membership: boolean;
   resolve_user_workspaces_exists: boolean;
   definer_policies: string[];
 }
@@ -111,7 +128,7 @@ export function decideAuthWorkspaceRecovery(
       reason: "the unresolved migration is not the authentication workspace migration"
     };
   }
-  if (!failed.logs?.includes(AUTH_WORKSPACE_EXPECTED_FAILURE)) {
+  if (!isAuthWorkspaceExpectedFailure(failed.logs)) {
     return {
       action: "abort",
       reason: "the authentication workspace migration failed for a different reason"
@@ -135,6 +152,15 @@ export function decideAuthWorkspaceRecovery(
     return {
       action: "abort",
       reason: `role ${PRIVATE_DEFINER_ROLE} must be created manually in Supabase SQL Editor as postgres before recovery; run: ${PRIVATE_DEFINER_BOOTSTRAP_SQL}`
+    };
+  }
+  if (
+    isAuthWorkspaceGrantRoleFailure(failed.logs) &&
+    !artifacts.migrator_private_definer_membership
+  ) {
+    return {
+      action: "abort",
+      reason: `marctco_migrator must receive ${PRIVATE_DEFINER_ROLE} membership manually in Supabase SQL Editor as postgres before recovery; run: ${PRIVATE_DEFINER_GRANT_SQL}`
     };
   }
 
