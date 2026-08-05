@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { createPrismaClient } from "./client.js";
 import {
-  decideFoundationRecovery,
+  decideMigrationRecovery,
+  type AuthWorkspaceArtifacts,
   type FailedMigrationState,
   type FoundationArtifacts
 } from "./foundation-recovery.js";
 
 if (process.env.ALLOW_FOUNDATION_RECOVERY !== "true") {
-  throw new Error("Foundation recovery requires ALLOW_FOUNDATION_RECOVERY=true in the release job");
+  throw new Error("Migration recovery requires ALLOW_FOUNDATION_RECOVERY=true in the release job");
 }
 
 const client = createPrismaClient();
@@ -24,7 +25,7 @@ try {
         ORDER BY started_at
       `
     : [];
-  const artifact_rows = await client.$queryRaw<FoundationArtifacts[]>`
+  const foundation_rows = await client.$queryRaw<FoundationArtifacts[]>`
     SELECT
       ARRAY(SELECT rolname::text FROM pg_roles WHERE rolname LIKE 'marctco_%' ORDER BY rolname) AS roles,
       ARRAY(SELECT nspname::text FROM pg_namespace WHERE nspname = 'private') AS schemas,
@@ -37,21 +38,56 @@ try {
         ORDER BY tablename
       ) AS tables
   `;
-  const artifacts = artifact_rows[0] ?? { roles: [], schemas: [], types: [], tables: [] };
-  decision = decideFoundationRecovery({ history_table_exists, migrations, artifacts });
+  const auth_rows = await client.$queryRaw<AuthWorkspaceArtifacts[]>`
+    SELECT
+      EXISTS(SELECT 1 FROM pg_roles WHERE rolname = 'marctco_private_definer') AS private_definer_role_exists,
+      EXISTS(
+        SELECT 1
+        FROM pg_proc AS proc
+        INNER JOIN pg_namespace AS namespace ON namespace.oid = proc.pronamespace
+        WHERE namespace.nspname = 'private'
+          AND proc.proname = 'resolve_user_workspaces'
+      ) AS resolve_user_workspaces_exists,
+      ARRAY(
+        SELECT policyname::text
+        FROM pg_policies
+        WHERE policyname IN (
+          'workspaces_private_definer_select',
+          'workspace_members_private_definer_select'
+        )
+        ORDER BY policyname
+      ) AS definer_policies
+  `;
+  const foundationArtifacts = foundation_rows[0] ?? {
+    roles: [],
+    schemas: [],
+    types: [],
+    tables: []
+  };
+  const authArtifacts = auth_rows[0] ?? {
+    private_definer_role_exists: false,
+    resolve_user_workspaces_exists: false,
+    definer_policies: []
+  };
+  decision = decideMigrationRecovery(
+    { history_table_exists, migrations, artifacts: foundationArtifacts },
+    { history_table_exists, migrations, artifacts: authArtifacts }
+  );
 } finally {
   await client.$disconnect();
 }
 
 if (decision.action === "abort") {
-  throw new Error(`Foundation recovery refused: ${decision.reason}`);
+  throw new Error(`Migration recovery refused: ${decision.reason}`);
 }
 if (decision.action === "none") {
-  console.log(`Foundation recovery not needed: ${decision.reason}`);
+  console.log(`Migration recovery not needed: ${decision.reason}`);
   process.exit(0);
 }
 
-console.log("Foundation recovery audit proved a failed history row with no residual artifacts");
+console.log(
+  "Migration recovery audit proved a failed history row with no residual artifacts"
+);
 const pnpm = process.env.npm_execpath;
 if (!pnpm) {
   throw new Error("pnpm executable path is unavailable");
@@ -75,5 +111,5 @@ if (result.error) {
   throw result.error;
 }
 if (result.status !== 0) {
-  throw new Error("Prisma refused to mark the transactionally clean foundation attempt rolled back");
+  throw new Error("Prisma refused to mark the transactionally clean migration attempt rolled back");
 }
