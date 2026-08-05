@@ -22,7 +22,8 @@ O handler é provider-agnóstico: ele não sabe se aquilo é Meta, Google ou lan
 - [ ] `workspace_id` presente no corpo é **ignorado**; o tenant vem do token
 - [ ] `IntegrationEvent` persiste payload cru e despacho `PENDING` em commit **antes** do 200
 - [ ] A ordem do handler é: resolve token → persiste/commit → responde 200; ele não conecta ao Redis
-- [ ] Dispatcher independente busca pendências no PostgreSQL e publica no BullMQ
+- [ ] Dispatcher independente busca pendências no PostgreSQL por `private.claim_pending_events` e publica no BullMQ. A função é necessária porque o dispatcher procura pendência de **todos** os workspaces, sem sessão e sem job prévio: "claim por evento" é circular — para setar o claim ele precisaria do `workspace_id` que só a leitura revela, e sem GUC a policy devolve zero linhas ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9)
+- [ ] `claim_pending_events` devolve **só `(id, workspace_id)`** — nunca o `raw`, que carrega CPF e telefone. Função sem tenant que devolvesse payload seria vazamento cross-tenant com cara de recurso
 - [ ] Redis indisponível mantém o evento pendente e o endpoint continua respondendo 200
 - [ ] `jobId` determinístico derivado de `IntegrationEvent.id`; job carrega IDs, não payload com PII
 - [ ] Evento só é marcado `DISPATCHED` depois da confirmação do BullMQ

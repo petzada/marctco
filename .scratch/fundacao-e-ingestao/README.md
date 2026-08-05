@@ -4,20 +4,20 @@ Fatia vertical cobrindo as **Fases 0 e 1** de [docs/plano-de-construcao.md](../.
 
 - **Começar aqui:** [PROMPT-INICIAL.md](../../PROMPT-INICIAL.md) — na raiz do repo; prompt para abrir a sessão de implementação
 - **Spec:** [spec.md](./spec.md)
-- **Tickets:** [issues/](./issues/) — 16, numerados em ordem de dependência
+- **Tickets:** [issues/](./issues/) — 17, numerados em ordem de dependência
 
 ## Critério de aceite da fatia
 
-`POST` autenticado → commit do `IntegrationEvent`/outbox → 200 mesmo sem Redis → dispatcher/BullMQ → worker valida o contrato `v1`, normaliza e preserva múltiplos contatos → **sempre** Pessoa + Oportunidade no funil comercial de destino, com marcador quando houver conflito de identidade ou possível duplicado → visível na tela de Leads, com RLS provando que workspace A não lê B.
+Primeiro acesso provisiona workspace utilizável → `POST` autenticado → commit do `IntegrationEvent`/outbox → 200 mesmo sem Redis → dispatcher/BullMQ → worker valida o contrato `v1`, normaliza e preserva múltiplos contatos → **sempre** Pessoa + Oportunidade no funil comercial de destino, com marcador quando houver conflito de identidade ou possível duplicado → visível na tela de Leads, com RLS provando que workspace A não lê B.
 
 ## Grafo de dependências
 
 ```
-01 esqueleto ──┬─► 03 RLS ──┬─► 04 auth ─────────────────┐
-               │            │                            │
-02 tokens ─────┼────────────┼─► 05 funis ────────┐       │
-               │            │                    │       │
-               │            └─► 06 conexão ──► 07 endpoint
+01 esqueleto ──┬─► 03 RLS ──┬─► 04 auth ──────┬──────────┐
+               │            │                 │          │
+02 tokens ─────┼────────────┼─► 05 funis ──┬──┴► 17 prov. │
+               │            │              │              │
+               │            └─► 06 conexão ┴─────► 07 endpoint
                │                     │              │
                │                     │              ▼
                │                     │         08 Pessoa
@@ -43,12 +43,12 @@ Fatia vertical cobrindo as **Fases 0 e 1** de [docs/plano-de-construcao.md](../.
 
 ## Ordem sugerida
 
-`01 · 02 → 03 → 04 · 05 · 06 → 07 → 08 → 09 → 10 · 11 · 13 · 16 → 12 · 14 → 15`
+`01 · 02 → 03 → 04 · 05 · 06 → 17 → 07 → 08 → 09 → 10 · 11 · 13 · 16 → 12 · 14 → 15`
 
-O ticket **09** fecha o tracer bullet: um `POST` produz lead real no funil, com ou sem pendência marcada. Os tickets 10 a 16 endurecem, resolvem e tornam visível o que o 09 já faz.
+O ticket **17** vem antes do 07 porque sem ele não existe workspace com funil para o lead cair. O ticket **09** fecha o tracer bullet: um `POST` produz lead real no funil, com ou sem pendência marcada. Os tickets 10 a 16 endurecem, resolvem e tornam visível o que o 09 já faz.
 
 ## Antes de começar
 
-O ticket **01 monta o ambiente local em Docker e o pipeline inteiro**. Com Postgres local, o item A7 encolhe: `migrate dev` roda onde foi feito para rodar e a autoria de migration deixa de ser aposta. Resta confirmar `SET LOCAL` dentro de `$transaction` e `pgbouncer=true` — se algum falhar, o [ADR-0010](../../docs/adr/0010-migrations-e-ci-cd.md) precisa ser emendado antes de seguir.
+O ticket **01 monta o ambiente local em Docker e o pipeline inteiro**. Com Postgres local, o item A7 encolhe: `migrate dev` roda onde foi feito para rodar e a autoria de migration deixa de ser aposta. Restam quatro confirmações mecânicas — `SET LOCAL` dentro de `$transaction`, `pgbouncer=true`, o comportamento de `$transaction` diante de erro capturado, e o schema `private` não aparecendo como drift. Se alguma falhar, o ADR correspondente precisa ser emendado antes de seguir.
 
 O item **A6** (o que o plano free do Supabase garante de backup) é gate do primeiro `migrate deploy` em produção, não ticket de código. Sem staging, o backup é a única rede.

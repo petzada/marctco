@@ -8,7 +8,7 @@
 
 Um monorepo que sobe de ponta a ponta. Ao final existe um ambiente local em Docker onde migrações são autoradas em segundos, uma URL no Railway que responde, uma tabela no Supabase criada por migração, e um pipeline no GitHub Actions que — sem receber nenhum secret de produção — prova a migração do zero, checa drift, varre DDL destrutiva, impede o merge se algo falhar, e só libera o Railway depois da migration de produção pós-merge.
 
-O item **A7 deixa de ser risco de premissa**: com Postgres local, `prisma migrate dev` roda onde foi feito para rodar e o shadow database funciona. O que ainda precisa ser confirmado aqui é mecânico, não arquitetural: `SET LOCAL` dentro de `$transaction` do Prisma e prepared statements com o pooler em transaction mode.
+O item **A7 deixa de ser risco de premissa**: com Postgres local, `prisma migrate dev` roda onde foi feito para rodar e o shadow database funciona. O que ainda precisa ser confirmado aqui é mecânico, não arquitetural — e são quatro coisas, não duas.
 
 ## Acceptance criteria
 
@@ -22,8 +22,25 @@ O item **A7 deixa de ser risco de premissa**: com Postgres local, `prisma migrat
 
 - [ ] `docker-compose.yml` sobe Postgres e Redis descartáveis, com um comando
 - [ ] `prisma migrate dev` funciona contra o Postgres local, com shadow database
-- [ ] Primeira migração cria `Workspace` e `WorkspaceMember`
+- [ ] Primeira migração cria `Workspace` (com `slug` UUIDv4 único) e `WorkspaceMember`
 - [ ] Testes puros e prova de RLS rodam localmente antes do push
+
+**Verificações mecânicas (A7)**
+
+- [ ] `SET LOCAL` funciona dentro de `$transaction` do Prisma
+- [ ] Prepared statements funcionam com o pooler em transaction mode (`pgbouncer=true` ou porta de session mode)
+- [ ] **Comportamento de `$transaction` diante de erro capturado**: confirmar que a violação de unicidade aborta a transação e que `INSERT ... ON CONFLICT DO NOTHING RETURNING id` permite seguir na mesma transação. É o que sustenta o ticket 11 — melhor descobrir aqui ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
+- [ ] **Schema `private` não declarado na datasource não aparece como drift** no `migrate diff` ([ADR-0010](../../../docs/adr/0010-migrations-e-ci-cd.md) guard 6)
+
+Se algum falhar, emende o ADR correspondente registrando o que foi descoberto **antes** de seguir.
+
+**Papéis e autoverificação**
+
+- [ ] Papéis criados **dentro das migrations**, idempotentes e prefixados: `marctco_migrator` (dono, DDL), `marctco_app` e `marctco_worker` (sem `BYPASSRLS`)
+- [ ] **Nenhuma senha em arquivo de migration** — o repositório é público ao time; a senha é definida por `ALTER ROLE`, fora do versionamento
+- [ ] O mesmo caminho de criação vale para Docker local, CI e produção — uma fonte, três ambientes
+- [ ] **App e worker abortam o boot** se o papel conectado for superusuário, tiver `BYPASSRLS` ou for dono de tabela de negócio ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 10). É a única defesa contra a connection string errada no Railway, porque nenhum CI sabe qual string está lá
+- [ ] A mensagem de recusa diz **qual** condição falhou, para o diagnóstico não virar adivinhação
 
 **Guards**
 
@@ -46,7 +63,6 @@ O item **A7 deixa de ser risco de premissa**: com Postgres local, `prisma migrat
 - [ ] Após merge na `main`, job exclusivo e serializado por `concurrency` aplica `prisma migrate deploy` uma única vez e verifica o resultado
 - [ ] Railway usa **Wait for CI** e faz deploy de app e worker como serviços separados; migration **não** roda no startup dos serviços
 - [ ] Railway e Supabase na **mesma região**
-- [ ] Prepared statements funcionam com o pooler (`pgbouncer=true` ou porta de session mode)
 
 **Fora deste ticket, por decisão registrada**
 

@@ -14,6 +14,10 @@ _Avoid_: Lead como model ou tabela, Lead para card do funil jurídico, segundo s
 Tenant SaaS do cliente: a empresa mãe / grupo da consultoria. Isola dados, integrações, trial e feature flags.
 _Avoid_: Conta, tenant solto, organização Clerk, workspace por filial
 
+**Provisionamento**:
+Nascimento de um Workspace, em ato único e indivisível: o tenant, o vínculo do primeiro membro como dono e o funil comercial padrão com suas etapas passam a existir juntos ou não existem. Acontece no primeiro acesso de quem tem direito a provisionar, nunca por edição manual de banco.
+_Avoid_: Criar workspace sem funil, semear funil por script de desenvolvimento em cliente real, workspace válido pela metade, provisionar quem apenas perdeu a associação
+
 **Tag**:
 Rótulo configurável no workspace para identificar filial, time ou carteira; aplica-se a membros e, se útil, a oportunidades.
 _Avoid_: Sub-workspace, departamento como tenant, “empresa” no sentido de workspace
@@ -34,6 +38,14 @@ _Avoid_: Buscar etapa por nome, etapa de Ganho ou Perdido, funil sem entrada ou 
 Estado da Oportunidade — em aberto, ganha ou perdida — ortogonal à etapa. Ganho e perda tiram o card do Kanban; perda exige motivo.
 _Avoid_: Ganho ou Perdido como coluna do funil, situação inferida a partir da etapa
 
+**Chegada**:
+Instante em que a Oportunidade passa a existir e o relógio de atendimento pode começar a correr. Para todo lead que entra direto, é o instante do recebimento; para o que passou pela quarentena, é o instante da liberação, porque não corre relógio contra ninguém enquanto não há card. O recebimento continua registrado à parte, como verdade sobre a origem.
+_Avoid_: Confundir com o instante do recebimento em todos os casos, reconstruir a chegada depois, relógio correndo sobre lead que ninguém podia atender
+
+**Marcador**:
+Pendência anexada a uma Oportunidade que já existe e já pode ser atendida. Sinaliza, nunca bloqueia, e é sempre resolvível. Quantos houver, o usuário os alcança por um único ponto de entrada no lead.
+_Avoid_: Fila de revisão, portão antes da Oportunidade, um rótulo por tipo espalhado pela tela, marcador que não tem resolução
+
 **Pessoa**:
 Cadastro único da pessoa física/jurídica no workspace, com zero ou um CPF válido e múltiplos telefones/e-mails normalizados. Nenhum telefone ou e-mail vence uma contradição por si só; chaves conflitantes criam Pessoa nova e marcam revisão de identidade, sem impedir o atendimento.
 _Avoid_: Lead como entidade permanente, contato duplicado por funil, CPF como campo obrigatório, “telefone sempre decide”, sobrescrever contato anterior
@@ -43,16 +55,16 @@ Pendência marcada na Oportunidade já criada quando os identificadores recebido
 _Avoid_: Escolher uma chave arbitrariamente, fundir Pessoas automaticamente em conflito, apagar o registro perdedor, reter o envio antes da Oportunidade
 
 **Possível duplicado**:
-Ligação entre duas Oportunidades da mesma Pessoa quando há semelhança de financiamento sem prova de que seja o mesmo contrato. As duas existem e podem ser atendidas; o gestor decide se são financiamentos distintos, se devem ser mescladas ou se o envio é inválido.
-_Avoid_: Anexar automaticamente por mesma Pessoa + tipo de financiamento, reter o envio antes da Oportunidade, excluir o envio ou o card perdedor
+Ligação entre duas Oportunidades da mesma Pessoa quando ambas estão em aberto. Dado de financiamento não é o gatilho — ele é o que a tela mostra ao humano para distinguir uma da outra. As duas existem e podem ser atendidas; o gestor decide se são financiamentos distintos, se devem ser mescladas ou se o envio é inválido.
+_Avoid_: Exigir semelhança de financiamento para ligar, tratar campo de financiamento como prova, reter o envio antes da Oportunidade, excluir o envio ou o card perdedor
 
 **Mesclagem**:
-Resolução não destrutiva de Pessoa ou Oportunidade duplicada: a absorvida aponta para a canônica, sai das vistas ativas e preserva histórico e identificadores.
-_Avoid_: Excluir o registro absorvido, sobrescrever dados da canônica, mesclar sem trilha de auditoria
+Resolução não destrutiva de Pessoa ou Oportunidade duplicada: o que estava pendurado na absorvida passa para a canônica na mesma operação, e a absorvida guarda apenas a lápide que a tira das vistas ativas e preserva a trilha. A lápide nunca redireciona leitura — nenhum registro ativo aponta para um registro mesclado. Mesclar Pessoas reavalia a duplicidade entre as Oportunidades que a canônica passa a ter.
+_Avoid_: Excluir o registro absorvido, sobrescrever dados da canônica, seguir o ponteiro na leitura, escrever em registro absorvido, mesclar sem trilha de auditoria
 
 **Quarentena**:
-Submissão recebida sem telefone e sem e-mail: persistida e visível em Integrações, sem gerar Pessoa nem Oportunidade — não há como contatar nem identificar. Sem relógio de SLA.
-_Avoid_: Rejeitar no request, descarte silencioso, confundir com o lead sem telefone (que entra no funil marcado)
+Submissão recebida sem telefone e sem e-mail: persistida e visível em Integrações, sem gerar Pessoa nem Oportunidade — não há como contatar nem identificar. Sem relógio de atendimento. Sair da quarentena exige que alguém forneça ao menos um contato; liberar sem contato produziria cadastro que nunca casa com nada e card que ninguém atende.
+_Avoid_: Rejeitar no request, descarte silencioso, liberar sem contato, confundir com o lead sem telefone (que entra no funil marcado)
 
 **Oportunidade**:
 Negócio ligado a uma Pessoa, numa etapa de um funil; área comercial ou jurídica. Na UI comercial chama-se Lead.

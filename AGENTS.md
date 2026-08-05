@@ -20,7 +20,7 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 ## Implementação
 
-Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sessão. Spec e tickets em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/).
+Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sessão. Spec e 17 tickets em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/).
 
 ## Ordem de construção
 
@@ -41,6 +41,7 @@ Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sess
 | [0009](./docs/adr/0009-etapas-editaveis-papeis-e-status.md) | Funis independentes do financiamento, papéis de etapa, roteamento e handoff humano |
 | [0010](./docs/adr/0010-migrations-e-ci-cd.md) | Migrations e CI/CD: Docker local, Postgres efêmero no CI, release serializado |
 | [0011](./docs/adr/0011-monorepo-pnpm-e-dominio-puro.md) | Monorepo pnpm e pacote de domínio puro |
+| [0012](./docs/adr/0012-contexto-de-tenant-na-url.md) | Contexto de tenant no segmento de URL, `slug` UUIDv4, 404 uniforme |
 
 **Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.
 

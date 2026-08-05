@@ -35,11 +35,16 @@ Com Docker local:
 3. **Expand/contract é regra dura.** Nunca `NOT NULL` sem default em um passo; nunca constraint única sem verificar duplicata antes; nunca remover coluna na mesma release que para de usá-la.
 4. Migrations rodam com a connection string do papel **owner**, distinta da do app — se forem a mesma, o `FORCE ROW LEVEL SECURITY` não protege nada.
 5. O seed (funil comercial padrão, com sua etapa `ENTRY` e sua `CLOSING`) é script de seed do Prisma, não migration.
-6. Prisma se limita ao schema `public`; `auth.*` pertence ao Supabase.
+6. **O datamodel do Prisma se limita ao schema `public`.** `auth.*` pertence ao Supabase, e existe um terceiro schema, `private`, que hospeda as três funções `SECURITY DEFINER` da lista fechada do [ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9. `private` é criado e mantido por SQL escrito à mão dentro das migrations e **não** é declarado na datasource: o Prisma não o modela, não o gera e não o compara. Quem prova o conteúdo dele é o Seam 3.
 7. **Drift check no CI:** `migrate diff` entre `schema.prisma` e o banco recém-migrado precisa retornar vazio. Sem ele, alguém edita o `schema.prisma` sem gerar a migration correspondente e o CI passa mentindo — erro que agente de código comete com frequência.
+
+   **O que o drift check não cobre precisa ficar dito, senão ele vira falsa segurança:** ele compara o datamodel do Prisma com o banco, e o Prisma não modela policy, função, papel nem grant. Ou seja, **exatamente o SQL que carrega o modelo de segurança está fora do alcance dele** — uma policy derrubada à mão em produção mantém o drift check verde. Quem cobre essa superfície é o Seam 3, varrendo `pg_policies`, `pg_tables`, os atributos dos papéis e a lista de funções `SECURITY DEFINER`. As duas verificações não se substituem: uma olha o schema, a outra olha a segurança.
 8. Migration cujo sucesso dependa dos dados existentes traz um **preflight** somente-leitura, executado contra produção antes dela no job de release. A regra vale desde já; a infraestrutura se constrói quando a primeira migration assim for escrita.
 9. Migrations de produção rodam uma vez, em job exclusivo e serializado por `concurrency` — nunca no startup do app ou do worker.
 10. Nenhum workflow disparado por `pull_request` recebe secret, token ou connection string de produção.
+11. **Os papéis nascem dentro das migrations**, de forma idempotente e com nome prefixado (`marctco_migrator`, `marctco_app`, `marctco_worker`) para nunca colidir com os papéis internos do Supabase. **A senha nunca vai numa migration** — o arquivo está no git; a migration cria o papel e concede privilégios, e a senha é definida uma vez por `ALTER ROLE`, fora do versionamento.
+
+    Sem isso há duas topologias e só uma é testada. O CI sobe um Postgres efêmero com um papel só, `postgres`, e a prova de RLS passa — porque `FORCE` se aplica até ao dono — sem nunca verificar que o papel do app **não** tem `BYPASSRLS`, já que esse papel não existe ali. Em produção, o papel é criado à mão, uma vez, e o painel do Supabase oferece pronta para copiar a connection string do `postgres`. Colar aquilo no Railway zera o isolamento com o CI inteiro verde. Papéis nas migrations fazem CI, Docker local e produção derivarem da mesma fonte; a autoverificação de boot do [ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 10 fecha o que resta, porque nenhum CI sabe qual string está no Railway.
 
 ## Fluxo
 
@@ -82,7 +87,7 @@ MERGE NA MAIN
 
 O que roda sem tocar produção cobre justamente a lógica mais arriscada — e isso **valida a fronteira do [ADR-0008](./0008-fronteira-conector-dominio.md)**, porque a decisão perigosa ficou toda em função pura: validação tolerante do contrato de entrada, normalização (E.164, DV do CPF, lowercase, moeda), síntese de `external_lead_id`, quarentena, detecção de conflito de identidade e de possível duplicado.
 
-O Postgres efêmero acrescenta o que função pura não alcança: migration aplicando limpa do zero, drift check, a constraint `UNIQUE` sob insert-and-catch e a prova de isolamento. Essa prova varre `pg_tables` e `pg_policies` e exige, para toda tabela de negócio: RLS habilitada, RLS **forçada**, ao menos uma policy, leitura cross-workspace devolvendo zero linhas e escrita cross-workspace recusada.
+O Postgres efêmero acrescenta o que função pura não alcança: migration aplicando limpa do zero, drift check, a constraint `UNIQUE` sob `ON CONFLICT DO NOTHING` e a prova de isolamento. Essa prova varre `pg_tables` e `pg_policies` e exige, para toda tabela de negócio: RLS habilitada, RLS **forçada**, ao menos uma policy, leitura cross-workspace devolvendo zero linhas e escrita cross-workspace recusada. Acrescenta ainda os atributos dos papéis, a lista fechada de funções `SECURITY DEFINER` e a ausência de referência ativa a registro mesclado — tudo aquilo que o drift check não enxerga.
 
 **Redis também roda como service container.** O teste prova duas fronteiras independentes do [ADR-0007](./0007-ingestao-idempotencia.md): o endpoint confirma `200` após o commit PostgreSQL mesmo com Redis indisponível; depois, com Redis disponível, o dispatcher publica a pendência com `jobId` determinístico e o worker a processa uma única vez no efeito de negócio.
 

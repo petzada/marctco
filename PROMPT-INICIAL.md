@@ -11,7 +11,7 @@ arquitetura já foi decidida e travada numa sessão de grelha anterior.
 
 # Leitura obrigatória, nesta ordem, antes de escrever qualquer linha
 
-1. `AGENTS.md` — escada de precedência entre documentos e índice dos 11 ADRs.
+1. `AGENTS.md` — escada de precedência entre documentos e índice dos 12 ADRs.
    Os documentos deste repo conflitam entre si de propósito; a escada resolve.
 2. `CONTEXT.md` — glossário. É a linguagem ubíqua, em PT-BR.
 3. `docs/adr/0005-idioma-codigo-en-ui-pt-br.md` — código em inglês, UI em PT-BR,
@@ -25,8 +25,9 @@ arquitetura já foi decidida e travada numa sessão de grelha anterior.
 Leia o ADR correspondente ao ticket em que estiver mexendo. Eles contêm os modos
 de falha silenciosos deste stack — em especial o ADR-0006, que explica por que
 Supabase RLS + Prisma não encaixam sozinhos. Os vinculantes desta fatia são
-0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010 e 0011; o 0004 rege o ticket 16
-(catálogo de flags) e o 0002, workspace e tags.
+0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011 e 0012; o 0004 rege o
+ticket 16 (catálogo de flags), o 0002 rege workspace e tags, e o 0012 rege as
+rotas de toda a aplicação.
 
 Ao tocar UI, `DESIGN.md` é lei visual — e o ticket 02 existe justamente porque o
 arquivo de tokens que ele referencia ainda não existe no repositório.
@@ -66,6 +67,24 @@ propor mudança — e traga a proposta a mim em vez de mudar por conta própria.
 
 - Código em inglês, UI em PT-BR, sem acento em identificador.
 - O worker roda SOB RLS, não com service_role.
+- Existem TRÊS consultas sem contexto de tenant, e a lista é FECHADA: resolução de
+  token, descoberta de pendências e provisionamento de workspace. Cada uma é uma
+  função SECURITY DEFINER em schema `private`, e o Seam 3 reprova a quarta.
+  `claim_pending_events` devolve `(id, workspace_id)` e nunca o `raw`.
+- Papéis nascem nas migrations, com prefixo `marctco_`. Senha jamais em migration.
+- Workspace nasce por `provision_workspace`, em UMA transação: tenant + vínculo do
+  dono + funil padrão. O direito de provisionar vive em `app_metadata` e NUNCA em
+  `user_metadata`, que o próprio usuário edita pelo SDK do cliente.
+- App e worker ABORTAM O BOOT se o papel conectado for superusuário, tiver
+  BYPASSRLS ou for dono de tabela de negócio. Nenhum CI pega a string errada
+  no Railway; só o processo em produção pega.
+- Toda rota autenticada vive sob `/workspace/:slug`, com `slug` UUIDv4 validado
+  contra WorkspaceMember a cada requisição. Workspace alheio devolve 404, nunca
+  403, e a tentativa é registrada. `/onboarding` fica fora do prefixo.
+- Na ingestão, `workspace_id` do corpo é IGNORADO. Na sessão, a escolha do
+  usuário é VALIDADA. Não são a mesma regra.
+- `token_hash` é SHA-256 determinístico com índice único. Não bcrypt, não argon2:
+  hash salgado por linha torna a busca por índice impossível na rota mais quente.
 - Desenvolvimento contra Postgres e Redis em Docker local. `prisma migrate dev`
   é PERMITIDO contra o local e PROIBIDO contra qualquer banco remoto.
 - Contra produção, só `prisma migrate deploy`. Não existe Supabase local nem
@@ -80,6 +99,12 @@ propor mudança — e traga a proposta a mim em vez de mudar por conta própria.
 - Nenhum campo de negócio é obrigatório na ingestão.
 - `IntegrationEvent` é a outbox: commit no PostgreSQL → 200; dispatcher publica
   no BullMQ depois. Redis indisponível não muda a resposta nem perde o evento.
+- Duplicata é detectada por INSERT ... ON CONFLICT DO NOTHING RETURNING id, NÃO
+  capturando a violação: em Postgres o erro aborta a transação, e o worker tem
+  de seguir depois para registrar o reenvio. A constraint continua sendo a única
+  árbitra; o que mudou é o mecanismo, não a regra.
+- Quando a origem não manda ID, `external_lead_id` vem do `IntegrationEvent.id`.
+  NUNCA hash do payload com janela de tempo — engole lead novo em silêncio.
 - LP envia servidor-servidor; segredo de integração nunca vai para o navegador.
 - CRM é dono do contrato canônico `v1`; Pluga faz o De→Para de Meta/Google. Isso
   foi VERIFICADO: o HTTP Request da Pluga monta JSON livre, sem envelope próprio.
@@ -91,10 +116,21 @@ propor mudança — e traga a proposta a mim em vez de mudar por conta própria.
 - `CLOSING` é papel de FLUXO, não de resultado: marca onde a jornada em aberto
   termina. Ganho e perdido continuam sendo `status`, jamais etapas do Kanban.
 - Telefone não decide conflitos. Pessoa preserva múltiplos telefones/e-mails.
-- DÚVIDA NUNCA SEGURA O LEAD. Conflito de identidade cria Pessoa nova; possível
-  duplicado cria a Oportunidade e liga à semelhante. Ambos viram MARCADOR no card,
-  resolvido depois por mesclagem não destrutiva. O único envio que não vira
-  Oportunidade é o sem telefone e sem e-mail, que vai para quarentena.
+- DÚVIDA NUNCA SEGURA O LEAD. Conflito de identidade cria Pessoa nova; duas
+  Oportunidades EM ABERTO da mesma Pessoa se ligam SEMPRE, inclusive sem dado
+  algum de financiamento — financiamento é discriminador na tela, nunca gatilho.
+  Ambos viram MARCADOR no card, resolvido depois por mesclagem não destrutiva.
+  O único envio que não vira Oportunidade é o sem telefone e sem e-mail, que vai
+  para quarentena.
+- Sair da quarentena EXIGE ao menos um contato. Não existe "liberar sem
+  completar". O `arrived_at` do lead liberado é o instante da LIBERAÇÃO — a
+  quarentena é o único lugar onde algo fica retido, e relógio que nasce estourado
+  não tem como ser zerado.
+- Mesclagem TRANSFERE: as FKs são reapontadas na mesma transação e o ponteiro é
+  lápide, nunca indireção de leitura. Nenhum registro ativo aponta para um
+  registro mesclado — invariante do Seam 3.
+- Um lead, UM ícone. Todos os avisos de um lead abrem de um único ponto de
+  entrada; jamais um rótulo por tipo espalhado pela linha da tabela.
 - Handoff ao jurídico é ação do gestor, notificado quando o atendente conclui.
   Nenhum status ou etapa cria card jurídico sozinho.
 - `FORCE ROW LEVEL SECURITY`, não apenas `ENABLE`.
@@ -121,7 +157,7 @@ aplicar migration e já existe dado real, PARE e me avise.
 
 ## Por que este prompt é assim
 
-**Ele não repete as decisões, aponta para elas.** Um prompt que resumisse os 11 ADRs criaria uma segunda fonte de verdade que envelhece na primeira emenda. O repositório é a fonte; o prompt é o mapa.
+**Ele não repete as decisões, aponta para elas.** Um prompt que resumisse os 12 ADRs criaria uma segunda fonte de verdade que envelhece na primeira emenda. O repositório é a fonte; o prompt é o mapa.
 
 **Ele lista as regras que não se re-litigam** porque todas contrariam o reflexo padrão de quem chega sem contexto — e um agente novo tende a "consertar" cada uma delas. Dar service_role ao worker, apontar `migrate dev` para produção, retornar 409 em duplicata e exigir campos obrigatórios são exatamente os atalhos que a grelha descartou com motivo registrado.
 

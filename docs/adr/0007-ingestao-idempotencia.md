@@ -48,7 +48,7 @@ Isso não reabre o 409: duplicata continua recebendo 200, porque a idempotência
 
 | Caso | Destino |
 |---|---|
-| Sem telefone **e** sem e-mail | **Quarentena**: persiste `IntegrationEvent`, não cria Person nem Opportunity, aparece em Integrações > Pluga para correção manual ou liberação |
+| Sem telefone **e** sem e-mail | **Quarentena**: persiste `IntegrationEvent`, não cria Person nem Opportunity, aparece em Integrações > Pluga para ser completado e liberado |
 | Tem contato, falta CPF | Entra no funil, sem marcador |
 | Só e-mail, sem telefone | Entra no funil, **com marcador** |
 | Falta tipo de financiamento/banco/parcela | Entra no funil comercial, sem marcador |
@@ -65,9 +65,17 @@ Perder lead por mapeamento torto é o pecado capital de quem compra mídia; o ma
 
 `UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission`.
 
-- **`external_lead_id` é `NOT NULL` sempre.** Em Postgres `NULL` não colide com `NULL` num índice único. Integrações servidor-servidor de LP devem enviar um ID estável; quando uma origem não o fornecer, o conector sintetiza um determinístico para manter a proteção.
-- **Quando a origem não fornece ID, o conector sintetiza** um determinístico: hash do payload normalizado + janela de tempo. Responsabilidade do adapter, não do domínio.
-- **Insert-and-catch, nunca check-then-insert.** A violação de constraint é o caminho normal para duplicata, não um erro.
+- **`external_lead_id` é `NOT NULL` sempre.** Em Postgres `NULL` não colide com `NULL` num índice único. Integrações servidor-servidor de LP devem enviar um ID estável; quando uma origem não o fornecer, o conector sintetiza um para manter a proteção.
+- **Quando a origem não fornece ID, o conector usa o `IntegrationEvent.id`** — o identificador que o próprio CRM cunhou ao receber a requisição. Responsabilidade do adapter, não do domínio.
+
+  **Supersede "hash do payload normalizado + janela de tempo".** Aquela fórmula tinha dois defeitos opostos, sem ajuste comum entre eles. Com janela medida no relógio do processamento, a chave **não é determinística**: um evento republicado depois de o Redis voltar cai noutra janela, produz outra chave, não colide com nada e cria uma segunda Oportunidade — quebrando justamente a garantia que o varredor precisa ter. Com janela larga o bastante para cobrir retransmissão, uma submissão **genuinamente nova** de conteúdo idêntico colide com a anterior, é tratada como retransmissão, e retransmissão é inerte por desenho: nenhuma Oportunidade, nenhum marcador, nenhuma quarentena. O lead não some do banco, some do produto — e some em silêncio, indistinguível de um reenvio legítimo.
+
+  O `IntegrationEvent.id` não tem relógio dentro, é único por requisição e sobrevive a qualquer reprocessamento. O custo é que dois `POST` distintos de uma LP sem ID viram duas submissões — e esse é exatamente o terreno do mecanismo 2, que produz dois cards ligados, visíveis e mescláveis. É a mesma troca que este ADR faz em todos os outros pontos: **duplicata visível em vez de lead engolido**.
+- **A constraint arbitra, nunca um `SELECT` anterior.** Sob concorrência, dois `check-then-insert` simultâneos passam ambos pelo `SELECT` — só o índice único decide.
+
+  O mecanismo é **`INSERT ... ON CONFLICT DO NOTHING RETURNING id`**, e não capturar a exceção de violação. Em Postgres, qualquer erro dentro de um bloco de transação **aborta a transação inteira**: todo comando seguinte responde `current transaction is aborted`, e capturar a exceção em TypeScript não desfaz isso, porque o estado ruim está no servidor. O worker precisa continuar depois de detectar a duplicata — atualizar `raw`, incrementar tentativas, registrar o reenvio na timeline —, e todos esses comandos viriam depois do insert que falhou, na mesma transação. Seria o caminho **normal** deste ADR quebrando com um erro que nem menciona duplicata.
+
+  Com `ON CONFLICT DO NOTHING`, o conflito não levanta erro e nada aborta: `RETURNING` vazio **é** o sinal de retransmissão, numa ida só ao banco. A chave começa por `workspace_id`, então um conflito só pode acontecer dentro do mesmo tenant — a constraint nunca vira oráculo de existência entre workspaces.
 
 ## Mecanismo 2 — "é seguramente o mesmo financiamento?"
 
@@ -75,16 +83,36 @@ Perder lead por mapeamento torto é o pecado capital de quem compra mídia; o ma
 
 - Retransmissão com a mesma chave idempotente continua inerte e permanece associada à mesma Oportunidade. Isso é o mecanismo 1, não este.
 - Uma submissão genuinamente nova **sempre cria Oportunidade**. Nenhum lead espera decisão humana para entrar no funil.
-- Quando já existe Oportunidade semelhante para a mesma Pessoa, a nova nasce **ligada** à anterior por um `IntakeReview(POSSIBLE_DUPLICATE)`, visível nos dois cards. O atendimento pode começar imediatamente em qualquer um dos dois.
+- **O gatilho é mesma Pessoa + Oportunidade em aberto não mesclada** — não semelhança de financiamento. A nova nasce **ligada** à anterior por um `IntakeReview(POSSIBLE_DUPLICATE)`, visível nos dois cards. O atendimento pode começar imediatamente em qualquer um dos dois.
+
+  **Supersede "mesma Pessoa + financiamento semelhante".** Faltar tipo, instituição e parcela é entrada normal e sem marcador — é o caso mais comum de todos, e um formulário de LP com nome e telefone é um lead perfeitamente válido. Avaliada contra o vazio, a semelhança dá falso, e as duas Oportunidades da mesma pessoa nasceriam sem ligação nenhuma: dois cards, dois atendentes, mesmo telefone, nenhum aviso — o cenário que a ligação existe para impedir, escapando por baixo dela no caso majoritário.
+
+  Há uma incoerência mais funda em usar financiamento como gatilho: este mesmo ADR declara, mais abaixo, que esses campos **não são prova** e que nenhum deles é discriminador universal. O que não basta para o humano concluir não basta para a máquina decidir se o humano será avisado. Eles continuam sendo o que sempre foram — o que a tela mostra para distinguir um card do outro —, e deixam de ser portão.
+
+  O custo é assimétrico, como em todo o resto deste desenho: um marcador a mais custa um clique em `NEW_FINANCING` e não bloqueia nada; um marcador a menos custa dois atendentes ligando para o mesmo cliente, e ninguém descobre.
 - O gestor resolve quando quiser, com três saídas auditáveis e não destrutivas:
   1. `NEW_FINANCING`: confirma que são contratos distintos; a ligação some, as duas Oportunidades seguem independentes;
-  2. `SAME_FINANCING`: mescla — a Oportunidade mais nova recebe `merged_into_opportunity_id` apontando para a canônica, sai das vistas ativas, e seu `LeadSubmission` passa a contar como reentrada na timeline da canônica;
+  2. `SAME_FINANCING`: mescla — a Oportunidade mais nova recebe `merged_into_opportunity_id` apontando para a canônica, sai das vistas ativas, e seu `LeadSubmission` é **repontado** para a canônica, onde vira reentrada na timeline;
   3. `INVALID_OR_SPAM`: arquiva com motivo, sem exclusão física.
-- `arrived_at` é sempre o `received_at` real do envio. Como nada fica retido, não existe relógio distorcido por tempo em fila.
+- `arrived_at` é o instante em que a Oportunidade passa a existir. Para todo lead que entra direto, isso é o `received_at` do envio, e nada muda: como nada fica retido, não existe relógio distorcido por tempo em fila.
+
+  **A quarentena é a exceção, porque é o único lugar do sistema onde algo fica retido** — a premissa da frase acima não vale ali. Um lead liberado três dias depois com `arrived_at` de três dias atrás nasce estourado e **nunca deixa de estar**: não há ação humana que zere aquele relógio. Isso não é alerta, é ruído permanente, e alerta que não se resolve mata o sinal dos vizinhos. Para lead liberado da quarentena, `arrived_at` é o instante da **liberação**.
+
+  Nada se perde: o `received_at` continua no `LeadSubmission` e no `IntegrationEvent` como verdade sobre a origem, e a demora é medível por `liberação − recebimento` — que é métrica de quarentena, e pertence ao alerta próprio dela em Integrações, não ao relógio de atendimento.
 
 **Considered option (rejeitada): reter o envio em fila antes de criar a Oportunidade.** Mais correto no cadastro e desastroso na operação. A prova de "mesmo financiamento" exigida seria uma referência estável de contrato — que **formulário de Ads não fornece**. Na prática, toda segunda submissão da mesma Pessoa cairia numa fila manual, e lead de mídia paga apodrece em minutos, não em dias. Numa operação cujo SLA começa em `arrived_at`, pôr trabalho humano bloqueante no caminho crítico troca um erro barato e reversível (dois cards que se mesclam) por um caro e invisível (lead quente parado numa tela que o comercial não abre).
 
 **Custo assumido:** mesclar depois é mais trabalho de schema do que decidir antes — exige `merged_into_opportunity_id`, exige que toda listagem ativa filtre mesclados, e aceita duplicata temporária visível. É o preço de nunca segurar um lead.
+
+### Mesclagem é transferência; o ponteiro é lápide
+
+O registro absorvido **para de ser alvo de escrita**. Tudo que estava pendurado nele é repontado para a canônica dentro da mesma transação da mesclagem. `merged_into_opportunity_id` e `merged_into_person_id` servem para exatamente duas coisas — tirar das vistas ativas e preservar a trilha — e para nenhuma terceira: **eles nunca redirecionam leitura**.
+
+Sem isso, o registro absorvido continua recebendo escrita que ninguém vê. O `LeadSubmission` de uma Oportunidade mesclada segue sendo alvo de retransmissão, e o "reenvio recebido" iria para a linha do tempo de um card que a tabela de Leads acabou de esconder: o evento aconteceu, foi gravado, e nem quem decidiu a mesclagem fica sabendo. A cada fase o problema se multiplicaria — atividade, mensagem, documento, cada um herdando a mesma pergunta.
+
+A alternativa, seguir o ponteiro na leitura, transfere o trabalho para **toda** consulta futura, e a que esquecer mostra dado de card morto sem sintoma. Transferir resolve uma vez, no único lugar que já sabe que a mesclagem está acontecendo.
+
+Daí um invariante verificável: **nenhum registro ativo aponta para um registro mesclado.** Vale como varredura no Seam 3, na mesma família da varredura de policies — é o que pega o dia em que uma fase futura criar uma tabela nova e esquecer de tratar mesclagem, coisa que nenhum teste de feature detecta, porque nenhuma rota toca a combinação.
 
 Não há índice único parcial por Pessoa + tipo de financiamento. Duas Oportunidades abertas da mesma Pessoa são estado legítimo, não anomalia a impedir.
 
@@ -96,8 +124,10 @@ Não há índice único parcial por Pessoa + tipo de financiamento. Duas Oportun
 - Telefone pode identificar automaticamente apenas quando aponta de forma inequívoca para uma Pessoa e nenhuma outra chave contradiz essa associação.
 - E-mail isolado permanece chave fraca e não autoriza fusão automática.
 - **Quando as chaves recebidas apontam para Pessoas diferentes, cria-se uma Pessoa nova** com os contatos daquele envio, a Oportunidade nasce nela, e um `IntakeReview(IDENTITY_CONFLICT)` registra as candidatas. Nenhuma chave vence por prioridade fixa, e nenhum vínculo errado é criado — porque nenhum vínculo com cadastro existente é criado.
-- A resolução manual mescla a Pessoa nova numa candidata ou confirma que são pessoas distintas. A mesclagem transfere contatos e Oportunidades para a canônica e deixa `merged_into_person_id` na absorvida; identificadores e histórico permanecem auditáveis, sem exclusão silenciosa.
+- A resolução manual mescla a Pessoa nova numa candidata ou confirma que são pessoas distintas. A mesclagem transfere contatos e Oportunidades para a canônica e deixa `merged_into_person_id` na absorvida; identificadores e histórico permanecem auditáveis, sem exclusão silenciosa. A Pessoa absorvida fica sem contato algum, e por isso a resolução de identidade nunca mais a alcança.
+- **Mesclar Pessoas reavalia a duplicidade.** Se a canônica passa a ter duas Oportunidades em aberto que nunca estiveram ligadas, o `POSSIBLE_DUPLICATE` é registrado ali. Antes da mesclagem eram duas pessoas e não havia o que marcar; depois dela você **sabe** que é a mesma pessoa com dois cards vivos — que é precisamente a condição sinalizada. Sem essa reavaliação, a mesclagem produz o par mudo que o mecanismo 2 existe para eliminar.
 - Sem nenhuma chave de contato não se cria Person: o evento permanece em quarentena. Este é o **único** caso em que a ingestão não produz Oportunidade — e ele não é dúvida, é impossibilidade de contato.
+- **Sair da quarentena exige ao menos um contato**, e essa regra não tem exceção manual. Liberar um envio sem telefone e sem e-mail criaria uma `Person` sem nenhuma chave — que nunca casará com nada, porque a resolução de identidade só trabalha com contatos e CPF — e uma Oportunidade que nenhum atendente consegue atender, com relógio correndo. A ação da tela é **completar e liberar**, com o payload cru exibido ao lado: o caso real por trás do pedido de "liberar assim mesmo" é o contato ter chegado num campo que o mapeamento não mapeou, e a resposta certa para isso é digitar o que se está lendo.
 
 Formulários de Ads raramente trazem CPF; por isso a identidade não depende dele, mas essa ausência também não transforma telefone em autoridade absoluta.
 
@@ -119,7 +149,9 @@ CRM é fonte de verdade (`sintese-final.md` §17). Telefone em **E.164**, CPF s�
 
 Como nada fica retido, **não existe fila que esconde leads**. A revisão é um marcador no card, e a tela de Leads é a superfície principal.
 
-- O lead com pendência **aparece normalmente na tabela de Leads**, com um marcador visível de identidade em conflito ou possível duplicado. Ele pode ser atribuído e atendido antes de qualquer resolução.
+- O lead com pendência **aparece normalmente na tabela de Leads**. Ele pode ser atribuído e atendido antes de qualquer resolução.
+- **Um lead, um ícone.** Todos os avisos de um lead — sem telefone, identidade em conflito, possível duplicado, e o que as fases seguintes acrescentarem — são alcançados por um **único** ponto de entrada na linha da tabela e no card, que abre a lista. Nunca um rótulo por tipo espalhado pela linha: com três avisos são três rótulos, e a tabela de triagem em volume alto deixa de ser legível justamente quando mais precisa ser. Se há três avisos, é um ícone com contagem. Esta regra vale para todo aviso futuro, não só para os desta fatia.
+- Os **contadores-filtro** continuam no topo da tabela e continuam por tipo. São perguntas diferentes: o contador responde "quais leads têm este aviso" e vive fora da linha; o ícone responde "o que este lead tem".
 - Um contador-filtro na própria tabela de Leads leva às pendências, no mesmo padrão do contador de "sem telefone" — o gestor resolve no contexto do lead, não numa tela técnica de Integrações.
 - Ao atribuir ou abrir um card com possível duplicado, a UI mostra a outra Oportunidade e o atendente responsável. É isso que impede dois atendentes ligando para o mesmo cliente: **visibilidade, não bloqueio**.
 - A comparação mostra lado a lado o envio bruto/normalizado, Pessoas candidatas e a Oportunidade semelhante.
@@ -138,18 +170,20 @@ Persistir antes de responder é inegociável. O evento nasce com despacho penden
 - `jobId` é determinístico e derivado do `IntegrationEvent.id`, tornando republicação segura.
 - O job carrega apenas identificadores técnicos e `workspace_id`, nunca o payload com PII; o worker lê o evento no PostgreSQL sob RLS.
 - Marcar como despachado antes da confirmação do BullMQ é proibido. Publicar duas vezes é tolerado pela idempotência do job e do worker.
-- O dispatcher aplica retry com backoff e não depende de um job repetível guardado no próprio Redis para descobrir pendências; sua fonte é o PostgreSQL.
+- O dispatcher aplica retry com backoff e não depende de um job repetível guardado no próprio Redis para descobrir pendências; sua fonte é o PostgreSQL, lida por `private.claim_pending_events` (ADR-0006 regra 9), que devolve `(id, workspace_id)` e nada mais.
 - O botão “reprocessar” recoloca o evento no mesmo fluxo de despacho, sem caminho paralelo.
 
 `IntegrationEvent` é a fonte única da tela de Integrações para recebimento, despacho, processamento, falha e reprocessamento. Estado no Redis é operacional e nunca a fonte de verdade.
 
 ### A resolução do token é cross-tenant por natureza
 
-O handler precisa descobrir **qual** workspace pertence àquele token — ou seja, faz uma consulta **antes** de saber o workspace, e por isso **antes** de poder setar `app.workspace_id`. É o único ponto do sistema que legitimamente não tem contexto de tenant, e ele colide de frente com o [ADR-0006](./0006-rls-duas-camadas-guc-worker.md).
+O handler precisa descobrir **qual** workspace pertence àquele token — ou seja, faz uma consulta **antes** de saber o workspace, e por isso **antes** de poder setar `app.workspace_id`. Ela colide de frente com o [ADR-0006](./0006-rls-duas-camadas-guc-worker.md).
 
 Resolver dando bypass de RLS ao app seria destruir a rede inteira por causa de uma consulta. A saída é uma **função `SECURITY DEFINER` em schema privado** que recebe o hash do token e devolve o `workspace_id`, com `EXECUTE` revogado de todo papel que não seja o do app. Superfície mínima, auditável, e o resto do sistema continua sem bypass.
 
-Lookup por hash indexado, **sem cache** — token revogado precisa parar de funcionar imediatamente.
+**Não é a única consulta sem tenant.** O dispatcher, que procura pendências de todos os workspaces sem sessão e sem job prévio, tem exatamente o mesmo formato — e um "claim por evento" seria circular, porque para setar o claim ele precisa do `workspace_id` do evento, e para ler o `workspace_id` ele precisaria do claim. O provisionamento de workspace é o terceiro caso. As três recebem o mesmo remédio e formam **lista fechada**, enumerada e verificada no ADR-0006 regra 9. O que cada uma devolve importa tanto quanto quem pode chamá-la: `claim_pending_events` devolve `(id, workspace_id)` e nunca o `raw`, que carrega CPF e telefone.
+
+Lookup por hash indexado, **sem cache** — token revogado precisa parar de funcionar imediatamente. O hash é **SHA-256 determinístico**, e isso não é descuido: salt e key-stretching existem contra segredo de baixa entropia escolhido por humano, e um token de integração é 256 bits de CSPRNG, onde não há o que forçar. Hash adaptativo é salgado por linha, o que torna impossível procurar por índice — restaria carregar todas as conexões e verificar uma a uma, na rota mais quente do sistema, com cache proibido. Salgar um valor inadivinhável não compra segurança; compra latência.
 
 ### Região
 

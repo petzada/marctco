@@ -18,6 +18,8 @@ Nesta fatia os funis são **semeados, não editáveis pela interface** — mas o
 - [ ] Invariante validável: todo funil em uso tem **exatamente uma** `ENTRY` e **ao menos uma** `CLOSING`
 - [ ] Invariante validável: **exatamente um** funil comercial por workspace tem `is_default = true`
 - [ ] `CLOSING` é papel de fluxo, não de resultado — não confunde com `status: WON | LOST`
+- [ ] A **definição** dos funis padrão vive em `packages/domain`, como dado puro testável no Seam 1
+- [ ] Essa definição tem **dois consumidores e uma cópia só**: o `db seed` de desenvolvimento e o provisionamento de produção (ticket 17). `prisma db seed` é script de desenvolvimento e **não roda quando um cliente real cria workspace** — semear só por ele deixaria todo workspace de verdade sem funil
 - [ ] Seed cria funil comercial marcado como padrão, com etapas razoáveis incluindo `ENTRY` e `CLOSING`
 - [ ] Nenhuma FK ou regra escolhe funil a partir de `FinancingType`
 - [ ] O seed é script de seed do Prisma, **não** migração

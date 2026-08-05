@@ -33,11 +33,13 @@ O isolamento entre workspaces é garantido pelo banco, não por disciplina de c�
 
 1. Como membro de uma assessoria, quero entrar no CRM com e-mail e senha, para acessar os dados do meu workspace.
 2. Como membro de um único workspace, quero entrar direto na aplicação sem escolher workspace, porque escolher entre uma opção é ruído.
-3. Como membro de mais de um workspace (staff marctco), quero um seletor de workspace, para alternar entre clientes.
+3. Como membro de mais de um workspace (acesso de suporte da marctco), quero um seletor de workspace, para alternar entre clientes — e quero que cada aba mantenha o seu contexto, para não agir num cliente achando que estou noutro.
 4. Como dono da assessoria, quero que meu workspace represente o grupo inteiro — matriz e filiais — para não multiplicar contas, integrações e configuração.
 5. Como dono da assessoria, quero que meus dados sejam invisíveis a qualquer outra assessoria cliente da marctco, mesmo que haja um erro de programação numa consulta.
 6. Como membro, quero que meu papel (OWNER, ADMIN, MANAGER, ATTENDANT, VIEWER) fique registrado na minha associação ao workspace, para que as permissões possam se apoiar nele.
-7. Como equipe técnica da marctco, quero criar workspaces e liberar acesso manualmente, porque não há cadastro autônomo nem cobrança no aplicativo.
+7. Como equipe técnica da marctco, quero criar **o usuário** no painel do Supabase e marcá-lo como apto a provisionar, porque não há cadastro autônomo nem cobrança no aplicativo.
+7b. Como dono da assessoria, quero que meu primeiro acesso crie meu workspace já utilizável — com meu vínculo de dono e um funil comercial padrão —, para não receber uma plataforma vazia que não aceita lead.
+7c. Como equipe técnica da marctco, quero que um usuário que apenas perdeu a associação **não** provisione workspace novo, para que ex-colaborador demitido não vire dono de um workspace fantasma.
 
 ### Financiamento e funis
 
@@ -71,7 +73,8 @@ O isolamento entre workspaces é garantido pelo banco, não por disciplina de c�
 
 26. Como gestor, quero que **todo** lead com contato vire uma Oportunidade na etapa de entrada do funil comercial de destino, mesmo carregando pendência, para que nenhum lead quente espere decisão humana para ser atendido.
 27. Como gestor, quero que o mesmo cliente com um novo financiamento em outra data gere uma **nova** Oportunidade, porque é um negócio novo.
-28. Como gestor, quero que mesma Pessoa + tipo de financiamento apenas ligue as duas Oportunidades com um marcador, porque a pessoa pode ter dois contratos legítimos da mesma categoria.
+28. Como gestor, quero que duas Oportunidades **em aberto** da mesma Pessoa sejam sempre ligadas por um marcador, mesmo quando não veio dado nenhum de financiamento, porque é justamente aí que dois atendentes ligariam para o mesmo cliente sem nenhum aviso.
+28b. Como gestor, quero que o dado de financiamento sirva para eu **distinguir** os dois cards na tela, e não para decidir se serei avisado, porque ele não é prova.
 29. Como gestor, quero decidir depois entre financiamento novo, mesmo financiamento ou inválido/spam, sem que a decisão pendente segure o atendimento de nenhum dos dois cards.
 30. Como gestor, quero que as três resoluções preservem o envio e deixem trilha de auditoria; quando for o mesmo financiamento, quero que os cards sejam mesclados sem exclusão e a reentrada apareça na timeline.
 30b. Como atendente, quero ver, ao abrir um lead com possível duplicado, qual é a outra Oportunidade e quem a atende, para não ligar para o mesmo cliente que um colega.
@@ -88,8 +91,9 @@ O isolamento entre workspaces é garantido pelo banco, não por disciplina de c�
 
 36. Como gestor, quero que um lead sem telefone e sem e-mail seja guardado e mostrado na tela de Integrações, e não jogado fora, porque nenhum lead pago pode sumir.
 37. Como gestor, quero que um lead sem telefone e sem e-mail **não** entre no funil, porque não há como atendê-lo nem identificá-lo.
-38. Como gestor, quero poder completar os dados de um lead em quarentena e liberá-lo para o funil.
-39. Como gestor, quero poder liberar um lead em quarentena para o funil mesmo sem completar os dados, se eu julgar que vale a pena.
+38. Como gestor, quero completar os dados de um lead em quarentena e liberá-lo para o funil, vendo o payload cru ao lado do formulário, porque o contato costuma ter chegado num campo que o mapeamento não mapeou.
+39. Como gestor, quero que liberar exija ao menos um contato, para que eu não crie um cadastro que nunca casa com nada e um card que ninguém consegue atender.
+39b. Como gestor, quero que o lead liberado da quarentena comece seu relógio de atendimento **na liberação**, para que ele não nasça com alerta estourado que nenhuma ação minha resolve.
 40. Como gestor, quero que um lead que só tem e-mail entre no funil normalmente, mas marcado, porque não dá para chamar no WhatsApp nem ligar.
 41. Como gestor, quero que a falta de CPF, instituição, parcela ou tipo de financiamento **não** marque nem segure o lead, porque o atendimento não depende deles.
 42. Como gestor, quero um contador de leads sem telefone na própria tabela de Leads, que filtre ali mesmo, para corrigir no contexto do lead e não numa tela técnica.
@@ -103,6 +107,7 @@ O isolamento entre workspaces é garantido pelo banco, não por disciplina de c�
 47. Como gestor, quero distinguir na tabela dois leads da mesma pessoa, porque uma pessoa pode ter dois financiamentos legítimos em revisional.
 48. Como gestor, quero ver a origem do lead (Meta, Google ou landing page) no próprio registro, para saber que campanha está produzindo.
 49. Como membro de um workspace, quero que a tabela de Leads mostre exclusivamente leads do meu workspace, sempre.
+49b. Como gestor, quero alcançar **todos** os avisos de um lead por um único ícone na linha e no card, e não um rótulo por tipo espalhado pela tabela, porque com três avisos a lista de triagem deixa de ser legível justamente quando mais preciso dela.
 
 ### Integrações
 
@@ -145,7 +150,7 @@ Entidades da fatia:
 
 | Model | Notas |
 |---|---|
-| `Workspace` | Tenant do grupo; timezone America/Sao_Paulo |
+| `Workspace` | Tenant do grupo; timezone America/Sao_Paulo; `slug` UUIDv4 único, usado no caminho da URL ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)) |
 | `WorkspaceMember` | `role: OWNER \| ADMIN \| MANAGER \| ATTENDANT \| VIEWER` |
 | `WorkspaceSettings` | Configuração operacional do gestor |
 | `WorkspaceFlag` | Liberação por workspace; ausência significa desligado |
@@ -160,7 +165,7 @@ Entidades da fatia:
 | `IntakeReview` | `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE`, resolução e motivo auditáveis; marcador, nunca bloqueio |
 | `Opportunity` | `status`, `area`, `stage_id`, `arrived_at`, `assigned_user_id`, `missing_phone`, `merged_into_opportunity_id`, financiamento opcional |
 
-`arrived_at` é gravado na ingestão **mesmo sem tela de SLA nesta fatia** — esse instante não é reconstruível depois, e perdê-lo inviabiliza a Fase 3 para todo lead já recebido.
+`arrived_at` é gravado **mesmo sem tela de SLA nesta fatia** — esse instante não é reconstruível depois, e perdê-lo inviabiliza a Fase 3 para todo lead já recebido. Ele marca **quando a Oportunidade passa a existir**: igual ao `received_at` no caminho direto, igual ao instante da liberação para lead que passou pela quarentena. O `received_at` continua no `LeadSubmission` e no `IntegrationEvent` como verdade sobre a origem, e a demora em quarentena é medível pela diferença entre os dois.
 
 `amount` fica para a Fase 2: coluna anulável é aditiva e não custa nada acrescentar depois.
 
@@ -174,7 +179,11 @@ Duas camadas ([ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md)): e
 - `FORCE ROW LEVEL SECURITY` em toda tabela de negócio — `ENABLE` sozinho não se aplica ao dono da tabela, e o dono é o papel das migrações.
 - Papéis separados: um para migrações (dono, DDL), um sem bypass para app e worker, `service_role` só para ferramenta interna.
 - `SET LOCAL` dentro de transação, nunca `SET`.
+- **Papéis criados dentro das migrations**, idempotentes e prefixados (`marctco_migrator`, `marctco_app`, `marctco_worker`), para que CI, Docker local e produção derivem da mesma fonte. Senha nunca numa migration — o arquivo está no git.
+- **App e worker abortam o boot** se o papel conectado for superusuário, tiver `BYPASSRLS` ou for dono de tabela de negócio. É a única verificação que pega a connection string errada no Railway, porque nenhum CI sabe qual string está lá.
+- **`SECURITY DEFINER` só em schema `private`, lista fechada de três**: `resolve_workspace_by_token_hash`, `claim_pending_events` e `provision_workspace`. Nenhuma delas devolve payload — `claim_pending_events` devolve `(id, workspace_id)` e nada mais.
 - O browser **não** acessa o Postgres direto. Supabase Auth é autenticação e nada mais.
+- Na sessão do navegador o workspace vem do segmento de URL e é **validado** contra `WorkspaceMember` antes do GUC; o que não corresponde a uma associação devolve 404 e fica registrado. Na ingestão o `workspace_id` do corpo é **ignorado**. Validar e ignorar não são a mesma regra ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)).
 - O worker roda **sob RLS**, com o claim vindo do job. Se o evento não pertencer àquele workspace, a leitura devolve zero linhas e o job falha alto.
 - Transação **nunca** envolve chamada de rede externa.
 
@@ -197,7 +206,9 @@ Nunca 409. Nenhum campo de negócio é obrigatório. O tenant vem do token; `wor
 
 O handler faz exatamente três coisas: **resolve o token → persiste o evento/outbox em commit → responde 200**. O dispatcher independente publica depois no BullMQ com `jobId` determinístico. O handler não abre conexão com Redis.
 
-A resolução do token é a única consulta do sistema sem contexto de tenant — ela existe para descobrir o tenant. Resolvida por função `SECURITY DEFINER` em schema privado, com `EXECUTE` revogado de todo papel que não seja o do app. Lookup por hash indexado, **sem cache**: token revogado precisa parar de funcionar na hora.
+A resolução do token é uma das **três** consultas do sistema sem contexto de tenant — as outras duas são a descoberta de pendências pelo dispatcher e o provisionamento de workspace. Todas em `SECURITY DEFINER` no schema `private`, lista fechada, com `EXECUTE` revogado de todo papel que não seja o do app. Lookup por hash indexado, **sem cache**: token revogado precisa parar de funcionar na hora.
+
+O hash é **SHA-256 determinístico** — não bcrypt nem argon2. Hash adaptativo é salgado por linha, o que impede busca por índice: restaria carregar todas as conexões e verificar uma a uma, na rota mais quente do sistema, com cache proibido. Salt e key-stretching existem contra segredo de baixa entropia escolhido por humano; o token é 256 bits de CSPRNG, e não há o que forçar.
 
 Railway e Supabase na mesma região.
 
@@ -207,14 +218,14 @@ O contrato canônico `v1` é validado de forma tolerante no worker e produz `Inb
 
 O adapter conhece a **forma canônica**; o domínio conhece o **significado**. A Pluga faz o De→Para de Meta/Google; o conector sintetiza `external_lead_id` quando necessário. O domínio normaliza, decide quarentena, resolve inequivocamente ou abre revisão, e só então cria/associa Opportunity.
 
-`external_lead_id` é `NOT NULL` sempre — em Postgres `NULL` não colide com `NULL`, e sem valor a constraint não deduplicaria nada.
+`external_lead_id` é `NOT NULL` sempre — em Postgres `NULL` não colide com `NULL`, e sem valor a constraint não deduplicaria nada. Quando a origem não fornece ID, o conector usa o **`IntegrationEvent.id`**: sem relógio dentro, único por requisição, estável sob qualquer reprocessamento.
 
 ### Idempotência
 
 Dois mecanismos, em duas tabelas, respondendo perguntas diferentes ([ADR-0007](../../docs/adr/0007-ingestao-idempotencia.md)):
 
-1. **`UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission`** — "já recebi esta transmissão?". Implementado como **insert-and-catch**, nunca check-then-insert: sob concorrência só a constraint arbitra.
-2. **Identidade confiável do financiamento** — mesma Pessoa + tipo/banco não basta. Sem referência estável do mesmo contrato, a Oportunidade **é criada** e um `POSSIBLE_DUPLICATE` liga as duas. O gestor resolve depois como `NEW_FINANCING`, `SAME_FINANCING` (mescla por `merged_into_opportunity_id`) ou `INVALID_OR_SPAM`, sem apagar dados.
+1. **`UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission`** — "já recebi esta transmissão?". Sob concorrência só a constraint arbitra, nunca um `SELECT` anterior. O mecanismo é **`INSERT ... ON CONFLICT DO NOTHING RETURNING id`**, e não capturar a violação: em Postgres um erro aborta a transação inteira, e o worker precisa continuar depois — atualizar `raw`, incrementar tentativas, registrar o reenvio. `RETURNING` vazio **é** o sinal de retransmissão. A chave começa por `workspace_id`, então o conflito é sempre intra-tenant.
+2. **Duas Oportunidades em aberto da mesma Pessoa sempre se ligam** por um `POSSIBLE_DUPLICATE`, com ou sem dado de financiamento. Financiamento é discriminador na tela, nunca gatilho — este mesmo desenho declara que esses campos não são prova, e o que não basta para o humano concluir não basta para a máquina decidir se o humano será avisado. O gestor resolve depois como `NEW_FINANCING`, `SAME_FINANCING` (mescla por `merged_into_opportunity_id`) ou `INVALID_OR_SPAM`, sem apagar dados. Mesclar **Pessoas** reavalia a duplicidade entre as Oportunidades que a canônica passa a ter.
 
 Identidade da Person: CPF válido é forte mas opcional; telefone só associa sem contradição; e-mail isolado é fraco. Chaves que apontam para Pessoas diferentes criam **Pessoa nova** e registram `IDENTITY_CONFLICT` com as candidatas. `Person` preserva múltiplos telefones/e-mails. Sem contato, não cria Person.
 
@@ -226,9 +237,11 @@ Retransmissão atualiza `raw` e tentativas, registra na linha do tempo, e **não
 
 Sem telefone **e** sem e-mail → `QUARANTINED`, sem Person e sem Opportunity, visível em Integrações. Sem telefone (só e-mail) → entra no funil com `missing_phone`. Falta de CPF, tipo de financiamento, instituição ou parcela → entra normalmente, sem marcador.
 
+**Sair da quarentena exige ao menos um contato.** A ação da tela é "completar e liberar", com o payload cru ao lado — o caso real é o contato ter chegado num campo que o mapeamento não mapeou. Liberar vazio criaria `Person` sem chave, que nunca casa com nada, e card que ninguém atende. O `arrived_at` do lead liberado é o instante da **liberação**, não o do recebimento.
+
 `IntegrationEvent.status` é a fonte única da tela de Integrações — última sync, histórico e fila morta leem o mesmo campo. Sem estado paralelo no Redis para a UI consultar.
 
-Dispatcher consulta pendências no PostgreSQL, publica no BullMQ quando o Redis estiver disponível e é a mesma peça usada pelo botão “reprocessar”. LP é servidor-servidor; a durabilidade não depende de retentativa da origem.
+Dispatcher consulta pendências no PostgreSQL por `private.claim_pending_events`, publica no BullMQ quando o Redis estiver disponível e é a mesma peça usada pelo botão “reprocessar”. A descoberta precisa dessa função porque o dispatcher procura pendência de todos os workspaces sem sessão e sem job prévio: "claim por evento" seria circular, já que para setar o claim ele precisaria do `workspace_id` que só a leitura revela. LP é servidor-servidor; a durabilidade não depende de retentativa da origem.
 
 ### Feature flags
 
@@ -254,6 +267,12 @@ Prisma Client é gerado em `packages/db`; o `postinstall` precisa garantir `pris
 
 `DESIGN.md` é a lei visual. A tabela de Leads usa o componente de tabela de dados documentado, com numerais tabulares nas colunas de data. **O arquivo de tokens referenciado por `{token.refs}` não existe** e precisa ser criado a partir dos valores já documentados no `DESIGN.md`, antes do primeiro componente — o guia proíbe hex e px inline.
 
+**Um lead, um ícone.** Todos os avisos de um lead são alcançados por um único ponto de entrada na linha e no card, que abre a lista; três avisos são um ícone com contagem, nunca três rótulos. Os contadores-filtro continuam no topo e continuam por tipo — são perguntas diferentes. A regra vale para todo aviso que as fases seguintes acrescentarem.
+
+**Lacuna conhecida:** o `DESIGN.md` não documenta `popover` nem `tooltip`. Os componentes disponíveis são `button-icon`, `status-badge`, `dropdown-menu` e `modal`. A escolha entre reusar `dropdown-menu` e acrescentar um `popover` ao guia é do ticket 12, e precisa entrar no guia — não ser inventada dentro do componente.
+
+Toda rota autenticada vive sob `/workspace/:slug` ([ADR-0012](../../docs/adr/0012-contexto-de-tenant-na-url.md)); `/onboarding` fica fora do prefixo, porque ali ainda não há workspace.
+
 ---
 
 ## Testing Decisions
@@ -266,7 +285,7 @@ Ferramenta: Vitest.
 
 Funções puras, sem container, sem banco. Rápido o bastante para cobrir casos de borda em volume.
 
-Cobre: contrato `v1` tolerante a extras; normalização de telefone, CPF, e-mail e moeda; preservação de múltiplos contatos; quarentena; associação inequívoca; conflito de identidade; possível duplicado; síntese determinística de `external_lead_id`; três resoluções não destrutivas.
+Cobre: contrato `v1` tolerante a extras; normalização de telefone, CPF, e-mail e moeda; preservação de múltiplos contatos; quarentena; recusa de liberação sem contato; associação inequívoca; conflito de identidade; **possível duplicado disparado por duas Oportunidades em aberto da mesma Pessoa, inclusive sem dado nenhum de financiamento**; `external_lead_id` derivado do `IntegrationEvent.id` produzindo a **mesma** chave para o mesmo evento processado duas vezes; três resoluções não destrutivas; definição dos funis padrão consumida tanto pelo seed de desenvolvimento quanto pelo provisionamento.
 
 Este seam só existe porque `packages/domain` é puro. Se ele passar a importar Prisma, o seam morre.
 
@@ -274,7 +293,7 @@ Este seam só existe porque `packages/domain` é puro. Se ele passar a importar 
 
 `POST` no endpoint com token válido → commit do evento/outbox → 200 com Redis disponível ou indisponível → dispatcher → BullMQ real → worker → `Person`, revisão ou `Opportunity`. Postgres e Redis como service containers do GitHub Actions.
 
-Cobre: 200 em JSON autenticado; 401 em token inválido; 400 em corpo inválido; tenant pelo token; outbox persistida antes do 200; Redis fora mantendo despacho pendente; dispatcher recuperando e publicando uma vez por `jobId`; retransmissão inerte; múltiplos contatos preservados; conflito de identidade criando Pessoa nova **com** Oportunidade e marcador; mesma Pessoa + tipo sem prova criando Oportunidade **ligada** à anterior; cada uma das três resoluções, incluindo mesclagem por `merged_into_opportunity_id`; `arrived_at` sempre igual ao `received_at`; roteamento por `is_default` e por `target_pipeline_id`; quarentena sem contato; financiamento ausente sem bloquear.
+Cobre: 200 em JSON autenticado; 401 em token inválido; 400 em corpo inválido; tenant pelo token; outbox persistida antes do 200; Redis fora mantendo despacho pendente; dispatcher recuperando e publicando uma vez por `jobId`; **evento reprocessado depois de o Redis voltar não criando segunda Oportunidade**; retransmissão inerte, com a detecção por `ON CONFLICT DO NOTHING` permitindo que a transação **continue** e registre o reenvio; múltiplos contatos preservados; conflito de identidade criando Pessoa nova **com** Oportunidade e marcador; segunda Oportunidade em aberto da mesma Pessoa nascendo **ligada** à anterior mesmo sem dado de financiamento; cada uma das três resoluções, incluindo mesclagem por `merged_into_opportunity_id` com as FKs **repontadas**; mesclagem de Pessoas reavaliando a duplicidade; `arrived_at` igual ao `received_at` no caminho direto e igual à liberação para lead ex-quarentena; roteamento por `is_default` e por `target_pipeline_id`; quarentena sem contato; financiamento ausente sem bloquear; provisionamento criando Workspace, vínculo de dono e funil padrão **num commit só**.
 
 Redis real, e não processor inline, porque o seam precisa provar a independência entre aceite durável no PostgreSQL e despacho posterior no BullMQ.
 
@@ -284,7 +303,15 @@ Direto no banco, sem passar pela aplicação.
 
 Cobre: varredura de `pg_tables` e `pg_policies` exigindo, para **toda** tabela de negócio, RLS habilitada, RLS **forçada** e ao menos uma policy; leitura cross-workspace devolvendo zero linhas; escrita cross-workspace recusada; migrações aplicando limpas do zero; drift check entre `schema.prisma` e o banco migrado.
 
-Este seam é deliberadamente independente da fatia: seu propósito é reprovar a tabela que alguém criar daqui a meses e esquecer a policy. Um teste de feature nunca pega isso, porque nenhuma rota toca a tabela nova.
+Mais três varreduras, todas da mesma natureza — invariantes que nenhuma rota exercita:
+
+- **Atributos de papel:** o papel do app não é superusuário, não tem `BYPASSRLS` e não é dono de tabela de negócio.
+- **Lista fechada de `SECURITY DEFINER`:** enumerar as funções do banco e **reprovar qualquer uma fora das três** nomeadas no [ADR-0006](../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9. Sem esta varredura a lista é comentário, e a quarta função entra sem ninguém notar.
+- **Nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela.
+
+Este seam é deliberadamente independente da fatia: seu propósito é reprovar a tabela que alguém criar daqui a meses e esquecer a policy, ou a que a Fase 5 acrescentar sem tratar mesclagem. Um teste de feature nunca pega isso, porque nenhuma rota toca a combinação.
+
+**O drift check não substitui nada disso.** Ele compara o datamodel do Prisma com o banco, e o Prisma não modela policy, função, papel nem grant — ou seja, exatamente o SQL que carrega o modelo de segurança está fora do alcance dele. Uma policy derrubada à mão mantém o drift check verde.
 
 ---
 
@@ -294,6 +321,8 @@ WhatsMiau e mensagem automática de primeiro contato · atribuição de lead a a
 
 Nesta fatia os funis são **seedados**, não editáveis pela interface — o schema suporta edição desde já ([ADR-0009](../../docs/adr/0009-etapas-editaveis-papeis-e-status.md)), a tela vem depois.
 
+O **provisionamento** entra (ticket 17), mas as telas do wizard que coletam dados da empresa não: o que a fatia precisa é que o workspace nasça válido e utilizável. **Cadastro de colaboradores pelo gestor fica fora** — a fatia opera com o dono provisionado, e atribuição só chega na Fase 2. Quando entrar, vale a invariante que o ticket 17 já assume: colaborador nasce **com** o vínculo, e por isso nunca cai no caminho de provisionamento.
+
 Também fora: telemetria de produto (PostHog, Amplitude, Himetrica), conector nativo Meta/Google, mapeamento De→Para no CRM, compliance LGPD além do mínimo de segurança de acesso.
 
 ---
@@ -302,7 +331,7 @@ Também fora: telemetria de produto (PostHog, Amplitude, Himetrica), conector na
 
 **Verificações pendentes que precisam virar ticket antes de codar** (registradas em [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md#itens-registrados-como-abertos)):
 
-- **A7 encolheu.** Com Postgres em Docker local, `migrate dev` e o shadow database resolvem a autoria: a premissa não pode mais rachar. Resta confirmar no ticket 01, e é mecânico: `SET LOCAL` dentro de `$transaction` do Prisma e `pgbouncer=true` para prepared statements em pooling transaction-mode.
+- **A7 encolheu.** Com Postgres em Docker local, `migrate dev` e o shadow database resolvem a autoria: a premissa não pode mais rachar. Restam quatro confirmações mecânicas no ticket 01: `SET LOCAL` dentro de `$transaction` do Prisma · `pgbouncer=true` para prepared statements em pooling transaction-mode · o comportamento de `$transaction` diante de erro capturado, que é o motivo de `ON CONFLICT DO NOTHING` ter substituído "insert-and-catch" · o schema `private`, não declarado na datasource, não aparecer como drift.
 - **A6 é gate de deploy, não ticket de código.** Sem staging, o backup do Supabase é a única rede sob migração em produção — e PITR é add-on pago. Confirmar o que o plano free garante antes do primeiro `migrate deploy`.
 - **A10 (tokens do `DESIGN.md`) toca esta fatia**, porque há UI. Ticket mecânico, mas anterior ao primeiro componente.
 - A8 (se a Pluga registra 409 como sucesso) confirma o argumento sem mudar a decisão.

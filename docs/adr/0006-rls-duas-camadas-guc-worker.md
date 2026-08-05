@@ -37,9 +37,31 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
 6. **Transação nunca envolve I/O externo.** Chamada a OpenRouter, WhatsMiau ou assinatura fica **fora** da transação: ler numa transação, chamar o terceiro fora, escrever em outra. Segurar conexão durante HTTP de segundos esgota o pool e prende locks.
 
-7. **O GUC vem de `workspace_members`, validado no servidor.** Nunca de header, query string, body ou claim que o cliente possa influenciar. O browser não escolhe seu workspace — ele prova quem é, e o servidor resolve o resto.
+7. **O GUC vem sempre de `workspace_members`, validado no servidor.** Mas o que se faz com o valor que chega do cliente depende de haver ou não outra fonte de tenant, e as duas regras são diferentes:
+   - **Ingestão: ignorar.** O token já diz o workspace. `workspace_id` no corpo não tem valor nenhum e é descartado sem olhar.
+   - **Sessão do navegador: validar, nunca confiar.** Quem pertence a mais de um workspace precisa poder escolher, e a escolha viaja na requisição — não existe alternativa em HTTP sem estado. O servidor confere a escolha contra `workspace_members` antes de setar o GUC. Escolha que não corresponde a uma associação do usuário devolve **404**, nunca 403: distinguir "não existe" de "existe mas não é seu" confirma a existência do workspace alheio. A tentativa é registrada, porque usuário legítimo tentando isso é sinal.
+
+   Ignorar e validar não são a mesma regra. Escrever "o browser não escolhe seu workspace" sem essa distinção proíbe o próprio seletor. Onde a escolha mora é decisão do [ADR-0012](./0012-contexto-de-tenant-na-url.md).
 
 8. **O browser nunca acessa o Postgres direto.** TanStack Query chama rotas do Next; as rotas usam Prisma. Supabase Auth é **autenticação e nada mais**, não camada de dados. É o que permite um mecanismo único de isolamento valendo igual no app e no worker.
+
+9. **`SECURITY DEFINER` só em schema privado, e a lista é fechada.** Existem consultas que precisam acontecer **antes** de haver tenant, e por isso não podem passar por policy keiada no GUC. Elas não justificam bypass para o app inteiro: cada uma vira uma função `SECURITY DEFINER` em schema `private`, com superfície mínima, `EXECUTE` revogado de todo papel que não seja o do app, e `search_path` fixado na própria função.
+
+   São **três**, e nenhuma a mais:
+
+   | Função | Por que não tem tenant | O que devolve |
+   |---|---|---|
+   | `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `workspace_id` |
+   | `claim_pending_events` | O dispatcher procura pendência de todos os workspaces, sem sessão e sem job prévio | Só `(id, workspace_id)` — nunca `raw`, que carrega CPF e telefone |
+   | `provision_workspace` | Cria o Workspace, o vínculo do primeiro membro e o funil padrão; o tenant ainda não existe | `workspace_id` |
+
+   O que **devolvem** importa tanto quanto quem pode chamá-las: uma função sem tenant que devolvesse payload seria um vazamento cross-tenant com aparência de recurso. O Seam 3 enumera `SECURITY DEFINER` no banco e **reprova qualquer função fora desta lista** — sem isso, a lista é comentário, e a quarta função entra sem ninguém notar.
+
+10. **O app e o worker se recusam a subir com o papel errado.** Toda a defesa deste ADR depende de um valor numa variável de ambiente, e nenhuma das duas camadas olha para lá. O painel do Supabase entrega, pronta para copiar, a connection string do `postgres` — colá-la no Railway produz exatamente o cenário de abertura deste documento: RLS habilitada, policies escritas, isolamento zero, sem nenhum sinal de erro, com o CI inteiro verde.
+
+    Por isso, no boot, cada processo consulta o papel com que se conectou e **aborta a inicialização** se for superusuário, se tiver `BYPASSRLS`, ou se for dono de alguma tabela de negócio. É a mesma lógica com que o [ADR-0010](./0010-migrations-e-ci-cd.md) mantém a string de produção fora do `.env`: transformar o erro provável em **impossível de servir**, não apenas em proibido.
+
+    O CI não consegue fazer essa verificação — ele não sabe qual string está no Railway. Só o processo em produção sabe, e ele é o único que pode se recusar a atender.
 
 ## Verificar antes da Fase 0
 

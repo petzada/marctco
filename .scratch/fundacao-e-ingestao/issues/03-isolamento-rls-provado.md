@@ -23,5 +23,11 @@ Ver [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md). Atenção
 - [ ] **Seam 3**: varredura de `pg_tables` e `pg_policies` reprova qualquer tabela de negócio sem RLS habilitada, sem `FORCE` ou sem policy
 - [ ] Teste: leitura cross-workspace devolve zero linhas
 - [ ] Teste: escrita cross-workspace é recusada
+- [ ] **Os testes de isolamento conectam com o papel do app**, não com o dono — rodar como dono com `FORCE` passa sem provar que o papel do app carece de `BYPASSRLS`
+- [ ] **Seam 3 assere atributos de papel**: o papel do app não é superusuário, não tem `BYPASSRLS` e não é dono de tabela de negócio
+- [ ] **Seam 3 enumera `SECURITY DEFINER`** e reprova qualquer função fora da lista fechada de três do [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9 — sem isso a lista é comentário
+- [ ] Schema `private` existe, com `EXECUTE` das funções revogado de todo papel exceto o do app, e `search_path` fixado em cada função
+- [ ] **Seam 3 verifica que nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
 - [ ] Os testes rodam no CI e barram o merge
 - [ ] Uma tabela nova criada sem policy **reprova** o CI — verificado deliberadamente
+- [ ] Fica registrado no ticket que **o drift check não cobre policy, função, papel nem grant**: é este seam que cobre, e os dois não se substituem

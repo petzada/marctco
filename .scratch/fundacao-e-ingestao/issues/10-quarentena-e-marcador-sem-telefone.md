@@ -22,4 +22,6 @@ O marcador significa **exatamente uma coisa**: não dá para chamar no WhatsApp 
 - [ ] Falta tipo de financiamento, instituição ou parcela → entra no funil **sem** marcador
 - [ ] Nenhum payload recebido é descartado, em nenhuma hipótese
 - [ ] O estado de quarentena vive no evento de integração; o marcador vive na Oportunidade — os dois **não** são o mesmo campo
-- [ ] A ação de completar ou liberar lead em quarentena está no ticket 14 (interface)
+- [ ] Sair da quarentena **exige ao menos um contato** — não existe liberação de envio sem telefone e sem e-mail. A regra tem uma dona só: liberar vazio criaria `Person` sem chave, que a resolução de identidade nunca mais alcança, e card que ninguém consegue atender
+- [ ] O `arrived_at` do lead liberado é o instante da **liberação**; a quarentena é o único lugar do sistema onde algo fica retido, e um relógio que nasce estourado não tem como ser zerado ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
+- [ ] A interface de completar e liberar está no ticket 14

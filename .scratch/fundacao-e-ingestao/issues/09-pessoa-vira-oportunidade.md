@@ -19,12 +19,12 @@ A idempotência tem um dono só: a constraint mais o worker. Nunca um pré-check
 - [ ] `LeadSubmission` com `source`, `external_lead_id`, `raw` e `received_at`
 - [ ] `external_lead_id` é `NOT NULL` — em Postgres `NULL` não colide com `NULL`, e sem valor a constraint não deduplicaria nada
 - [ ] `UNIQUE(workspace_id, source, external_lead_id)`
-- [ ] Implementado como **insert-and-catch**, nunca check-then-insert; violação de constraint é caminho normal, não erro
+- [ ] A constraint arbitra, nunca um `SELECT` anterior — mas o mecanismo é **`INSERT ... ON CONFLICT DO NOTHING RETURNING id`**, não capturar a violação: em Postgres o erro aborta a transação inteira e o worker precisa seguir depois ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)). `RETURNING` vazio é o sinal de duplicata
 - [ ] `Opportunity` criada com `status: OPEN`, `area: COMMERCIAL`, na etapa de papel `ENTRY` do funil de destino
 - [ ] Funil de destino é `IntegrationConnection.target_pipeline_id` quando presente, senão o `Pipeline` comercial com `is_default = true`
 - [ ] `FinancingType` **não** participa da escolha do funil, em nenhuma hipótese
-- [ ] Mesma Pessoa + financiamento semelhante cria a Oportunidade **e** um `IntakeReview(POSSIBLE_DUPLICATE)` ligando-a à anterior — nunca impede a criação
-- [ ] `arrived_at` gravado no momento da ingestão, sempre igual ao `received_at` do envio
+- [ ] Segunda Oportunidade **em aberto** da mesma Pessoa cria a Oportunidade **e** um `IntakeReview(POSSIBLE_DUPLICATE)` ligando-a à anterior — nunca impede a criação. O gatilho **não** é semelhança de financiamento: vale inclusive quando não veio dado algum de financiamento, que é o caso mais comum
+- [ ] `arrived_at` gravado no momento da ingestão, igual ao `received_at` do envio. Lead que passa pela quarentena recebe o instante da liberação (ticket 10)
 - [ ] `assigned_user_id` nasce nulo — atribuição é da Fase 2
 - [ ] `financing_type`, `financial_institution` e `installment_amount` são anuláveis e não bloqueiam criação
 - [ ] Nenhuma Oportunidade jurídica é criada pela ingestão
