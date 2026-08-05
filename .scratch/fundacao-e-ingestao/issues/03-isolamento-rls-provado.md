@@ -56,6 +56,6 @@ Ver [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md). Atenção
   — **Parcial.** O schema existe e `USAGE` já é negado a `marctco_worker` (testado). `EXECUTE` por função e `search_path` fixado só são verificáveis quando as três funções existirem (tickets 06, 15, 17).
 - [x] **Seam 3 verifica que nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)) — varredura genérica por coluna `merged_into_%`, provada contra uma violação sintética porque nenhuma tabela real tem essa coluna ainda
 - [x] **Seam 3 reprova qualquer import do client cru do Prisma fora de `packages/db`** — é a varredura que impede o escopo de papel de virar convenção outra vez, e nenhuma rota a exercita ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
-- [ ] Os testes rodam no CI e barram o merge — `pnpm test:unit` e `pnpm test:db` já fazem parte dos jobs `Quality`/`Database` do `.github/workflows/ci.yml`; marcado assim que o CI do PR desta ticket passar verde
+- [x] Os testes rodam no CI e barram o merge — `pnpm test:unit` e `pnpm test:db` fazem parte dos jobs `Quality`/`Database` do `.github/workflows/ci.yml`; PR #8 com `Database`, `Quality` e o gate `CI` verdes
 - [x] Uma tabela nova criada sem policy **reprova** o CI — verificado deliberadamente
 - [x] Fica registrado no ticket que **o drift check não cobre policy, função, papel nem grant**: é este seam que cobre, e os dois não se substituem — ver "Nota de escopo" acima
