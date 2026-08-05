@@ -15,6 +15,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Workspace | `Workspace` | — |
 | Associação ao workspace | `WorkspaceMember` | Onde vive o perfil de acesso. **Nunca** `Membership` solto nem `User` do workspace |
 | Perfil de acesso | `WorkspaceMember.role` | `ATTENDANT \| SUPERVISOR \| MANAGER \| OWNER` — quatro, e nenhum a mais ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
+| Contexto de acesso | `AccessContext` = `UserContext \| JobContext` | `UserContext`: `workspace_id` + `user_id` + `role`. `JobContext`: `workspace_id` + `integration_event_id` — o worker não tem usuário nem papel ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md)). **Nunca** `Session` nem `RequestContext` |
 | Provisionamento | `private.provision_workspace` | Workspace + vínculo do dono + funil padrão, num commit ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9) |
 | Tag | `Tag` | Define o time de um `SUPERVISOR` |
 | Tipo de financiamento | `FinancingType` | `VEHICLE \| REAL_ESTATE \| PERSONAL_LOAN \| OTHER`; opcional na Oportunidade |
@@ -37,8 +38,12 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Supervisor | `WorkspaceMember.role = SUPERVISOR` | Escopo do time/filial, computado por tag. Até a Fase 2, escopo efetivo de `MANAGER` |
 | Gestão | `WorkspaceMember.role = MANAGER` | Operação inteira do workspace |
 | Direção | `WorkspaceMember.role = OWNER` | Operação **e** conta: membros, papéis, segredo de integração. É o papel criado no provisionamento |
+| Plano de ingestão | `IntakePlan` | União discriminada `Quarantine \| Retransmission \| NewOpportunity`; decidido puro, aplicado por `applyIntakePlan` ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)) |
+| Plano de busca de Pessoa | `PersonLookupPlan` | Quais chaves buscar e com que força; dado inerte — o domínio descreve a busca, `findPersonCandidates` a executa |
+| Chave idempotente do envio | `SubmissionKey` | `source` + `external_lead_id`; o que a constraint `UNIQUE(workspace_id, source, external_lead_id)` arbitra ([ADR-0007](./0007-ingestao-idempotencia.md)) |
 | Revisão de ingestão | `IntakeReview` | Pendência **marcada na Oportunidade já criada**, nunca bloqueio; `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE` |
 | Marcador | `IntakeReview` + `Opportunity.missing_phone` | Não é um model: é o conjunto de pendências de um lead. Na UI, **um ícone só** os reúne ([ADR-0007](./0007-ingestao-idempotencia.md)) |
+| Marcadores de um lead | `markersFor(opportunity, reviews)` | Função pura de `packages/domain`; quem responde "o que este lead tem". Os contadores por tipo **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
 | Possível duplicado | `IntakeReview.type = POSSIBLE_DUPLICATE` | Gatilho: mesma Pessoa + Oportunidade **em aberto** não mesclada. Financiamento é discriminador na tela, nunca gatilho |
 | Mesclagem | — | Não tem model. É a operação que **reaponta** as FKs para a canônica e deixa a lápide na absorvida; o ponteiro nunca redireciona leitura |
 | Resolução da revisão | `IntakeReview.resolution` | Tipada pelo `type`; para `POSSIBLE_DUPLICATE`: `NEW_FINANCING \| SAME_FINANCING \| INVALID_OR_SPAM`; nulo enquanto pendente |

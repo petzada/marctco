@@ -19,6 +19,7 @@ Onde a escolha mora é o [ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na
 - [ ] Rótulos de UI em PT-BR: Atendente · Supervisor · Gestão · Direção
 - [ ] Toda rota autenticada vive sob `/workspace/:slug`; `slug` é o UUIDv4 do `Workspace`
 - [ ] O GUC é resolvido no servidor **a cada requisição**, validando o `slug` da URL contra a associação do usuário
+- [ ] **Esta validação é o único construtor de `UserContext`** — o contexto nasce dela com `workspace_id`, `user_id` e `role`, e nenhum outro caminho o produz. `React.cache()` deduplica por requisição, que é o escopo seguro ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
 - [ ] `slug` que não corresponde a uma associação do usuário devolve **404** — nunca 403, que confirmaria a existência do workspace alheio
 - [ ] Toda tentativa de acessar workspace alheio é **registrada**: usuário legítimo tentando isso é sinal
 - [ ] Membro de um único workspace entra direto, sem tela de escolha, redirecionado para o seu `slug`

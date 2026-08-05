@@ -45,6 +45,9 @@ Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sess
 | [0013](./docs/adr/0013-fluxo-de-dados-no-app.md) | **Fluxo de dados:** Server Component lê, route handler escreve, paginação keyset, condição arbitra escrita concorrente |
 | [0014](./docs/adr/0014-copia-unica-e-retencao-do-payload.md) | Cópia única do payload e expiração em 90 dias |
 | [0015](./docs/adr/0015-perfis-de-acesso-e-escopo.md) | **Perfis de acesso:** Atendente, Supervisor, Gestão, Direção — escopo por tela |
+| [0016](./docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md) | **Contexto de acesso e leitor escopado** — `packages/db` não devolve o client do Prisma |
+| [0017](./docs/adr/0017-ingestao-como-decisao-e-plano.md) | **Ingestão é decisão pura; o plano de escrita é dado** — `IntakePlan`, dois chamadores |
+| [0018](./docs/adr/0018-marcador-como-modulo.md) | Marcador é módulo de domínio: `markersFor` responde "o que este lead tem" |
 
 **Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.
 

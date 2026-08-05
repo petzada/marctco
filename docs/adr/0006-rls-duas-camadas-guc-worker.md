@@ -73,6 +73,8 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
     Cache por requisição (`React.cache()`) é seguro porque o escopo morre com a requisição. Cache entre requisições exige `workspace_id` na chave, sem exceção — e continua **proibido** para o lookup de token.
 
+    *Reforçado pelo [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md).* Com o `AccessContext` como argumento obrigatório de toda operação de `packages/db`, esta regra deixa de depender de vigilância: não há como um valor em escopo de módulo servir de default silencioso, porque não existe leitura sem contexto passado.
+
 12. **PII não sai do tenant por telemetria.** Sentry é a observabilidade travada e `pino` o log estruturado; o comportamento **padrão** de ambos é capturar contexto de erro e serializar o objeto inteiro. O sistema guarda CPF, telefone e situação financeira de pessoa real, e o worker erra com o payload cru no escopo — o primeiro erro de normalização mandaria o lead completo para um serviço terceiro, com retenção própria e acesso por login.
 
     Isso anularia um cuidado que o [ADR-0007](./0007-ingestao-idempotencia.md) já teve deliberadamente: manter PII **fora do job** do BullMQ. Não adianta blindar a fila e vazar pelo relatório de erro três linhas depois.

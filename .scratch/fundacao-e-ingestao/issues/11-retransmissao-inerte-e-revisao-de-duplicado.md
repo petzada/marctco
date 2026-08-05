@@ -25,6 +25,8 @@ Isto **não** é constraint de banco, deliberadamente: uma pessoa pode ter dois 
 - [ ] Retransmissão **não** altera etapa, responsável, situação nem `arrived_at`
 - [ ] Card que já avançou permanece na etapa em que estava
 - [ ] Negócio perdido **não** reabre por retransmissão
+- [ ] **As quatro linhas acima são garantidas pelo tipo, não pela atenção**: a variante `Retransmission` do `IntakePlan` não tem campo de etapa, responsável, situação nem `arrived_at`. Não há como escrever o bug porque não há onde escrevê-lo ([ADR-0017](../../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
+- [ ] Provado no **Seam 1**, sobre o plano, e não só ponta a ponta: é a regra mais fácil de errar e não pode depender do teste mais caro do projeto
 
 **Possível duplicado**
 

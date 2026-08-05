@@ -11,7 +11,7 @@ arquitetura já foi decidida e travada numa sessão de grelha anterior.
 
 # Leitura obrigatória, nesta ordem, antes de escrever qualquer linha
 
-1. `AGENTS.md` — escada de precedência entre documentos e índice dos 15 ADRs.
+1. `AGENTS.md` — escada de precedência entre documentos e índice dos 18 ADRs.
    Os documentos deste repo conflitam entre si de propósito; a escada resolve.
 2. `CONTEXT.md` — glossário. É a linguagem ubíqua, em PT-BR.
 3. `docs/adr/0005-idioma-codigo-en-ui-pt-br.md` — código em inglês, UI em PT-BR,
@@ -25,7 +25,8 @@ arquitetura já foi decidida e travada numa sessão de grelha anterior.
 Leia o ADR correspondente ao ticket em que estiver mexendo. Eles contêm os modos
 de falha silenciosos deste stack — em especial o ADR-0006, que explica por que
 Supabase RLS + Prisma não encaixam sozinhos. Os vinculantes desta fatia são
-0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014 e 0015;
+0002, 0004, 0005, 0006, 0007, 0008, 0009, 0010, 0011, 0012, 0013, 0014, 0015,
+0016, 0017 e 0018;
 o 0004 rege o ticket 16 (catálogo de flags), o 0002 rege workspace e tags, o
 0012 rege as rotas de toda a aplicação e o 0013 rege como todo dado chega na
 tela e volta dela.
@@ -151,9 +152,22 @@ propor mudança — e traga a proposta a mim em vez de mudar por conta própria.
 - O payload é guardado UMA vez, no IntegrationEvent, e expira em 90 dias — a
   linha fica, o conteúdo some. Quarentena não expira. `LeadSubmission` não tem
   `raw`; tem `last_integration_event_id`.
-- Quatro perfis, e nenhum a mais: ATTENDANT, SUPERVISOR, MANAGER, OWNER. O papel
-  entra no helper de acesso junto com o workspace_id. Uma regra nesta fatia:
-  atendente só enxerga oportunidade atribuída a si.
+- Quatro perfis, e nenhum a mais: ATTENDANT, SUPERVISOR, MANAGER, OWNER. Uma regra
+  nesta fatia: atendente só enxerga oportunidade atribuída a si.
+- `AccessContext` é união: `UserContext` (workspace + usuário + papel) no app,
+  `JobContext` (workspace + evento) no worker. NÃO invente papel para o job
+  preencher campo, e NÃO torne `role` opcional (ADR-0016).
+- `packages/db` NÃO exporta o client do Prisma. Exporta operações nomeadas que
+  recebem `AccessContext` — `listLeads`, `countLeadsByMarker`, `applyIntakePlan`.
+  O client cru é interno e o CI reprova import de fora (ADR-0016).
+- A ingestão é módulo de `packages/domain`, não roteiro do worker: `planSubmission`
+  → `planPersonLookup` → `decideIntake` → `IntakePlan`, aplicado por `packages/db`
+  numa transação. `now` é argumento, nunca lido por dentro. A variante
+  `Retransmission` não tem campo de etapa, responsável, situação nem `arrived_at`
+  — é assim que retransmissão não rebobina o funil (ADR-0017).
+- "Completar e liberar" da quarentena chama a MESMA função da ingestão, com `now`
+  = instante da liberação. Não reimplemente, não enfileire evento novo. O
+  `InboundLead` ali vem do formulário, não do conector — o conector fica no worker.
 - Handoff ao jurídico é ação do gestor, notificado quando o atendente conclui.
   Nenhum status ou etapa cria card jurídico sozinho.
 - `FORCE ROW LEVEL SECURITY`, não apenas `ENABLE`.
@@ -180,7 +194,7 @@ aplicar migration e já existe dado real, PARE e me avise.
 
 ## Por que este prompt é assim
 
-**Ele não repete as decisões, aponta para elas.** Um prompt que resumisse os 15 ADRs criaria uma segunda fonte de verdade que envelhece na primeira emenda. O repositório é a fonte; o prompt é o mapa.
+**Ele não repete as decisões, aponta para elas.** Um prompt que resumisse os 18 ADRs criaria uma segunda fonte de verdade que envelhece na primeira emenda. O repositório é a fonte; o prompt é o mapa.
 
 **Ele lista as regras que não se re-litigam** porque todas contrariam o reflexo padrão de quem chega sem contexto — e um agente novo tende a "consertar" cada uma delas. Dar service_role ao worker, apontar `migrate dev` para produção, retornar 409 em duplicata e exigir campos obrigatórios são exatamente os atalhos que a grelha descartou com motivo registrado.
 

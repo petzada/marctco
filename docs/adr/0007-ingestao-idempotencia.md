@@ -141,6 +141,8 @@ Retransmissão aponta `last_integration_event_id` para o evento novo, incrementa
 
 A alternativa é catastrófica: um soluço da Pluga ressuscitaria negócios perdidos, zeraria relógios de SLA e devolveria à fila leads já descartados. Um card perdido que volta sozinho destrói a confiança da operação no funil mais rápido que um lead perdido.
 
+*Reforçado pelo [ADR-0017](./0017-ingestao-como-decisao-e-plano.md).* Esta regra deixa de depender de o worker lembrar de não escrever: a variante `Retransmission` do `IntakePlan` **não tem campo** de etapa, responsável, situação nem `arrived_at`. Não há como escrever o bug porque não há onde escrevê-lo — e a prova cabe no Seam 1, em vez de exigir o ambiente inteiro.
+
 ## Normalização
 
 CRM é fonte de verdade (`sintese-final.md` §17). Telefone em **E.164**, CPF só dígitos com DV validado, e-mail **lowercase**. Normalização é serviço de domínio compartilhado, chamado uma vez — não implementação por adapter, senão três cópias divergem e o default de país (Brasil) vaza para dentro do adapter, que não deveria conhecê-lo.
