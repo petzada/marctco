@@ -2,7 +2,7 @@
 
 **Blocked by:** 01
 
-**Status:** done — parcial, ver "Nota de escopo"
+**Status:** done
 
 ## Nota de escopo (registrada ao fechar o ticket)
 
