@@ -54,10 +54,38 @@ export default tseslint.config(
         {
           "patterns": [
             {
-              "group": ["@prisma/client", "@marctco/db/src/*", "**/packages/db/src/client*"],
+              "group": [
+                "@prisma/client",
+                "@marctco/db/src/*",
+                "**/packages/db/src/client*",
+                "**/packages/db/src/internal/*"
+              ],
               "message": "Prisma Client is internal to packages/db; import a named database operation instead."
             }
           ]
+        }
+      ]
+    }
+  },
+  {
+    // ADR-0006 regra 11: apps/web and apps/worker are each a single Node
+    // process serving requests/jobs for every tenant. A mutable value at
+    // module scope (resolved workspace, role, flag) leaks tenant A's
+    // result into tenant B's request — RLS cannot catch this, because the
+    // read was legitimate and scoped correctly; what leaks happens after
+    // the database, inside the process. `const` is still allowed (a
+    // module-level PrismaClient or logger instance is infrastructure, not
+    // tenant data), which is why this bans `let`/`var` at module scope
+    // rather than banning top-level declarations outright.
+    files: ["apps/web/**/*.ts", "apps/web/**/*.tsx", "apps/worker/**/*.ts"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Program > VariableDeclaration[kind!='const']",
+          message:
+            "No mutable module-scope state in apps/web or apps/worker (ADR-0006 regra 11): a workspace, role or flag value must never live in a singleton or a cache without a workspace key. Use const, or move the value inside a request/job scope."
         }
       ]
     }

@@ -2,7 +2,15 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done — parcial, ver "Nota de escopo"
+
+## Nota de escopo (registrada ao fechar o ticket)
+
+O ticket 01 já entregou boa parte da base SQL desta issue (papéis prefixados, `FORCE ROW LEVEL SECURITY`, policies keiadas em `app.workspace_id` com subselect, índice em `workspace_id`, a varredura de `pg_tables`/`pg_policies`, a enumeração de `SECURITY DEFINER` e a checagem de atributos de papel) — ver "Descobertas do ticket 01". O que faltava, e que este ticket constrói, é a camada TypeScript em `packages/db`: `AccessContext` (união discriminada, dois construtores, nenhum literal) e `withAccessContext`, o único caminho de transação que os named operations futuros vão usar.
+
+Nenhuma tabela de negócio além de `Workspace`/`WorkspaceMember` existe ainda nesta fatia — `Person`, `Opportunity`, `IntegrationEvent` e `IntakeReview` nascem nos tickets 06 a 11. Por isso, os critérios que citam operações nomeadas específicas (`listLeads`, `countLeadsByMarker`, etc.) ou a regra de escopo do `ATTENDANT` **não podem ser código ainda** — não há tabela para consultar. Ficam desmarcados de propósito, com o motivo explicado ao lado de cada um, e a infraestrutura que os tickets 04–17 vão usar para implementá-los está pronta e testada.
+
+**Sobre o drift check:** ele compara `schema.prisma` com o banco migrado e não modela policy, função, papel, grant nem GUC — exatamente o SQL que carrega o modelo de segurança fica fora do alcance dele (ADR-0010 guard 7). Quem cobre essa superfície é este Seam 3: a varredura de `pg_tables`/`pg_policies`, a lista fechada de `SECURITY DEFINER`, os atributos de papel e a ausência de referência ativa a registro mesclado. As duas verificações não se substituem.
 
 ## What to build
 
@@ -14,34 +22,40 @@ Ver [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md). Atenção
 
 ## Acceptance criteria
 
-- [ ] Papéis separados: migrações (dono, DDL), app e worker (sem `BYPASSRLS`), `service_role` restrito a ferramenta interna
-- [ ] `ENABLE` **e** `FORCE ROW LEVEL SECURITY` em toda tabela de negócio
-- [ ] Policies keiam em `app.workspace_id`, com a leitura do GUC envolta em subselect — sem isso a função é avaliada por linha
-- [ ] Índice em `workspace_id` em toda tabela de negócio
-- [ ] Helper de transação em `packages/db` faz `SET LOCAL` (nunca `SET`) e é o único caminho de acesso a dado
-- [ ] **`AccessContext` é união discriminada com dois construtores e nenhum literal** ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)):
+- [x] Papéis separados: migrações (dono, DDL), app e worker (sem `BYPASSRLS`), `service_role` restrito a ferramenta interna
+- [x] `ENABLE` **e** `FORCE ROW LEVEL SECURITY` em toda tabela de negócio
+- [x] Policies keiam em `app.workspace_id`, com a leitura do GUC envolta em subselect — sem isso a função é avaliada por linha
+- [x] Índice em `workspace_id` em toda tabela de negócio
+- [x] Helper de transação em `packages/db` faz `SET LOCAL` (nunca `SET`) e é o único caminho de acesso a dado — `withAccessContext` em `packages/db/src/internal/scoped-transaction.ts`
+- [x] **`AccessContext` é união discriminada com dois construtores e nenhum literal** ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)):
   - `UserContext` (`workspace_id`, `user_id`, `role`) — construído no `apps/web` pela validação do `slug` contra `WorkspaceMember`
   - `JobContext` (`workspace_id`, `integration_event_id`) — construído no `apps/worker` a partir do `workspace_id` do job
-- [ ] **Duas variantes porque o worker não tem usuário nem papel.** Contexto único obrigaria o job a inventar um papel — papel sem escopo declarado é o que o [ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md) proíbe; e `role` opcional quebraria o fail-closed no único processo que toca todos os tenants
+- [x] **Duas variantes porque o worker não tem usuário nem papel.** Contexto único obrigaria o job a inventar um papel — papel sem escopo declarado é o que o [ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md) proíbe; e `role` opcional quebraria o fail-closed no único processo que toca todos os tenants
 - [ ] **`packages/db` não exporta o client do Prisma.** Exporta operações **nomeadas** que recebem `AccessContext` — `listLeads`, `countLeadsByMarker`, `getLead`, `listIntegrationEvents`, `findPersonCandidates`, `getQuarantinedEvent`, `assignLead`, `resolveIntakeReview`, `applyIntakePlan`. Receber o papel não basta: um helper que devolve o client torna o `role` um parâmetro inerte, e nenhum tipo obriga o `findMany` da tela a filtrar por `assigned_user_id`
+  — **Parcial.** O client cru não é exportado (verificado pelo Seam 3, item abaixo), mas as nove operações nomeadas ainda não têm código: `Person`, `Opportunity`, `IntegrationEvent` e `IntakeReview` não existem nesta fatia até os tickets 06–11. Cada operação nasce com sua tabela, sobre `withAccessContext`.
 - [ ] **`listLeads(jobCtx)` não compila.** Só `findPersonCandidates` e `applyIntakePlan` aceitam as duas variantes, e as duas são do caminho de ingestão
-- [ ] **As três funções sem tenant não recebem `AccessContext` e não podem receber** — elas acontecem antes de existir workspace, e são justamente as que produzem o `workspace_id` que o constrói. Lista fechada de três, varrida pelo Seam 3 ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9)
-- [ ] O client cru vive num módulo interno de `packages/db`; `no-restricted-imports` barra o import de fora e o **CI reprova**
+  — **Parcial.** `listLeads` ainda não existe. O mecanismo que faz essa chamada não compilar está provado genericamente em `packages/db/tests/access-context.type-check.ts`, com uma operação representativa `UserContext`-only e `@ts-expect-error` na chamada com `JobContext`; roda em `pnpm typecheck` e quebra o build se a barreira regredir.
+- [x] **As três funções sem tenant não recebem `AccessContext` e não podem receber** — elas acontecem antes de existir workspace, e são justamente as que produzem o `workspace_id` que o constrói. Lista fechada de três, varrida pelo Seam 3 ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9)
+- [x] O client cru vive num módulo interno de `packages/db`; `no-restricted-imports` barra o import de fora e o **CI reprova**
 - [ ] Cada operação aplica, do lado de dentro, o `SET LOCAL`, o escopo do papel, o cursor keyset e o índice que lhe corresponde ([ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md))
-- [ ] **Fail-closed**: papel ausente ou desconhecido num `UserContext` faz a operação recusar, nunca devolver tudo. A outra metade do fail-closed é do compilador — operação que exige `UserContext` não aceita `JobContext`
-- [ ] É o ponto único onde o escopo por perfil mora — agora como interface, não como intenção ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
+  — **Parcial.** `withAccessContext` aplica o `SET LOCAL`; escopo do papel, keyset e índice por operação só existem quando a operação existir (mesma razão do item acima).
+- [x] **Fail-closed**: papel ausente ou desconhecido num `UserContext` faz a operação recusar, nunca devolver tudo. A outra metade do fail-closed é do compilador — operação que exige `UserContext` não aceita `JobContext`
+- [x] É o ponto único onde o escopo por perfil mora — agora como interface, não como intenção ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md)) — `UserContext.role` viaja obrigatoriamente por `withAccessContext`; nenhuma consulta futura em `packages/db` alcança dado sem passar por ele
 - [ ] Uma regra implementada nesta fatia: **`ATTENDANT` enxerga apenas oportunidade atribuída a si**. O restante da matriz é especificação, não código
-- [ ] **Nenhum estado mutável em escopo de módulo** em `apps/web` nem em `apps/worker`: workspace resolvido, papel e flag jamais em singleton ou cache sem chave de workspace. A RLS não pega esse vazamento — a leitura foi legítima, o que vaza é o resultado dentro do processo ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 11)
+  — **Não cumprido nesta ticket.** `Opportunity` não existe até o ticket 09; a regra só pode virar código dentro de `listLeads`/`getLead` (ticket 12), sobre o ponto único já construído aqui.
+- [x] **Nenhum estado mutável em escopo de módulo** em `apps/web` nem em `apps/worker`: workspace resolvido, papel e flag jamais em singleton ou cache sem chave de workspace. A RLS não pega esse vazamento — a leitura foi legítima, o que vaza é o resultado dentro do processo ([ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 11) — regra de ESLint (`no-restricted-syntax`, `Program > VariableDeclaration[kind!='const']`) barra `let`/`var` em escopo de módulo nesses dois apps
 - [ ] Nenhuma transação envolve chamada de rede externa
-- [ ] **Seam 3**: varredura de `pg_tables` e `pg_policies` reprova qualquer tabela de negócio sem RLS habilitada, sem `FORCE` ou sem policy
-- [ ] Teste: leitura cross-workspace devolve zero linhas
-- [ ] Teste: escrita cross-workspace é recusada
-- [ ] **Os testes de isolamento conectam com o papel do app**, não com o dono — rodar como dono com `FORCE` passa sem provar que o papel do app carece de `BYPASSRLS`
-- [ ] **Seam 3 assere atributos de papel**: o papel do app não é superusuário, não tem `BYPASSRLS` e não é dono de tabela de negócio
-- [ ] **Seam 3 enumera `SECURITY DEFINER`** e reprova qualquer função fora da lista fechada de três do [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9 — sem isso a lista é comentário
+  — Nenhuma transação com I/O externo existe ainda no código para violar a regra; sem operação real para verificar, fica como regra de projeto (ADR-0006 regra 6), não como checagem executável.
+- [x] **Seam 3**: varredura de `pg_tables` e `pg_policies` reprova qualquer tabela de negócio sem RLS habilitada, sem `FORCE` ou sem policy
+- [x] Teste: leitura cross-workspace devolve zero linhas
+- [x] Teste: escrita cross-workspace é recusada
+- [x] **Os testes de isolamento conectam com o papel do app**, não com o dono — rodar como dono com `FORCE` passa sem provar que o papel do app carece de `BYPASSRLS`
+- [x] **Seam 3 assere atributos de papel**: o papel do app não é superusuário, não tem `BYPASSRLS` e não é dono de tabela de negócio
+- [x] **Seam 3 enumera `SECURITY DEFINER`** e reprova qualquer função fora da lista fechada de três do [ADR-0006](../../../docs/adr/0006-rls-duas-camadas-guc-worker.md) regra 9 — sem isso a lista é comentário
 - [ ] Schema `private` existe, com `EXECUTE` das funções revogado de todo papel exceto o do app, e `search_path` fixado em cada função
-- [ ] **Seam 3 verifica que nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md))
-- [ ] **Seam 3 reprova qualquer import do client cru do Prisma fora de `packages/db`** — é a varredura que impede o escopo de papel de virar convenção outra vez, e nenhuma rota a exercita ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
-- [ ] Os testes rodam no CI e barram o merge
-- [ ] Uma tabela nova criada sem policy **reprova** o CI — verificado deliberadamente
-- [ ] Fica registrado no ticket que **o drift check não cobre policy, função, papel nem grant**: é este seam que cobre, e os dois não se substituem
+  — **Parcial.** O schema existe e `USAGE` já é negado a `marctco_worker` (testado). `EXECUTE` por função e `search_path` fixado só são verificáveis quando as três funções existirem (tickets 06, 15, 17).
+- [x] **Seam 3 verifica que nenhum registro ativo aponta para um registro mesclado**, em nenhuma tabela ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)) — varredura genérica por coluna `merged_into_%`, provada contra uma violação sintética porque nenhuma tabela real tem essa coluna ainda
+- [x] **Seam 3 reprova qualquer import do client cru do Prisma fora de `packages/db`** — é a varredura que impede o escopo de papel de virar convenção outra vez, e nenhuma rota a exercita ([ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md))
+- [ ] Os testes rodam no CI e barram o merge — `pnpm test:unit` e `pnpm test:db` já fazem parte dos jobs `Quality`/`Database` do `.github/workflows/ci.yml`; marcado assim que o CI do PR desta ticket passar verde
+- [x] Uma tabela nova criada sem policy **reprova** o CI — verificado deliberadamente
+- [x] Fica registrado no ticket que **o drift check não cobre policy, função, papel nem grant**: é este seam que cobre, e os dois não se substituem — ver "Nota de escopo" acima

@@ -15,6 +15,7 @@ const ignored_directories = new Set([
 const forbidden_patterns = [
   /from\s+["']@prisma\/client["']/,
   /from\s+["'][^"']*packages\/db\/src\/client[^"']*["']/,
+  /from\s+["'][^"']*packages\/db\/src\/internal\/[^"']*["']/,
   /from\s+["']@marctco\/db\/src\//
 ];
 const failures = [];
