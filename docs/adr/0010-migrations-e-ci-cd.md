@@ -46,6 +46,8 @@ Com Docker local:
 
     Sem isso há duas topologias e só uma é testada. O CI sobe um Postgres efêmero com um papel só, `postgres`, e a prova de RLS passa — porque `FORCE` se aplica até ao dono — sem nunca verificar que o papel do app **não** tem `BYPASSRLS`, já que esse papel não existe ali. Em produção, o papel é criado à mão, uma vez, e o painel do Supabase oferece pronta para copiar a connection string do `postgres`. Colar aquilo no Railway zera o isolamento com o CI inteiro verde. Papéis nas migrations fazem CI, Docker local e produção derivarem da mesma fonte; a autoverificação de boot do [ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 10 fecha o que resta, porque nenhum CI sabe qual string está no Railway.
 
+    **Emenda de 2026-08-05 — bootstrap sob papel gerenciado.** No Supabase, `postgres` tem privilégios administrativos, mas não é superusuário. Criar `marctco_migrator` não basta para executar `SET ROLE`: o criador precisa receber membership explícita `WITH INHERIT FALSE, SET TRUE`, e os grants dos objetos criados devem acontecer antes do `RESET ROLE`. A migration prova esse caminho num Postgres limpo cujo bootstrap tem `CREATEROLE`, mas não `SUPERUSER`. Isto detalha a mesma separação de papéis; não a reverte. O acesso do migrator a `_prisma_migrations` é concedido somente quando a tabela existe: `migrate deploy` a cria antes da aplicação, enquanto o replay no shadow database de `migrate dev` não a cria. A recuperação de uma tentativa failed só pode marcar `rolled-back` depois de uma auditoria mecânica confirmar simultaneamente o erro conhecido e a ausência de roles, schema, tipo e tabelas residuais; qualquer outro estado aborta para inspeção humana.
+
 ## Fluxo
 
 ```

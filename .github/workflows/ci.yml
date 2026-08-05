@@ -56,6 +56,19 @@ jobs:
           AUTH_TYPE: scram-sha-256
         ports:
           - 6432:5432
+      managed-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: supabase_admin
+          POSTGRES_PASSWORD: supabase-admin-local
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U supabase_admin -d postgres"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
       redis:
         image: redis:8-alpine
         ports:
@@ -70,6 +83,9 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/marctco?schema=public
       PGBOUNCER_DATABASE_URL: postgresql://postgres:postgres@localhost:6432/marctco?schema=public&pgbouncer=true&connection_limit=1
       REDIS_URL: redis://localhost:6379
+      MANAGED_MIGRATION_ADMIN_URL: postgresql://supabase_admin:supabase-admin-local@localhost:5433/postgres?schema=public
+      MANAGED_MIGRATION_DATABASE_URL: postgresql://postgres:managed-postgres-local@localhost:5433/marctco_managed?schema=public
+      MANAGED_MIGRATOR_DATABASE_URL: postgresql://marctco_migrator:managed-migrator-local@localhost:5433/marctco_managed?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -85,6 +101,7 @@ jobs:
       - run: pnpm db:drift
       - run: pnpm test:db
       - run: pnpm test:a7
+      - run: pnpm test:managed-migration
 
   ci:
     name: CI
@@ -110,6 +127,7 @@ jobs:
       DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
       DIRECT_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
       ALLOW_REMOTE_MIGRATE_DEPLOY: "true"
+      ALLOW_FOUNDATION_RECOVERY: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -120,5 +138,6 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:recover:foundation
       - run: pnpm db:migrate:deploy
       - run: pnpm --filter @marctco/db exec prisma migrate status

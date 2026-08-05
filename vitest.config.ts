@@ -20,7 +20,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: "db",
-          include: ["packages/db/tests/{boot-check,rls}.test.ts"],
+          include: [
+            "packages/db/src/foundation-recovery.test.ts",
+            "packages/db/tests/{boot-check,rls}.test.ts"
+          ],
           fileParallelism: false
         }
       },
@@ -29,6 +32,14 @@ export default defineConfig({
         test: {
           name: "a7",
           include: ["packages/db/tests/a7.test.ts"],
+          fileParallelism: false
+        }
+      },
+      {
+        extends: true,
+        test: {
+          name: "managed-migration",
+          include: ["packages/db/tests/managed-migration.test.ts"],
           fileParallelism: false
         }
       }
