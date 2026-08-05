@@ -36,7 +36,7 @@ O mapeamento De→Para acontece **na Pluga**, não aqui. A tela fornece o contra
 - [ ] Toda a tela lê a situação do evento de integração como fonte única — sem estado paralelo
 - [ ] A tela explica, em linguagem não técnica, que o **conteúdo** de eventos com mais de 90 dias não fica guardado — só o registro de que chegaram ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))
 - [ ] "Reprocessar" **recusa com explicação** evento cujo payload expirou, em vez de falhar obscuro
-- [ ] Payload expirado e payload que nunca existiu são estados **distinguíveis** na tela
+- [ ] **Nenhum estado novo para "expirado".** O payload é gravado no recebimento, antes do 200 — não há caminho para um evento existir sem ele. Logo `raw` nulo tem causa única, e a data de expiração sai de `received_at + 90 dias`: a tela diz **quando** o conteúdo saiu, sem coluna adicional
 - [ ] Gerar e rotacionar segredo, ativar e desativar integração são exclusivos da **Direção** (`OWNER`); histórico, reprocessar e quarentena são da **Gestão** para cima ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
 - [ ] Usa os tokens do ticket 02
 - [ ] **Não** existe assistente de mapeamento De→Para

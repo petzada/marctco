@@ -55,4 +55,8 @@ Esta decisão converte um item de compliance adiado indefinidamente numa decisã
 
 ## Consequences
 
-`LeadSubmission` perde `raw` e ganha `last_integration_event_id`. `IntegrationEvent.raw` torna-se anulável, e nulo passa a significar "expirado", não "nunca houve" — o que exige que o estado do evento continue distinguindo os dois casos. A tela de Integrações precisa dizer, em linguagem não técnica, que o conteúdo de eventos antigos não fica guardado; e o botão de reprocessar precisa recusar, com explicação, um evento cujo payload expirou.
+`LeadSubmission` perde `raw` e ganha `last_integration_event_id`. `IntegrationEvent.raw` torna-se anulável.
+
+**Nulo significa expirado, e só isso** — nenhum estado novo é necessário para distinguir. O payload é gravado no ato do recebimento, antes da resposta HTTP: é o que a outbox é. Não existe caminho pelo qual um evento passe a existir sem ele, então a ausência tem uma causa única. E a data em que o conteúdo saiu é derivável de `received_at + 90 dias`, sem coluna adicional — o que permite à tela dizer exatamente quando, em vez de dizer "não disponível".
+
+A tela de Integrações precisa explicar, em linguagem não técnica, que o conteúdo de eventos antigos não fica guardado; e o botão de reprocessar precisa recusar, com explicação, um evento cujo payload expirou.

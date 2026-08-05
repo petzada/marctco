@@ -13,29 +13,43 @@ Primeiro acesso provisiona workspace utilizável → `POST` autenticado → comm
 ## Grafo de dependências
 
 ```
-01 esqueleto ──┬─► 03 RLS ──┬─► 04 auth ──────┬──────────┐
-               │            │                 │          │
-02 tokens ─────┼────────────┼─► 05 funis ──┬──┴► 17 prov. │
-               │            │              │              │
-               │            └─► 06 conexão ┴─────► 07 endpoint
-               │                     │              │
-               │                     │              ▼
-               │                     │         08 Pessoa
-               │                     │              │
-               │                     │              ▼
-               │                     │      09 Oportunidade ◄── 05
-               │                     │       (tracer bullet)
-               │                     │              │
-               │                     │      ┌───────┼────────┬──────────┐
-               │                     │      ▼       ▼        ▼          ▼
-               │                     │  10 quar. 11 retr. 13 Google  16 flags
-               │                     │      │
-               │                     │      ├──────────► 12 Leads ◄── 04, 02
-               │                     │      │
-               │                     └──────┴──────────► 14 Integrações ◄── 04, 02
-                                                              │
-                                              07 ─────────────┴──► 15 varredor
+01 esqueleto ──► 03 RLS ──┬──► 04 auth ───────┐
+                          │                   │
+02 tokens                 ├──► 05 funis ──────┼──► 17 provisionamento
+                          │        │          │
+                          └──► 06 conexão ──► 07 endpoint
+                                   │              │
+                                   │              ▼
+                                   │         08 Pessoa
+                                   │              │
+                                   │              ▼
+                                   │      09 Oportunidade ◄── 05
+                                   │       (tracer bullet)
+                                   │              │
+                                   │      ┌───────┼────────┬──────────┐
+                                   │      ▼       ▼        ▼          ▼
+                                   │  10 quar. 11 retr. 13 Google  16 flags
+                                   │      │       │
+                                   │      └───────┴──► 12 Leads ◄── 04, 02
+                                   │      │
+                                   └──────┴──► 14 Integrações ◄── 04, 02
+                                                     │
+                                     07 ─────────────┴──► 15 varredor
 ```
+
+| Ticket | Bloqueado por |
+|---|---|
+| 01 · 02 | — |
+| 03 | 01 |
+| 04 · 05 · 06 | 03 |
+| **17 provisionamento** | 03, 04, 05 |
+| 07 | 06 |
+| 08 | 07 |
+| 09 | 08, 05 |
+| 10 · 11 · 13 · 16 | 09 |
+| 12 | 09, 04, 02, 10, 11 |
+| 14 | 06, 04, 02, 10 |
+| 15 | 07, 14 |
 
 **Podem começar imediatamente:** 01 e 02, em paralelo.
 

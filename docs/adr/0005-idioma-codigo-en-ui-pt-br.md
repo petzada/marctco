@@ -13,7 +13,10 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Glossário (`CONTEXT.md`) | Código | Nota |
 |---|---|---|
 | Workspace | `Workspace` | — |
-| Tag | `Tag` | — |
+| Associação ao workspace | `WorkspaceMember` | Onde vive o perfil de acesso. **Nunca** `Membership` solto nem `User` do workspace |
+| Perfil de acesso | `WorkspaceMember.role` | `ATTENDANT \| SUPERVISOR \| MANAGER \| OWNER` — quatro, e nenhum a mais ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
+| Provisionamento | `private.provision_workspace` | Workspace + vínculo do dono + funil padrão, num commit ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9) |
+| Tag | `Tag` | Define o time de um `SUPERVISOR` |
 | Tipo de financiamento | `FinancingType` | `VEHICLE \| REAL_ESTATE \| PERSONAL_LOAN \| OTHER`; opcional na Oportunidade |
 | Funil | `Pipeline` | Sempre tipado: `type: COMMERCIAL \| LEGAL` |
 | Funil padrão do workspace | `Pipeline.is_default` | Exatamente um comercial por workspace; destino da ingestão ([ADR-0009](./0009-etapas-editaveis-papeis-e-status.md)) |
@@ -29,12 +32,15 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | **Lead** (rótulo de UI) | — | Não tem model. É `Opportunity` com `area = COMMERCIAL` |
 | EnvioLead | `LeadSubmission` | A submissão de formulário, não a oportunidade |
 | Transmissão mais recente do envio | `LeadSubmission.last_integration_event_id` | Substitui `LeadSubmission.raw`: o payload é guardado **uma vez**, no evento ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
-| Payload bruto recebido | `IntegrationEvent.raw` | Cópia única. Anulável: nulo significa **expirado** aos 90 dias, não "nunca houve" |
+| Payload bruto recebido | `IntegrationEvent.raw` | Cópia única. Anulável, e **nulo só pode significar expirado**: o payload é gravado no recebimento, antes do 200 ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
 | Atendente | `WorkspaceMember.role = ATTENDANT` | Enxerga apenas oportunidade atribuída a si ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
 | Supervisor | `WorkspaceMember.role = SUPERVISOR` | Escopo do time/filial, computado por tag. Até a Fase 2, escopo efetivo de `MANAGER` |
 | Gestão | `WorkspaceMember.role = MANAGER` | Operação inteira do workspace |
 | Direção | `WorkspaceMember.role = OWNER` | Operação **e** conta: membros, papéis, segredo de integração. É o papel criado no provisionamento |
 | Revisão de ingestão | `IntakeReview` | Pendência **marcada na Oportunidade já criada**, nunca bloqueio; `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE` |
+| Marcador | `IntakeReview` + `Opportunity.missing_phone` | Não é um model: é o conjunto de pendências de um lead. Na UI, **um ícone só** os reúne ([ADR-0007](./0007-ingestao-idempotencia.md)) |
+| Possível duplicado | `IntakeReview.type = POSSIBLE_DUPLICATE` | Gatilho: mesma Pessoa + Oportunidade **em aberto** não mesclada. Financiamento é discriminador na tela, nunca gatilho |
+| Mesclagem | — | Não tem model. É a operação que **reaponta** as FKs para a canônica e deixa a lápide na absorvida; o ponteiro nunca redireciona leitura |
 | Resolução da revisão | `IntakeReview.resolution` | Tipada pelo `type`; para `POSSIBLE_DUPLICATE`: `NEW_FINANCING \| SAME_FINANCING \| INVALID_OR_SPAM`; nulo enquanto pendente |
 | Oportunidade mesclada | `Opportunity.merged_into_opportunity_id` | Resultado de `SAME_FINANCING`; sai das vistas ativas sem exclusão física |
 | Pessoa mesclada | `Person.merged_into_person_id` | Resultado da resolução de `IDENTITY_CONFLICT`; preserva histórico e identificadores |
@@ -57,7 +63,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Valor (da oportunidade) | `amount` | `value` é genérico demais para coluna monetária |
 | Instituição financeira | `financial_institution` | Dado opcional do financiamento; não identifica Pessoa |
 | Valor da parcela | `installment_amount` | Decimal monetário normalizado; entrada preserva também o valor bruto |
-| Chegou em | `arrived_at` | Início do relógio de SLA. Instante em que a Oportunidade passa a existir — igual ao recebimento no caminho direto, igual à liberação para lead ex-quarentena ([ADR-0007](./0007-ingestao-idempotencia.md)) |
+| Chegada | `arrived_at` | Início do relógio de SLA. Instante em que a Oportunidade passa a existir — igual ao recebimento no caminho direto, igual à liberação para lead ex-quarentena ([ADR-0007](./0007-ingestao-idempotencia.md)) |
 | Recebido em | `received_at` | Verdade sobre a origem; permanece no `LeadSubmission` mesmo quando difere de `arrived_at` |
 | Responsável | `assigned_user_id` | Atribuir exige `IS NULL` no `WHERE`; reatribuir é operação distinta ([ADR-0013](./0013-fluxo-de-dados-no-app.md)) |
 | Identificador do workspace na URL | `Workspace.slug` | UUIDv4, único. Não legível, não enumerável ([ADR-0012](./0012-contexto-de-tenant-na-url.md)) |

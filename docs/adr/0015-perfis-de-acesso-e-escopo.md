@@ -82,3 +82,5 @@ O que precisa nascer com a fatia não é a matriz — é o **ponto único onde e
 ## Consequences
 
 O enum encolhe de cinco valores para quatro, com `SUPERVISOR` no lugar de `ADMIN` e `VIEWER`. Como não há dado em produção, é uma migração sem expand/contract. O helper de acesso passa a exigir papel além de workspace — o que significa que nenhuma consulta consegue ser escrita sem que o autor decida, ali, o que aquele papel enxerga.
+
+**Na fatia de fundação, a regra do `ATTENDANT` não tem quem a exercite, e isso é esperado.** O provisionamento cria um único membro, `OWNER`, e o cadastro de colaboradores fica fora da fatia; atribuição só chega na Fase 2, então `assigned_user_id` é sempre nulo. Um atendente, se existisse, veria uma lista vazia — o que está **correto** e não é defeito. A regra entra agora pelo mesmo motivo que `arrived_at` é gravado antes de existir tela de SLA: o que se paga caro depois não é a regra, é ter construído telas sem o lugar onde ela mora.

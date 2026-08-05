@@ -34,4 +34,6 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+> _Contradicts ADR-0007 (ingestão e idempotência) — but worth reopening because…_
+
+The example above names a real ADR of this repo on purpose. The placeholder it replaced ("event-sourced orders") described a decision that does not exist here, and an agent reading it could believe the numbering points elsewhere than it does.
