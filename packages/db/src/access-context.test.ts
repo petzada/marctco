@@ -1,0 +1,76 @@
+import { randomUUID } from "node:crypto";
+import { describe, expect, it } from "vitest";
+import {
+  createJobContext,
+  createUserContext,
+  isJobContext,
+  isUserContext,
+  WorkspaceRole
+} from "./access-context.js";
+
+describe("createUserContext", () => {
+  it("builds a UserContext for each of the four known roles", () => {
+    for (const role of Object.values(WorkspaceRole)) {
+      const workspace_id = randomUUID();
+      const user_id = randomUUID();
+      const context = createUserContext({ workspace_id, user_id, role });
+      expect(context.kind).toBe("user");
+      expect(context.workspace_id).toBe(workspace_id);
+      expect(context.user_id).toBe(user_id);
+      expect(context.role).toBe(role);
+      expect(isUserContext(context)).toBe(true);
+      expect(isJobContext(context)).toBe(false);
+    }
+  });
+
+  it("fails closed on an unknown role instead of building a context that sees everything", () => {
+    expect(() =>
+      createUserContext({ workspace_id: randomUUID(), user_id: randomUUID(), role: "ADMIN" })
+    ).toThrow(/unknown workspace role/i);
+  });
+
+  it("fails closed on a missing role", () => {
+    expect(() =>
+      createUserContext({ workspace_id: randomUUID(), user_id: randomUUID(), role: "" })
+    ).toThrow(/unknown workspace role/i);
+  });
+
+  it("refuses a non-UUID workspace_id", () => {
+    expect(() =>
+      createUserContext({ workspace_id: "not-a-uuid", user_id: randomUUID(), role: "OWNER" })
+    ).toThrow(/must be a UUID/i);
+  });
+
+  it("refuses a non-UUID user_id", () => {
+    expect(() =>
+      createUserContext({ workspace_id: randomUUID(), user_id: "not-a-uuid", role: "OWNER" })
+    ).toThrow(/must be a UUID/i);
+  });
+});
+
+describe("createJobContext", () => {
+  it("builds a JobContext with no user and no role", () => {
+    const workspace_id = randomUUID();
+    const integration_event_id = randomUUID();
+    const context = createJobContext({ workspace_id, integration_event_id });
+    expect(context.kind).toBe("job");
+    expect(context.workspace_id).toBe(workspace_id);
+    expect(context.integration_event_id).toBe(integration_event_id);
+    expect("role" in context).toBe(false);
+    expect("user_id" in context).toBe(false);
+    expect(isJobContext(context)).toBe(true);
+    expect(isUserContext(context)).toBe(false);
+  });
+
+  it("refuses a non-UUID workspace_id", () => {
+    expect(() =>
+      createJobContext({ workspace_id: "not-a-uuid", integration_event_id: randomUUID() })
+    ).toThrow(/must be a UUID/i);
+  });
+
+  it("refuses a non-UUID integration_event_id", () => {
+    expect(() =>
+      createJobContext({ workspace_id: randomUUID(), integration_event_id: "not-a-uuid" })
+    ).toThrow(/must be a UUID/i);
+  });
+});
