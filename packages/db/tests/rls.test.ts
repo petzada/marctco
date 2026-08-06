@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import { defaultCommercialPipeline } from "@marctco/domain";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { provisionWorkspace } from "../src/provision-workspace.js";
 import { createJobContext, type AccessContext, type UserContext } from "../src/access-context.js";
 import { withAccessContext } from "../src/internal/scoped-transaction.js";
 import {
@@ -39,6 +41,7 @@ const cross_workspace_token_hash = createHash("sha256")
   .update(`mtco_cross_workspace_${randomUUID()}`, "utf8")
   .digest("hex");
 let user_context_a: UserContext;
+const provisioned_workspace_ids: string[] = [];
 const isolation_cases = [
   {
     table_name: "integration_connections",
@@ -162,10 +165,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  const disposable_workspace_ids = [workspace_a, workspace_b, ...provisioned_workspace_ids];
   await client.workspaceMember.deleteMany({
-    where: { workspace_id: { in: [workspace_a, workspace_b] } }
+    where: { workspace_id: { in: disposable_workspace_ids } }
   });
-  await client.workspace.deleteMany({ where: { id: { in: [workspace_a, workspace_b] } } });
+  await client.workspace.deleteMany({ where: { id: { in: disposable_workspace_ids } } });
   await client.$disconnect();
 });
 
@@ -1033,5 +1037,242 @@ describe("Seam 3: withAccessContext is the single production path to data (ADR-0
       })
     ).rejects.toThrow(/must be a UUID/i);
     expect(work_ran).toBe(false);
+  });
+});
+
+async function provisionAsApp(
+  owner_user_id: string,
+  workspace_name: string,
+  definition: unknown = defaultCommercialPipeline
+): Promise<string | undefined> {
+  const rows = await client.$transaction(async (transaction) => {
+    await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+    return transaction.$queryRaw<Array<{ workspace_id: string }>>`
+      SELECT workspace_id
+      FROM private.provision_workspace(
+        ${owner_user_id}::uuid,
+        ${workspace_name}::text,
+        ${JSON.stringify(definition)}::jsonb
+      )
+    `;
+  });
+  const workspace_id = rows[0]?.workspace_id;
+  if (workspace_id) {
+    provisioned_workspace_ids.push(workspace_id);
+  }
+  return workspace_id;
+}
+
+describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17)", () => {
+  it("creates the tenant, its owner and the default pipeline in a single commit", async () => {
+    const owner = randomUUID();
+    const workspace_id = await provisionAsApp(owner, "Assessoria Provisionada");
+    if (!workspace_id) {
+      throw new Error("provisioning returned no workspace");
+    }
+
+    const workspace = await client.workspace.findUniqueOrThrow({ where: { id: workspace_id } });
+    expect(workspace.name).toBe("Assessoria Provisionada");
+    expect(workspace.slug).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+
+    const members = await client.workspaceMember.findMany({ where: { workspace_id } });
+    expect(members).toMatchObject([{ user_id: owner, role: "OWNER" }]);
+
+    // The ingestion destination exists before the first lead can arrive: one
+    // commercial pipeline marked default, with its ENTRY and CLOSING stages.
+    const pipelines = await client.pipeline.findMany({
+      where: { workspace_id },
+      include: { stages: { orderBy: { position: "asc" } } }
+    });
+    expect(pipelines).toHaveLength(1);
+    expect(pipelines[0]).toMatchObject({
+      name: defaultCommercialPipeline.name,
+      type: "COMMERCIAL",
+      is_default: true
+    });
+    expect(
+      pipelines[0]?.stages.map((stage) => ({
+        label: stage.label,
+        position: stage.position,
+        role: stage.role
+      }))
+    ).toEqual(defaultCommercialPipeline.stages.map((stage) => ({ ...stage })));
+  });
+
+  it("returns the workspace the owner already has instead of a second one", async () => {
+    const owner = randomUUID();
+    const [first, second] = await Promise.all([
+      provisionAsApp(owner, "Duas abas"),
+      provisionAsApp(owner, "Duas abas")
+    ]);
+
+    expect(first).toBeDefined();
+    expect(second).toBe(first);
+    await expect(
+      client.workspaceMember.count({ where: { user_id: owner } })
+    ).resolves.toBe(1);
+  });
+
+  it("gives a collaborator who already belongs somewhere no new workspace to own", async () => {
+    // Ex-colaborador com associação removida é barrado antes, por não ter o
+    // direito em app_metadata; quem ainda tem vínculo nunca vira dono de um
+    // workspace novo por clicar duas vezes.
+    await expect(provisionAsApp(user_a, "Workspace paralelo")).resolves.toBe(workspace_a);
+    await expect(client.workspaceMember.count({ where: { user_id: user_a } })).resolves.toBe(1);
+  });
+
+  it("leaves nothing behind when the workspace cannot be born valid", async () => {
+    const owner = randomUUID();
+    await expect(
+      provisionAsApp(owner, "Sem conclusão", {
+        ...defaultCommercialPipeline,
+        stages: defaultCommercialPipeline.stages.filter((stage) => stage.role !== "CLOSING")
+      })
+    ).rejects.toThrow(/at least one CLOSING/i);
+
+    await expect(client.workspaceMember.count({ where: { user_id: owner } })).resolves.toBe(0);
+    await expect(
+      client.workspace.count({ where: { name: "Sem conclusão" } })
+    ).resolves.toBe(0);
+  });
+
+  it("refuses an unnamed workspace at the database boundary", async () => {
+    await expect(provisionAsApp(randomUUID(), "   ")).rejects.toThrow(/workspace_name/i);
+  });
+
+  it("hands the caller a slug it can only reach through its own membership", async () => {
+    const owner = randomUUID();
+    const provisioned = await provisionWorkspace(
+      { owner_user_id: owner, workspace_name: "Assessoria Horizonte" },
+      client
+    );
+    provisioned_workspace_ids.push(provisioned.workspace_id);
+
+    const workspace = await client.workspace.findUniqueOrThrow({
+      where: { id: provisioned.workspace_id }
+    });
+    expect(provisioned.slug).toBe(workspace.slug);
+    await expect(
+      resolveUserContextForSlug(owner, provisioned.slug, client)
+    ).resolves.toMatchObject({ workspace_id: provisioned.workspace_id, role: "OWNER" });
+  });
+
+  it("keeps the provisioning executor technical, NOLOGIN and subject to RLS", async () => {
+    const roles = await client.$queryRaw<
+      Array<{ can_login: boolean; is_superuser: boolean; bypasses_rls: boolean }>
+    >`
+      SELECT rolcanlogin AS can_login, rolsuper AS is_superuser, rolbypassrls AS bypasses_rls
+      FROM pg_roles
+      WHERE rolname = 'marctco_provisioner'
+    `;
+    expect(roles).toEqual([{ can_login: false, is_superuser: false, bypasses_rls: false }]);
+
+    const memberships = await client.$queryRaw<Array<{ runtime_can_assume_provisioner: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_auth_members AS membership
+        JOIN pg_roles AS parent_role ON parent_role.oid = membership.roleid
+        JOIN pg_roles AS member_role ON member_role.oid = membership.member
+        WHERE parent_role.rolname = 'marctco_provisioner'
+          AND member_role.rolname IN ('marctco_app', 'marctco_worker')
+      ) AS runtime_can_assume_provisioner
+    `;
+    expect(memberships).toEqual([{ runtime_can_assume_provisioner: false }]);
+  });
+
+  it("keeps the provisioner owned, scoped and executable only as declared", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private' AND procedure.proname = 'provision_workspace'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: "marctco_provisioner",
+        search_path: ["search_path=pg_catalog"],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+  });
+
+  it("gives provisioning its own write surface and leaves the read-only executor read-only", async () => {
+    const privileges = await client.$queryRaw<
+      Array<{
+        provisioner_inserts_workspaces: boolean;
+        provisioner_inserts_members: boolean;
+        provisioner_inserts_pipelines: boolean;
+        provisioner_inserts_stages: boolean;
+        provisioner_updates_workspaces: boolean;
+        provisioner_deletes_workspaces: boolean;
+        provisioner_reads_connections: boolean;
+        definer_inserts_workspaces: boolean;
+        definer_inserts_pipelines: boolean;
+      }>
+    >`
+      SELECT
+        has_table_privilege('marctco_provisioner', 'public.workspaces', 'INSERT') AS provisioner_inserts_workspaces,
+        has_table_privilege('marctco_provisioner', 'public.workspace_members', 'INSERT') AS provisioner_inserts_members,
+        has_table_privilege('marctco_provisioner', 'public.pipelines', 'INSERT') AS provisioner_inserts_pipelines,
+        has_table_privilege('marctco_provisioner', 'public.stages', 'INSERT') AS provisioner_inserts_stages,
+        has_table_privilege('marctco_provisioner', 'public.workspaces', 'UPDATE') AS provisioner_updates_workspaces,
+        has_table_privilege('marctco_provisioner', 'public.workspaces', 'DELETE') AS provisioner_deletes_workspaces,
+        has_table_privilege('marctco_provisioner', 'public.integration_connections', 'SELECT') AS provisioner_reads_connections,
+        has_table_privilege('marctco_private_definer', 'public.workspaces', 'INSERT') AS definer_inserts_workspaces,
+        has_table_privilege('marctco_private_definer', 'public.pipelines', 'INSERT') AS definer_inserts_pipelines
+    `;
+    expect(privileges).toEqual([
+      {
+        provisioner_inserts_workspaces: true,
+        provisioner_inserts_members: true,
+        provisioner_inserts_pipelines: true,
+        provisioner_inserts_stages: true,
+        provisioner_updates_workspaces: false,
+        provisioner_deletes_workspaces: false,
+        provisioner_reads_connections: false,
+        definer_inserts_workspaces: false,
+        definer_inserts_pipelines: false
+      }
+    ]);
+  });
+
+  it("keeps every provisioning policy attached to a table the function actually writes", async () => {
+    const policies = await client.$queryRaw<Array<{ table_name: string; command: string }>>`
+      SELECT tablename::text AS table_name, cmd::text AS command
+      FROM pg_policies
+      WHERE schemaname = 'public'
+        AND 'marctco_provisioner' = ANY (roles)
+      ORDER BY tablename, cmd
+    `;
+    expect(policies).toEqual([
+      { table_name: "pipelines", command: "INSERT" },
+      { table_name: "pipelines", command: "SELECT" },
+      { table_name: "stages", command: "INSERT" },
+      { table_name: "workspace_members", command: "INSERT" },
+      { table_name: "workspace_members", command: "SELECT" },
+      { table_name: "workspaces", command: "INSERT" },
+      { table_name: "workspaces", command: "SELECT" }
+    ]);
   });
 });

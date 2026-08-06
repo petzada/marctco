@@ -28,6 +28,11 @@ export {
   type StageRoleAssignment
 } from "./pipeline-operations.js";
 export {
+  provisionWorkspace,
+  type ProvisionWorkspaceInput,
+  type ProvisionedWorkspace
+} from "./provision-workspace.js";
+export {
   generateIntegrationToken,
   hashIntegrationToken,
   resolveWorkspaceByIntegrationToken,

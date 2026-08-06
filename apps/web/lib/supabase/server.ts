@@ -33,9 +33,28 @@ export async function createSupabaseServerClient() {
   });
 }
 
-export async function getAuthenticatedUserId(): Promise<string | null> {
+export interface AuthenticatedSession {
+  readonly user_id: string;
+  /** Verified JWT claims. Only `app_metadata` may carry a right. */
+  readonly claims: Record<string, unknown>;
+}
+
+/**
+ * Verifies the Supabase session server-side. The claims travel with it because
+ * the provisioning right lives in `app_metadata`; nothing in this app reads a
+ * right from `user_metadata`, which the browser can rewrite.
+ */
+export async function getAuthenticatedSession(): Promise<AuthenticatedSession | null> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub;
-  return error || typeof userId !== "string" ? null : userId;
+  const claims = data?.claims;
+  if (error || !claims || typeof claims.sub !== "string") {
+    return null;
+  }
+  return { user_id: claims.sub, claims };
+}
+
+export async function getAuthenticatedUserId(): Promise<string | null> {
+  const session = await getAuthenticatedSession();
+  return session?.user_id ?? null;
 }

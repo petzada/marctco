@@ -1,8 +1,8 @@
 import { cache } from "react";
-import { createHash } from "node:crypto";
 import { resolveUserContextForSlug, type ResolvedUserContext } from "@marctco/db";
 import { checkSuspiciousRequestLimit, createMemoryRateLimiter } from "@marctco/domain";
 import { headers } from "next/headers";
+import { hashIdentifier } from "./audit-hash";
 import { getAuthenticatedUserId } from "./supabase/server";
 import { logger } from "./logger";
 
@@ -18,10 +18,6 @@ export type WorkspaceAccessResult =
   | { readonly status: "unauthenticated" }
   | { readonly status: "not-found" }
   | { readonly status: "resolved"; readonly workspace: ResolvedUserContext };
-
-function hashIdentifier(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
 
 async function denyWorkspaceAccess(
   authenticated_user_id: string,

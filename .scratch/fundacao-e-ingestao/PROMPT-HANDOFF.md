@@ -14,7 +14,23 @@ Despacha cada ticket a Composer 2.5 via Task (`composer-2.5-fast`,
 Formato de resumo fixo; self-review; confrontar critérios/ADRs; só então
 atualizar Status/registro.
 
-# Estado validado ao fechar esta sessão (2026-08-05)
+# Atualização de 2026-08-06 — ticket 17 concluído
+
+- **17 provisionamento: done.** Branch `ticket/17-provisionamento-de-workspace`,
+  migration `20260806000100_provision_workspace`, `pnpm test` 128/128.
+  Resumo completo em `registro.md`.
+- **Próximo despacho: ticket 07** (endpoint recebe e enfileira). Ordem restante:
+  `07 → 08 → 09 → (10 · 11 · 13 · 16 em paralelo se worktrees) → 12 · 14 → 15`.
+- **Mão humana antes de mesclar o 17:** `CREATE ROLE marctco_provisioner` +
+  `GRANT … TO marctco_migrator` no Supabase, e `SUPABASE_SERVICE_ROLE_KEY` no
+  Railway — `acoes-manuais-pendentes.md`.
+- **Descobertas do 17 para os próximos:** `provisionWorkspace` não pode ser
+  chamado dentro de outra transação; `CONSTRAINT TRIGGER` diferido roda no
+  `COMMIT` fora do contexto `SECURITY DEFINER`, sob as policies do chamador;
+  papel técnico `NOLOGIN` novo exige bootstrap humano enquanto o release rodar
+  como `marctco_migrator`; claims verificadas vêm de `getAuthenticatedSession`.
+
+# Estado validado ao fechar a sessão anterior (2026-08-05)
 
 ## Gate do ticket 06 — FECHADO (7/7)
 
