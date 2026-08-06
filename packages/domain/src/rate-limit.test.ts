@@ -22,6 +22,31 @@ describe("rate limiter", () => {
     expect(checkSuspiciousRequestLimit(limiter, request).allowed).toBe(true);
   });
 
+  it("counts each suspicious scope in its own bucket", () => {
+    const limiter = createMemoryRateLimiter({ limit: 1, window_ms: 500 });
+    const ip_address = "127.0.0.1";
+
+    expect(
+      checkSuspiciousRequestLimit(limiter, { scope: "FOREIGN_WORKSPACE_ATTEMPT", ip_address })
+        .allowed
+    ).toBe(true);
+    // Um IP que já esgotou tentativas de workspace alheio ainda tem sua
+    // primeira tentativa de provisionamento sem direito — são perguntas
+    // diferentes, e uma não pode mascarar a outra.
+    expect(
+      checkSuspiciousRequestLimit(limiter, {
+        scope: "UNENTITLED_PROVISIONING_ATTEMPT",
+        ip_address
+      }).allowed
+    ).toBe(true);
+    expect(
+      checkSuspiciousRequestLimit(limiter, {
+        scope: "UNENTITLED_PROVISIONING_ATTEMPT",
+        ip_address
+      }).allowed
+    ).toBe(false);
+  });
+
   it("fails open when the limiter itself throws", () => {
     expect(
       checkSuspiciousRequestLimit(

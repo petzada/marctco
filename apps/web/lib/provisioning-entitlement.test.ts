@@ -4,12 +4,6 @@ import { provisioningEntitlement } from "./provisioning-entitlement";
 describe("provisioningEntitlement", () => {
   it("grants provisioning only from app_metadata marked by the technical team", () => {
     expect(
-      provisioningEntitlement({ app_metadata: { can_provision_workspace: true } })
-    ).toEqual({ workspace_name: null });
-  });
-
-  it("carries the workspace name the technical team recorded with the right", () => {
-    expect(
       provisioningEntitlement({
         app_metadata: {
           can_provision_workspace: true,
@@ -29,25 +23,37 @@ describe("provisioningEntitlement", () => {
   });
 
   it("refuses anything other than the boolean true, including truthy strings", () => {
-    expect(provisioningEntitlement({ app_metadata: { can_provision_workspace: "true" } })).toBeNull();
-    expect(provisioningEntitlement({ app_metadata: { can_provision_workspace: 1 } })).toBeNull();
-    expect(provisioningEntitlement({ app_metadata: { can_provision_workspace: false } })).toBeNull();
+    const named = { workspace_name: "Assessoria Horizonte" };
+    expect(
+      provisioningEntitlement({ app_metadata: { ...named, can_provision_workspace: "true" } })
+    ).toBeNull();
+    expect(
+      provisioningEntitlement({ app_metadata: { ...named, can_provision_workspace: 1 } })
+    ).toBeNull();
+    expect(
+      provisioningEntitlement({ app_metadata: { ...named, can_provision_workspace: false } })
+    ).toBeNull();
     expect(provisioningEntitlement({ app_metadata: {} })).toBeNull();
     expect(provisioningEntitlement({})).toBeNull();
     expect(provisioningEntitlement(null)).toBeNull();
     expect(provisioningEntitlement(undefined)).toBeNull();
   });
 
-  it("treats a blank or non-string workspace name as absent", () => {
+  it("grants nothing when the marking carries no usable workspace name", () => {
+    // Marcação incompleta é marcação que não vale: o nome da assessoria faz
+    // parte do direito, não de uma tela que o coleta.
     expect(
       provisioningEntitlement({
         app_metadata: { can_provision_workspace: true, workspace_name: "   " }
       })
-    ).toEqual({ workspace_name: null });
+    ).toBeNull();
     expect(
       provisioningEntitlement({
         app_metadata: { can_provision_workspace: true, workspace_name: 42 }
       })
-    ).toEqual({ workspace_name: null });
+    ).toBeNull();
+    expect(
+      provisioningEntitlement({ app_metadata: { can_provision_workspace: true } })
+    ).toBeNull();
   });
 });

@@ -1,19 +1,20 @@
-import { createHash } from "node:crypto";
 import { listUserWorkspaces, provisionWorkspace } from "@marctco/db";
+import { checkSuspiciousRequestLimit, createMemoryRateLimiter } from "@marctco/domain";
 import { NextResponse } from "next/server";
+import { hashIdentifier } from "../../../lib/audit-hash";
 import { logger } from "../../../lib/logger";
 import { onboardingDecision } from "../../../lib/onboarding-decision";
 import { provisioningEntitlement } from "../../../lib/provisioning-entitlement";
-import {
-  consumeProvisioningEntitlement,
-  createSupabaseAdminClient
-} from "../../../lib/supabase/admin";
+import { consumeProvisioningEntitlement } from "../../../lib/supabase/admin";
 import { getAuthenticatedSession } from "../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-function hashIdentifier(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
+const unentitledProvisioningLimiter = createMemoryRateLimiter({ limit: 20, window_ms: 60_000 });
+
+function requestIp(requestHeaders: Headers): string {
+  const forwarded = requestHeaders.get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip") || "unknown";
 }
 
 /**
@@ -35,60 +36,58 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   if (decision.kind === "wait") {
     // Um login sem associação e sem o direito não cria nada. A tentativa é
-    // auditada sem PII: identificador em hash, nunca e-mail ou nome.
+    // auditada sem PII — identificador em hash, nunca e-mail ou nome — e passa
+    // pelo mesmo limiter em memória das tentativas de workspace alheio
+    // (ADR-0019 §4, ADR-0012).
+    const limit = checkSuspiciousRequestLimit(unentitledProvisioningLimiter, {
+      scope: "UNENTITLED_PROVISIONING_ATTEMPT",
+      ip_address: requestIp(request.headers)
+    });
     logger.warn({
       event: "workspace_provisioning",
-      result: "denied",
+      result: limit.allowed ? "denied" : "denied_rate_limited",
       user_id_hash: hashIdentifier(session.user_id),
       request_id: request.headers.get("x-request-id") ?? undefined
     });
     return NextResponse.redirect(new URL("/onboarding", request.url), { status: 303 });
   }
 
-  const form = await request.formData();
-  const submitted = form.get("workspace_name");
-  const workspace_name = (
-    typeof submitted === "string" && submitted.trim() !== ""
-      ? submitted
-      : (decision.workspace_name ?? "")
-  ).trim();
-  if (workspace_name === "") {
-    return NextResponse.redirect(new URL("/onboarding?erro=nome", request.url), { status: 303 });
-  }
-
-  // Fail closed before creating anything: a workspace born while the right
-  // cannot be spent would leave that right usable forever.
-  try {
-    createSupabaseAdminClient();
-  } catch (error: unknown) {
-    logger.error({
-      event: "workspace_provisioning",
-      result: "service_role_unavailable",
-      user_id_hash: hashIdentifier(session.user_id),
-      error
-    });
-    return NextResponse.redirect(new URL("/onboarding?erro=configuracao", request.url), {
-      status: 303
-    });
-  }
-
-  const provisioned = await provisionWorkspace({
-    owner_user_id: session.user_id,
-    workspace_name
-  });
-
+  // Spending the right first is what makes it consumed by provisioning rather
+  // than cleaned up after it. A right that survived a successful provisioning
+  // is the ex-collaborator hole: membership removed later, stale claim still
+  // in the token, brand-new workspace owned. If the workspace then fails to be
+  // created, the marking has to be redone — the safe side of the trade.
   try {
     await consumeProvisioningEntitlement(session.user_id);
   } catch (error: unknown) {
-    // The workspace already exists and the database refuses a second one for
-    // this owner, so the stale claim cannot be spent — but it must be cleared
-    // by hand, and that only shows up if it is logged loudly here.
     logger.error({
       event: "workspace_provisioning",
       result: "right_not_consumed",
       user_id_hash: hashIdentifier(session.user_id),
       error
     });
+    return NextResponse.redirect(new URL("/onboarding?error=configuration", request.url), {
+      status: 303
+    });
+  }
+
+  let provisioned;
+  try {
+    provisioned = await provisionWorkspace({
+      owner_user_id: session.user_id,
+      workspace_name: decision.workspace_name
+    });
+  } catch (error: unknown) {
+    // The right is already spent, so this user cannot retry on their own: the
+    // technical team has to mark them again. That only becomes visible if it
+    // is said here, in the same audit stream as the refusals.
+    logger.error({
+      event: "workspace_provisioning",
+      result: "right_spent_without_workspace",
+      user_id_hash: hashIdentifier(session.user_id),
+      error
+    });
+    throw error;
   }
 
   logger.info({

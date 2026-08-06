@@ -2,7 +2,7 @@ import type { UserWorkspace } from "@marctco/db";
 import type { ProvisioningEntitlement } from "./provisioning-entitlement";
 
 export type OnboardingDecision =
-  | { readonly kind: "provision"; readonly workspace_name: string | null }
+  | { readonly kind: "provision"; readonly workspace_name: string }
   | { readonly kind: "member" }
   | { readonly kind: "wait" };
 

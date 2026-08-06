@@ -11,7 +11,8 @@ export interface RateLimiter {
 export type SuspiciousRequest =
   | { scope: "AUTH_FAILURE"; ip_address: string }
   | { scope: "LANDING_PAGE_TOKEN"; token_hash: string }
-  | { scope: "FOREIGN_WORKSPACE_ATTEMPT"; ip_address: string };
+  | { scope: "FOREIGN_WORKSPACE_ATTEMPT"; ip_address: string }
+  | { scope: "UNENTITLED_PROVISIONING_ATTEMPT"; ip_address: string };
 
 interface RateLimitBucket {
   count: number;
@@ -67,6 +68,8 @@ function requestKey(request: SuspiciousRequest): string {
       return `landing-page:${request.token_hash}`;
     case "FOREIGN_WORKSPACE_ATTEMPT":
       return `foreign-workspace:${request.ip_address}`;
+    case "UNENTITLED_PROVISIONING_ATTEMPT":
+      return `unentitled-provisioning:${request.ip_address}`;
   }
 }
 

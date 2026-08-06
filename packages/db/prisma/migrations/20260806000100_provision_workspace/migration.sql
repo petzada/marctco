@@ -47,8 +47,16 @@ END
 $grant_migrator$;
 
 -- PostgreSQL requires the incoming owner to hold CREATE on the containing
--- schema while ownership is transferred. It is revoked again below.
-GRANT CREATE ON SCHEMA private TO marctco_provisioner;
+-- schema while ownership is transferred. It is revoked again below. Only the
+-- schema owner can grant it, and only when it is not already granted, so a
+-- redeploy after a failed attempt skips what is already in place (ADR-0010).
+DO $schema_grants$
+BEGIN
+  IF NOT has_schema_privilege('marctco_provisioner', 'private', 'CREATE') THEN
+    GRANT CREATE ON SCHEMA private TO marctco_provisioner;
+  END IF;
+END
+$schema_grants$;
 
 SET ROLE marctco_migrator;
 
@@ -116,9 +124,13 @@ BEGIN
     RAISE EXCEPTION 'provision_workspace requires the pipeline definition from packages/domain';
   END IF;
 
-  -- Two clicks or two tabs reach here concurrently. Serializing by owner for
-  -- the rest of the transaction makes the second caller read the first
-  -- caller's membership instead of inserting a second tenant.
+  -- Two clicks or two tabs reach here concurrently, and the condition to
+  -- arbitrate is "this user has no membership at all" — which no unique index
+  -- can express, because belonging to several workspaces is legitimate
+  -- (ADR-0012, the multi-workspace selector). So the database still arbitrates,
+  -- through a lock rather than a constraint: serializing by owner makes the
+  -- second caller read the first caller's membership instead of inserting a
+  -- second tenant.
   PERFORM pg_advisory_xact_lock(hashtextextended(owner_user_id::text, 0));
 
   SELECT member.workspace_id

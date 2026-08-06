@@ -35,6 +35,11 @@ interface ProvisionedWorkspaceRow {
  * The pipeline definition travels as an argument so `packages/domain` stays
  * the single copy shared with the development seed (ticket 05): the SQL never
  * repeats the stage list.
+ *
+ * It runs on its own connection and must not be nested inside another
+ * transaction: the deferred pipeline invariants only fire at COMMIT, so the
+ * function scopes the transaction to the workspace it created and that scope
+ * lasts until the commit it was written for.
  */
 export async function provisionWorkspace(
   input: ProvisionWorkspaceInput,

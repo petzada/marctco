@@ -29,12 +29,18 @@ As telas do wizard que coletam dados da empresa **não** estão neste ticket. O 
 - [x] O direito é consumido no provisionamento — provisionar duas vezes exige nova marcação
 - [x] O onboarding vive em `/onboarding`, **fora** do prefixo `/workspace/:slug`, porque ali ainda não existe workspace ([ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na-url.md))
 - [x] Concluído o provisionamento, o usuário é redirecionado para o `slug` recém-criado
-- [x] O Seam 3 continua reprovando qualquer função `SECURITY DEFINER` fora da lista fechada de três — hoje **quatro** desde o [ADR-0019](../../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md), e o Seam 3 reprova qualquer outra, overload incluso
-- [ ] **Seam 2**: um usuário apto, ao acessar pela primeira vez, produz workspace utilizável — e um `POST` de lead logo em seguida cai no funil padrão sem nenhuma configuração manual — a metade do banco está provada (workspace nasce com exatamente um funil comercial `is_default` com `ENTRY` e `CLOSING`); o `POST` só existe a partir do ticket 07
+- [x] O Seam 3 continua reprovando qualquer função `SECURITY DEFINER` fora da lista fechada de três
+- [ ] **Seam 2**: um usuário apto, ao acessar pela primeira vez, produz workspace utilizável — e um `POST` de lead logo em seguida cai no funil padrão sem nenhuma configuração manual
 
 ## Comments
 
-**2026-08-06 — implementado.** Migration `20260806000100_provision_workspace`, executor técnico próprio `marctco_provisioner` (o `marctco_private_definer` é dono dos dois resolvedores somente-leitura e não pode ganhar `INSERT` em `workspaces`), `provisionWorkspace` em `packages/db`, `/onboarding` + `POST /onboarding/provision` em `apps/web`. O direito vive em `app_metadata.can_provision_workspace` e é gasto por `service_role` logo após o commit. Detalhes e evidência de testes no `registro.md`.
+**2026-08-06 — implementado.** Migration `20260806000100_provision_workspace`, executor técnico próprio `marctco_provisioner` (o `marctco_private_definer` é dono dos dois resolvedores somente-leitura e não pode ganhar `INSERT` em `workspaces`), `provisionWorkspace` em `packages/db`, `/onboarding` + `POST /onboarding/provision` em `apps/web`. Detalhes e evidência de testes no `registro.md`.
+
+**Sobre a lista fechada:** o critério fala em três funções `SECURITY DEFINER` porque antecede o [ADR-0019](../../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md), que fixou a lista em **quatro**. O Seam 3 aceita exatamente essas quatro e reprova qualquer outra, overload incluso — é a mesma trava, com o número atualizado.
+
+**Seam 2 fica desmarcado:** a metade do banco está provada — o workspace nasce com exatamente um funil comercial `is_default`, com `ENTRY` e `CLOSING`, num commit só — mas o `POST` de lead só existe a partir do ticket 07. Marcar antes disso seria marcar o que não rodou.
+
+**O nome da assessoria vem da marcação**, em `app_metadata.workspace_name`, não de uma tela que o colete: as telas do wizard estão fora deste ticket. Marcação sem nome não concede direito nenhum, e o usuário continua vendo "seu acesso está sendo preparado".
 
 **Mão humana antes do release:** `marctco_provisioner` precisa ser criado e concedido ao migrator no Supabase antes do merge — ver `acoes-manuais-pendentes.md`.
 

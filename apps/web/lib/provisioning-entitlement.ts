@@ -1,11 +1,11 @@
 /** The single claim that marks a login as able to create its own workspace. */
 export const PROVISIONING_CLAIM = "can_provision_workspace";
 
-/** Optional companion claim: the workspace name recorded with the right. */
+/** Companion claim: the name the technical team recorded with the right. */
 export const PROVISIONING_WORKSPACE_NAME_CLAIM = "workspace_name";
 
 export interface ProvisioningEntitlement {
-  readonly workspace_name: string | null;
+  readonly workspace_name: string;
 }
 
 function claimRecord(value: unknown, key: string): Record<string, unknown> | null {
@@ -25,6 +25,12 @@ function claimRecord(value: unknown, key: string): Record<string, unknown> | nul
  * `user_metadata` travels the same JWT but is rewritable by the browser with
  * `supabase.auth.updateUser()`, so honouring it would turn one line of client
  * JavaScript into ownership of a brand-new workspace.
+ *
+ * The workspace name is part of the right, not something the first screen
+ * collects: naming the assessoria is what the technical team already does when
+ * it creates the login, and the wizard that collects company data is a later
+ * ticket. A marking without a name is an incomplete marking, so it grants
+ * nothing.
  */
 export function provisioningEntitlement(claims: unknown): ProvisioningEntitlement | null {
   const app_metadata = claimRecord(claims, "app_metadata");
@@ -34,5 +40,5 @@ export function provisioningEntitlement(claims: unknown): ProvisioningEntitlemen
 
   const recorded_name = app_metadata[PROVISIONING_WORKSPACE_NAME_CLAIM];
   const workspace_name = typeof recorded_name === "string" ? recorded_name.trim() : "";
-  return { workspace_name: workspace_name === "" ? null : workspace_name };
+  return workspace_name === "" ? null : { workspace_name };
 }

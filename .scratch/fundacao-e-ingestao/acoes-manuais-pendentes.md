@@ -37,7 +37,7 @@ Bootstrap humano + recoveries (#11/#12/#13) concluídos:
   { "can_provision_workspace": true, "workspace_name": "Assessoria Exemplo" }
   ```
 
-  `workspace_name` é opcional e só pré-preenche o campo do formulário. O direito é consumido no provisionamento: provisionar de novo exige nova marcação.
+  **As duas chaves são obrigatórias.** Sem `workspace_name`, a marcação não concede direito nenhum e o usuário continua vendo "seu acesso está sendo preparado" — o nome vem daqui porque as telas do wizard que coletam dados da empresa são de outro ticket. O direito é gasto no provisionamento, antes de o workspace nascer: provisionar de novo exige nova marcação.
 
 ## Já resolvido (referência)
 
