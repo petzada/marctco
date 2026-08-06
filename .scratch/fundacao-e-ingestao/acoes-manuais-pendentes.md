@@ -12,13 +12,15 @@ Bootstrap humano + recoveries (#11/#12/#13) concluídos:
 3. `ALTER SCHEMA private OWNER TO marctco_migrator`
 4. Production migration aplicou migrations `002`–`009`
 
-## Adiável para tickets 07 / 15
+## Já resolvido — 2026-08-06
 
-- **Redis no Railway:** o projeto Railway atual tem apenas `web` e `worker`. BullMQ e o dispatcher (tickets 07 e 15) precisarão de um serviço Redis provisionado na mesma região (`us-west-1`, alinhado ao Supabase).
+- **Redis no Railway:** provisionado. BullMQ e o dispatcher (tickets 07 e 15) já têm serviço.
+- **Bootstrap do papel `marctco_provisioner`:** `CREATE ROLE` + `GRANT … TO marctco_migrator` executados no SQL Editor do Supabase.
+- **`SUPABASE_SERVICE_ROLE_KEY`:** configurada no serviço `web` do Railway.
 
 ## Ticket 17 — bloqueante ANTES de mesclar o PR
 
-- [ ] **Bootstrap do papel `marctco_provisioner`.** O release aplica migrations como `marctco_migrator`, que não tem `CREATEROLE`. A migration `20260806000100_provision_workspace` falha de propósito, antes de qualquer DDL, com o SQL exato. Executar uma vez no SQL Editor do Supabase **como `postgres`**:
+- [x] **Bootstrap do papel `marctco_provisioner`.** Executado em 2026-08-06. O release aplica migrations como `marctco_migrator`, que não tem `CREATEROLE`. A migration `20260806000100_provision_workspace` falha de propósito, antes de qualquer DDL, com o SQL exato. Foi executado uma vez no SQL Editor do Supabase **como `postgres`**:
 
   ```sql
   CREATE ROLE marctco_provisioner NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
@@ -27,7 +29,7 @@ Bootstrap humano + recoveries (#11/#12/#13) concluídos:
 
   Feito isso, o job Production migration passa direto. Se o merge acontecer antes, a migration fica `failed` e a retomada é `prisma migrate resolve --rolled-back 20260806000100_provision_workspace` seguida de novo `migrate deploy` — o `pnpm db:recover:foundation` só cobre as migrations `001` e `002`.
 
-- [ ] **`SUPABASE_SERVICE_ROLE_KEY` no Railway (serviço `web`).** É com ela que o provisionamento gasta o direito em `app_metadata`. Sem a variável, `/onboarding` recusa antes de criar qualquer coisa e mostra "a equipe da marctco precisa concluir a configuração" — nenhum workspace nasce com direito pendurado. Nunca expor no cliente nem versionar.
+- [x] **`SUPABASE_SERVICE_ROLE_KEY` no Railway (serviço `web`).** Configurada em 2026-08-06. É com ela que o provisionamento gasta o direito em `app_metadata`. Sem a variável, `/onboarding` recusa antes de criar qualquer coisa e mostra "a equipe da marctco precisa concluir a configuração" — nenhum workspace nasce com direito pendurado. Nunca expor no cliente nem versionar.
 
 ## Ticket 17 — por cliente novo (rotina da equipe técnica)
 
