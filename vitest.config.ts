@@ -29,6 +29,7 @@ export default defineConfig({
           include: [
             "packages/db/src/foundation-recovery.test.ts",
             "packages/db/src/integration-connection.test.ts",
+            "packages/db/src/provision-workspace.test.ts",
             "packages/db/src/runtime-database-url.test.ts",
             "packages/db/src/workspace-context.test.ts",
             "packages/db/tests/{boot-check,rls}.test.ts"

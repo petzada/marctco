@@ -16,9 +16,28 @@ Bootstrap humano + recoveries (#11/#12/#13) concluídos:
 
 - **Redis no Railway:** o projeto Railway atual tem apenas `web` e `worker`. BullMQ e o dispatcher (tickets 07 e 15) precisarão de um serviço Redis provisionado na mesma região (`us-west-1`, alinhado ao Supabase).
 
-## Adiável para ticket 17
+## Ticket 17 — bloqueante ANTES de mesclar o PR
 
-- **Supabase `app_metadata`:** marcar usuários aptos a provisionar workspace via `app_metadata` no painel Supabase (nunca `user_metadata`). O direito é consumido no provisionamento e só é gravável com `service_role`.
+- [ ] **Bootstrap do papel `marctco_provisioner`.** O release aplica migrations como `marctco_migrator`, que não tem `CREATEROLE`. A migration `20260806000100_provision_workspace` falha de propósito, antes de qualquer DDL, com o SQL exato. Executar uma vez no SQL Editor do Supabase **como `postgres`**:
+
+  ```sql
+  CREATE ROLE marctco_provisioner NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  GRANT marctco_provisioner TO marctco_migrator WITH INHERIT FALSE, SET TRUE;
+  ```
+
+  Feito isso, o job Production migration passa direto. Se o merge acontecer antes, a migration fica `failed` e a retomada é `prisma migrate resolve --rolled-back 20260806000100_provision_workspace` seguida de novo `migrate deploy` — o `pnpm db:recover:foundation` só cobre as migrations `001` e `002`.
+
+- [ ] **`SUPABASE_SERVICE_ROLE_KEY` no Railway (serviço `web`).** É com ela que o provisionamento gasta o direito em `app_metadata`. Sem a variável, `/onboarding` recusa antes de criar qualquer coisa e mostra "a equipe da marctco precisa concluir a configuração" — nenhum workspace nasce com direito pendurado. Nunca expor no cliente nem versionar.
+
+## Ticket 17 — por cliente novo (rotina da equipe técnica)
+
+- [ ] **Marcar o usuário apto no painel Supabase**, em `app_metadata` (nunca `user_metadata`):
+
+  ```json
+  { "can_provision_workspace": true, "workspace_name": "Assessoria Exemplo" }
+  ```
+
+  `workspace_name` é opcional e só pré-preenche o campo do formulário. O direito é consumido no provisionamento: provisionar de novo exige nova marcação.
 
 ## Já resolvido (referência)
 
