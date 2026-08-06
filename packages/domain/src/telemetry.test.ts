@@ -37,6 +37,32 @@ describe("sanitizeTelemetry", () => {
     expect(sanitized.stack).toContain("Error: falha segura");
   });
 
+  it("keeps a nested error's message and stack, and nothing else it carries", () => {
+    const failure = Object.assign(new Error("ECONNREFUSED"), {
+      raw: { telefone: "+5511999999999" }
+    });
+
+    const sanitized = sanitizeTelemetry({
+      event: "integration_event_dispatch",
+      result: "publish_failed",
+      error: failure
+    });
+
+    expect(sanitized).toMatchObject({
+      event: "integration_event_dispatch",
+      result: "publish_failed",
+      error_message: "ECONNREFUSED"
+    });
+    expect(String(sanitized.error_stack)).toContain("Error: ECONNREFUSED");
+    expect(JSON.stringify(sanitized)).not.toContain("5511999999999");
+  });
+
+  it("says nothing when the thrown value is not an error-shaped object", () => {
+    expect(
+      sanitizeTelemetry({ event: "integration_event_dispatch", error: "just a string" })
+    ).toEqual({ event: "integration_event_dispatch" });
+  });
+
   it("permits only hashed identifiers in workspace-access audit events", () => {
     expect(
       sanitizeTelemetry({

@@ -56,6 +56,27 @@ enum IntegrationConnectionStatus {
   @@map("integration_connection_status")
 }
 
+/// The single source of the Integrações screen: what arrived, what it became,
+/// and what is still in quarantine. QUARANTINED and FAILED are written by the
+/// tickets that own those paths (10 and 15); ingestion writes RECEIVED and the
+/// worker writes PROCESSED.
+enum IntegrationEventStatus {
+  RECEIVED
+  PROCESSED
+  QUARANTINED
+  FAILED
+
+  @@map("integration_event_status")
+}
+
+/// The outbox half: PostgreSQL is the source of pending work, never Redis.
+enum IntegrationEventDispatchStatus {
+  PENDING
+  DISPATCHED
+
+  @@map("integration_event_dispatch_status")
+}
+
 model Workspace {
   id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   slug                    String                  @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -66,6 +87,7 @@ model Workspace {
   members                 WorkspaceMember[]
   pipelines               Pipeline[]
   integration_connections IntegrationConnection[]
+  integration_events      IntegrationEvent[]
 
   @@map("workspaces")
 }
@@ -112,10 +134,33 @@ model IntegrationConnection {
   updated_at         DateTime                    @updatedAt @db.Timestamptz(6)
   workspace          Workspace                   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   target_pipeline    Pipeline?                   @relation("IntegrationConnectionTargetPipeline", fields: [workspace_id, target_pipeline_id], references: [workspace_id, id], onDelete: Restrict)
+  events             IntegrationEvent[]
 
   @@unique([workspace_id, provider])
+  @@unique([workspace_id, id])
   @@index([workspace_id])
   @@map("integration_connections")
+}
+
+model IntegrationEvent {
+  id                        String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id              String                         @db.Uuid
+  integration_connection_id String                         @db.Uuid
+  /// The single copy of the payload. Nullable, and null can only ever mean
+  /// expired: it is written on receipt, before the 200 (ADR-0014).
+  raw                       Json?                          @db.JsonB
+  status                    IntegrationEventStatus         @default(RECEIVED)
+  dispatch_status           IntegrationEventDispatchStatus @default(PENDING)
+  received_at               DateTime                       @default(now()) @db.Timestamptz(6)
+  dispatched_at             DateTime?                      @db.Timestamptz(6)
+  processed_at              DateTime?                      @db.Timestamptz(6)
+  updated_at                DateTime                       @updatedAt @db.Timestamptz(6)
+  workspace                 Workspace                      @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  integration_connection    IntegrationConnection          @relation(fields: [workspace_id, integration_connection_id], references: [workspace_id, id], onDelete: Restrict)
+
+  @@index([workspace_id])
+  @@index([dispatch_status, received_at])
+  @@map("integration_events")
 }
 
 model Stage {

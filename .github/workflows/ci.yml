@@ -101,6 +101,9 @@ jobs:
       - run: pnpm db:migrate:dev
       - run: pnpm db:drift
       - run: pnpm test:db
+      # Seam 2 runs against this job's real Postgres and real Redis, with BullMQ
+      # publishing and consuming for actual — never a processor called inline.
+      - run: pnpm test:seam2
       - run: pnpm test:a7
       - run: pnpm test:managed-migration
 

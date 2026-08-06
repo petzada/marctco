@@ -33,6 +33,25 @@ export {
   type ProvisionedWorkspace
 } from "./provision-workspace.js";
 export {
+  claimPendingIntegrationEvents,
+  listIntegrationEvents,
+  markIntegrationEventDispatched,
+  markIntegrationEventProcessed,
+  readIntegrationEventForProcessing,
+  recordIntegrationEvent,
+  type IntegrationEventForProcessing,
+  type IntegrationEventRecord,
+  type ListIntegrationEventsOptions,
+  type PendingIntegrationEvent,
+  type RecordIntegrationEventInput,
+  type RecordedIntegrationEvent
+} from "./integration-event.js";
+export {
+  createIntegrationConnection,
+  type CreateIntegrationConnectionInput,
+  type CreatedIntegrationConnection
+} from "./integration-connection-operations.js";
+export {
   generateIntegrationToken,
   hashIntegrationToken,
   resolveWorkspaceByIntegrationToken,

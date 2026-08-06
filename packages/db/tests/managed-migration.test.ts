@@ -103,7 +103,7 @@ describe.skipIf(!enabled)("managed Postgres migration role", () => {
         Array<{
           role_name: string;
           can_set_migrator: boolean;
-          owned_business_tables: bigint;
+          unowned_business_tables: bigint;
           followup_applied: boolean;
         }>
       >`
@@ -111,12 +111,16 @@ describe.skipIf(!enabled)("managed Postgres migration role", () => {
           current_user::text AS role_name,
           pg_has_role(current_user, 'marctco_migrator', 'SET') AS can_set_migrator,
           (
+            -- What matters is that no business table escapes the migrator, not
+            -- how many there are: a count would have to be edited by every
+            -- ticket that adds a table, and an edited expectation proves less
+            -- each time.
             SELECT COUNT(*)
             FROM pg_tables
             WHERE schemaname = 'public'
               AND tablename <> '_prisma_migrations'
-              AND tableowner = 'marctco_migrator'
-          ) AS owned_business_tables,
+              AND tableowner <> 'marctco_migrator'
+          ) AS unowned_business_tables,
           EXISTS (
             SELECT 1
             FROM public._prisma_migrations
@@ -128,7 +132,7 @@ describe.skipIf(!enabled)("managed Postgres migration role", () => {
         {
           role_name: "postgres",
           can_set_migrator: true,
-          owned_business_tables: 6n,
+          unowned_business_tables: 0n,
           followup_applied: true
         }
       ]);

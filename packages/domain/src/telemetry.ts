@@ -1,4 +1,7 @@
+const errorKeys = new Set(["error", "err"]);
 const allowedKeys = new Set([
+  "error_message",
+  "error_stack",
   "workspace_id",
   "integration_event_id",
   "source",
@@ -47,6 +50,22 @@ export function sanitizeTelemetry(value: unknown): SafeTelemetry {
 
   const safe: SafeTelemetry = {};
   for (const [key, candidate] of Object.entries(source)) {
+    // A thrown error is the one nested value worth keeping: without it, every
+    // "publish failed" line says only that something failed. Only the two
+    // fields an Error is allowed to contribute survive, and a message that is
+    // not a string does not become one.
+    if (errorKeys.has(key)) {
+      const failure = asRecord(candidate);
+      const message = asSafePrimitive(failure?.message);
+      const stack = asSafePrimitive(failure?.stack);
+      if (typeof message === "string") {
+        safe.error_message = message;
+      }
+      if (typeof stack === "string") {
+        safe.error_stack = stack;
+      }
+      continue;
+    }
     if (!allowedKeys.has(key)) {
       continue;
     }

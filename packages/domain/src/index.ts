@@ -10,6 +10,12 @@ export {
   type SafeTelemetry
 } from "./telemetry.js";
 export {
+  INTEGRATION_EVENT_JOB,
+  INTEGRATION_EVENT_QUEUE,
+  integrationEventJobId,
+  type IntegrationEventJobData
+} from "./ingestion-jobs.js";
+export {
   PIPELINE_TYPES,
   STAGE_ROLES,
   assertPipelineDefinition,
