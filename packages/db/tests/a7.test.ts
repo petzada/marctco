@@ -114,5 +114,8 @@ describe("A7 mechanical checks", () => {
       { cwd: repository_root, encoding: "utf8", env: process.env }
     );
     expect(output).toMatch(/No difference detected|^$/m);
-  });
+    // This case spawns a Prisma process, so it is not bound by the default
+    // 5s: the CI runner and a loaded laptop both cross that line, and a drift
+    // check that fails for being slow teaches nothing about drift.
+  }, 20_000);
 });

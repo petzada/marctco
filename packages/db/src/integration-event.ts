@@ -1,13 +1,23 @@
 import { randomUUID } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type {
+  IntegrationEventDispatchStatus,
+  IntegrationEventStatus,
+  PrismaClient
+} from "@prisma/client";
 import { createJobContext, type JobContext, type UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { hashIntegrationToken } from "./integration-connection.js";
+import { assertUuid } from "./internal/uuid.js";
 import { withAccessContext } from "./internal/scoped-transaction.js";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CLAIM_BATCH = 500;
+const MAX_EVENTS_PER_PAGE = 500;
+const EVENT_NOT_VISIBLE = "The integration event is not visible in the workspace its job claims";
 const sharedPrisma = createPrismaClient();
+
+/** Re-exported from the generated enums so this module cannot drift from the schema. */
+export type { IntegrationEventDispatchStatus, IntegrationEventStatus };
 
 export interface RecordIntegrationEventInput {
   /** Resolved from the bearer token, never from the request body (ADR-0007). */
@@ -29,19 +39,30 @@ export interface PendingIntegrationEvent {
 export interface IntegrationEventForProcessing {
   readonly id: string;
   readonly integration_connection_id: string;
-  readonly status: "RECEIVED" | "PROCESSED" | "QUARANTINED" | "FAILED";
+  readonly status: IntegrationEventStatus;
   readonly raw: unknown;
   readonly received_at: Date;
 }
 
-interface IdRow {
+export interface IntegrationEventRecord extends IntegrationEventForProcessing {
+  readonly dispatch_status: IntegrationEventDispatchStatus;
+  readonly dispatched_at: Date | null;
+  readonly processed_at: Date | null;
+}
+
+/** The keyset a caller carries to ask for the page after this row (ADR-0013). */
+export interface IntegrationEventCursor {
+  readonly received_at: Date;
   readonly id: string;
 }
 
-function assertUuid(value: string, label: string): void {
-  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
-    throw new Error(`${label} must be a UUID, received: ${JSON.stringify(value)}`);
-  }
+export interface ListIntegrationEventsOptions {
+  readonly limit?: number;
+  readonly after?: IntegrationEventCursor;
+}
+
+interface IdRow {
+  readonly id: string;
 }
 
 /**
@@ -128,20 +149,26 @@ export async function claimPendingIntegrationEvents(
 /**
  * Written only after BullMQ has confirmed the job. Marking first would let a
  * failed publish look like delivered work, which is the one way the outbox can
- * lose a lead (ADR-0007).
+ * lose a lead (ADR-0007). A write that touches no row means the event is not
+ * in the workspace the caller claims, and that fails rather than reporting a
+ * dispatch that never happened — otherwise the event stays pending forever and
+ * is republished on every pass.
  */
 export async function markIntegrationEventDispatched(
   context: JobContext,
   prisma: PrismaClient = sharedPrisma
 ): Promise<void> {
   await withAccessContext(prisma, context, async (transaction) => {
-    await transaction.$executeRaw`
+    const updated = await transaction.$executeRaw`
       UPDATE integration_events
       SET dispatch_status = 'DISPATCHED',
           dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${context.integration_event_id}::uuid
     `;
+    if (updated === 0) {
+      throw new Error(EVENT_NOT_VISIBLE);
+    }
   });
 }
 
@@ -163,28 +190,21 @@ export async function readIntegrationEventForProcessing(
   );
   const event = events[0];
   if (!event) {
-    throw new Error(
-      "The integration event is not visible in the workspace its job claims"
-    );
+    throw new Error(EVENT_NOT_VISIBLE);
   }
   return event;
 }
 
-export interface IntegrationEventRecord extends IntegrationEventForProcessing {
-  readonly dispatch_status: "PENDING" | "DISPATCHED";
-  readonly dispatched_at: Date | null;
-  readonly processed_at: Date | null;
-}
-
-export interface ListIntegrationEventsOptions {
-  readonly limit?: number;
-}
-
 /**
- * What the Integrações screen reads: what arrived, what was dispatched, what
- * was processed — the single source for that screen, with no parallel state in
- * Redis (ADR-0007). Scoped by the caller's workspace like every other named
- * read, and restricted to the profiles that own the account's plumbing.
+ * One workspace's events, newest first: what arrived, what was dispatched,
+ * what was processed — the single source for the Integrações screen, with no
+ * parallel state in Redis (ADR-0007).
+ *
+ * Paginated by keyset, never `OFFSET` (ADR-0013): events keep arriving while
+ * someone reads, and an offset would skip or repeat rows precisely when the
+ * screen is busiest. `(received_at, id)` is the same pair the index orders by,
+ * so the tie between two events received in the same millisecond is broken the
+ * same way on every page.
  */
 export async function listIntegrationEvents(
   context: UserContext,
@@ -195,9 +215,20 @@ export async function listIntegrationEvents(
     throw new Error("Only MANAGER or OWNER can read integration events");
   }
   const limit = options.limit ?? 100;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-    throw new Error("limit must be an integer between 1 and 500");
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENTS_PER_PAGE) {
+    throw new Error(`limit must be an integer between 1 and ${MAX_EVENTS_PER_PAGE}`);
   }
+  if (options.after) {
+    assertUuid(options.after.id, "after.id");
+    if (Number.isNaN(options.after.received_at.getTime())) {
+      throw new Error("after.received_at must be a valid instant");
+    }
+  }
+
+  const after = options.after;
+  const keyset = after
+    ? Prisma.sql`WHERE (received_at, id) < (${after.received_at}::timestamptz, ${after.id}::uuid)`
+    : Prisma.empty;
 
   return withAccessContext(prisma, context, async (transaction) =>
     transaction.$queryRaw<IntegrationEventRecord[]>`
@@ -211,6 +242,7 @@ export async function listIntegrationEvents(
         dispatched_at,
         processed_at
       FROM integration_events
+      ${keyset}
       ORDER BY received_at DESC, id DESC
       LIMIT ${limit}::integer
     `
@@ -231,9 +263,7 @@ export async function markIntegrationEventProcessed(
       WHERE id = ${context.integration_event_id}::uuid
     `;
     if (updated === 0) {
-      throw new Error(
-        "The integration event is not visible in the workspace its job claims"
-      );
+      throw new Error(EVENT_NOT_VISIBLE);
     }
   });
 }

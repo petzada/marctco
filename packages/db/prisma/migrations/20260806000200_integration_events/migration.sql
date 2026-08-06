@@ -44,6 +44,11 @@ CREATE INDEX integration_events_workspace_id_idx ON integration_events(workspace
 -- The dispatcher's only query: oldest pending first, across every workspace.
 CREATE INDEX integration_events_dispatch_status_received_at_idx
   ON integration_events(dispatch_status, received_at);
+-- The Integrações screen reads one workspace newest-first. Ordering by the same
+-- columns the read orders by is what keeps it from sorting a whole tenant's
+-- history to show ten rows.
+CREATE INDEX integration_events_workspace_id_received_at_id_idx
+  ON integration_events(workspace_id, received_at DESC, id DESC);
 
 ALTER TABLE integration_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE integration_events FORCE ROW LEVEL SECURITY;
@@ -60,7 +65,13 @@ GRANT USAGE ON TYPE integration_event_status, integration_event_dispatch_status
 -- workspace_id that only the read reveals (ADR-0006 regra 9). The executor is
 -- the same read-only technical role that owns the other two resolvers — it
 -- gains SELECT and nothing else, so all three stay incapable of writing.
-GRANT SELECT ON TABLE integration_events TO marctco_private_definer;
+--
+-- The grant is per column, not per table: `raw` carries CPF and phone numbers,
+-- and the function's contract is `(id, workspace_id)`. Granting the whole row
+-- would leave the payload one careless SELECT away from a function that runs
+-- with no tenant at all (ADR-0019: only the privilege the function needs).
+GRANT SELECT (id, workspace_id, dispatch_status, received_at)
+  ON TABLE integration_events TO marctco_private_definer;
 CREATE POLICY integration_events_private_definer_select ON integration_events
   FOR SELECT TO marctco_private_definer
   USING (true);

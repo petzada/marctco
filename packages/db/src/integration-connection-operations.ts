@@ -6,8 +6,8 @@ import {
   type IntegrationProvider
 } from "./integration-connection.js";
 import { withAccessContext } from "./internal/scoped-transaction.js";
+import { isUuid } from "./internal/uuid.js";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sharedPrisma = createPrismaClient();
 
 export interface CreateIntegrationConnectionInput {
@@ -40,7 +40,7 @@ export async function createIntegrationConnection(
   if (context.role !== "OWNER") {
     throw new Error("Only OWNER can create an integration connection");
   }
-  if (input.target_pipeline_id !== undefined && !UUID_PATTERN.test(input.target_pipeline_id)) {
+  if (input.target_pipeline_id !== undefined && !isUuid(input.target_pipeline_id)) {
     throw new Error("target_pipeline_id must be a UUID");
   }
 

@@ -126,11 +126,37 @@ describe("Seam 2: a POST becomes a durable event, a job, and a processed event",
     await expect(listIntegrationEvents(tenant.context)).resolves.toHaveLength(4);
   });
 
+  it("pages by keyset, so a lead arriving mid-read neither repeats nor hides a row", async () => {
+    const all = await listIntegrationEvents(tenant.context);
+    expect(all.length).toBeGreaterThanOrEqual(4);
+
+    const first_page = await listIntegrationEvents(tenant.context, { limit: 2 });
+    const cursor = first_page[1];
+    if (!cursor) {
+      throw new Error("expected a second row to page from");
+    }
+
+    // A new event lands between the two reads, exactly as it would in
+    // production. An OFFSET would shift the window and repeat a row here.
+    await POST(leadRequest(tenant.token, JSON.stringify({ nome: "Chegou no meio" })));
+
+    const second_page = await listIntegrationEvents(tenant.context, {
+      limit: 2,
+      after: { received_at: cursor.received_at, id: cursor.id }
+    });
+
+    const seen = [...first_page, ...second_page].map((event) => event.id);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(second_page.map((event) => event.id)).toEqual(
+      all.slice(2, 4).map((event) => event.id)
+    );
+  });
+
   it("publishes every pending event once, under a job id derived from the event", async () => {
     const pending = (await listIntegrationEvents(tenant.context)).filter(
       (event) => event.dispatch_status === "PENDING"
     );
-    expect(pending).toHaveLength(4);
+    expect(pending).toHaveLength(5);
 
     // The dispatcher looks for pending work in every workspace at once, so what
     // is asserted here is that it published everything it claimed, and that

@@ -15,11 +15,22 @@ function startIntegrationEventWorker(): Worker | undefined {
     return undefined;
   }
 
+  // `maxRetriesPerRequest: null` is BullMQ's requirement for a Worker: a
+  // command waits for the connection to come back rather than throwing, so a
+  // Redis blip pauses consumption instead of killing the process.
   const worker = new Worker(
     INTEGRATION_EVENT_QUEUE,
     async (job) => processIntegrationEventJob(job.data),
     { connection: new IORedis(url, { maxRetriesPerRequest: null }) }
   );
+  worker.on("completed", (job, result: { integration_event_id: string }) => {
+    logger.info({
+      event: "integration_event_job",
+      result: "processed",
+      job_id: job.id,
+      integration_event_id: result.integration_event_id
+    });
+  });
   worker.on("failed", (job, error) => {
     // A job that claims the wrong tenant reads zero rows and lands here. It is
     // meant to be loud: BullMQ retries it and, once exhausted, it stays visible

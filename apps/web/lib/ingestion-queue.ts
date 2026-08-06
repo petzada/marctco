@@ -2,13 +2,12 @@ import { INTEGRATION_EVENT_JOB, INTEGRATION_EVENT_QUEUE } from "@marctco/domain"
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import {
+  dispatchIntervalMs,
   dispatchPendingIntegrationEvents,
   type JobPublisher
 } from "./ingestion-dispatcher";
 import { logger } from "./logger";
 
-const DEFAULT_INTERVAL_MS = 2_000;
-const MINIMUM_INTERVAL_MS = 250;
 const JOB_ATTEMPTS = 5;
 
 export interface IngestionQueue {
@@ -27,10 +26,15 @@ export function createIngestionQueue(redis_url = process.env.REDIS_URL): Ingesti
     throw new Error("The ingestion dispatcher requires REDIS_URL");
   }
 
-  // `maxRetriesPerRequest: null` is BullMQ's requirement: a command waits for
-  // the connection to come back instead of throwing, so a Redis blip shows up
-  // as a slow publish rather than a lost pass.
-  const connection = new IORedis(redis_url, { maxRetriesPerRequest: null });
+  // The producer fails fast on purpose. BullMQ's `maxRetriesPerRequest: null`
+  // is the right setting for a Worker — a command waits for the connection to
+  // come back — but here it would make an outage look like a hung pass instead
+  // of a refused publish, and a refused publish is exactly what leaves the
+  // event pending for the next pass.
+  const connection = new IORedis(redis_url, {
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false
+  });
   const queue = new Queue(INTEGRATION_EVENT_QUEUE, { connection });
 
   return {
@@ -59,16 +63,7 @@ export function createIngestionQueue(redis_url = process.env.REDIS_URL): Ingesti
  * the worker has no access to the private schema at all (ADR-0019).
  */
 export function startIngestionDispatcher(): void {
-  const interval_ms = Number.parseInt(
-    process.env.INGESTION_DISPATCH_INTERVAL_MS ?? String(DEFAULT_INTERVAL_MS),
-    10
-  );
-  if (!Number.isInteger(interval_ms) || interval_ms < MINIMUM_INTERVAL_MS) {
-    throw new Error(
-      `INGESTION_DISPATCH_INTERVAL_MS must be an integer of at least ${MINIMUM_INTERVAL_MS}`
-    );
-  }
-
+  const interval_ms = dispatchIntervalMs(process.env.INGESTION_DISPATCH_INTERVAL_MS);
   const { publisher } = createIngestionQueue();
   const state = { running: false };
   const timer = setInterval(() => {

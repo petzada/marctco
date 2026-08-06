@@ -1341,7 +1341,53 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
     ]);
   });
 
-  it("keeps the read-only executor read-only, now that it reads a third table", async () => {
+  it("scopes the worker role to its own tenant's events, and to nothing without a GUC", async () => {
+    // The Seam 2 pipeline runs as the app role; this is the same policy seen
+    // from the role the worker actually connects with in production.
+    const unscoped = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_worker");
+      return transaction.$queryRaw<Array<{ id: string }>>`SELECT id FROM integration_events`;
+    });
+    expect(unscoped).toEqual([]);
+
+    const scoped = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_worker");
+      await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
+      return transaction.$queryRaw<Array<{ workspace_id: string }>>`
+        SELECT workspace_id FROM integration_events
+      `;
+    });
+    expect(scoped.length).toBeGreaterThan(0);
+    expect(scoped.every((row) => row.workspace_id === workspace_a)).toBe(true);
+
+    const marks_processed = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_worker");
+      await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
+      return transaction.$executeRawUnsafe(`
+        UPDATE integration_events
+        SET status = 'PROCESSED', processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE workspace_id = '${workspace_b}'
+      `);
+    });
+    expect(marks_processed, "the worker cannot close another tenant's event").toBe(0);
+  });
+
+  it("keeps the payload out of reach of the tenant-less executor", async () => {
+    const columns = await client.$queryRaw<
+      Array<{ can_read_id: boolean; can_read_workspace: boolean; can_read_raw: boolean }>
+    >`
+      SELECT
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'id', 'SELECT') AS can_read_id,
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'workspace_id', 'SELECT') AS can_read_workspace,
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'raw', 'SELECT') AS can_read_raw
+    `;
+    // `raw` holds CPF and phone numbers, and this executor runs with no tenant.
+    expect(columns).toEqual([
+      { can_read_id: true, can_read_workspace: true, can_read_raw: false }
+    ]);
+  });
+
+  it("keeps the read-only executor read-only across every business table", async () => {
     // Reusing marctco_private_definer for a third function is only allowed
     // while Seam 3 can prove the same containment (ADR-0019): it reads what its
     // functions need and cannot write anywhere.
@@ -1359,9 +1405,12 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       ORDER BY tablename
     `;
     expect(privileges.filter((row) => row.can_write)).toEqual([]);
+    // `integration_events` is deliberately absent: the executor holds a
+    // column grant there, not a table one, so it can read `(id, workspace_id)`
+    // and never the payload — proved by the column test above.
     expect(
       privileges.filter((row) => row.can_select).map((row) => row.table_name)
-    ).toEqual(["integration_connections", "integration_events", "workspace_members", "workspaces"]);
+    ).toEqual(["integration_connections", "workspace_members", "workspaces"]);
   });
 
   it("keeps every provisioning policy attached to a table the function actually writes", async () => {

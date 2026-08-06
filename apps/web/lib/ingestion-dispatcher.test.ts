@@ -12,7 +12,9 @@ vi.mock("@marctco/db", () => ({
   createJobContext
 }));
 
-const { dispatchPendingIntegrationEvents } = await import("./ingestion-dispatcher");
+const { dispatchIntervalMs, dispatchPendingIntegrationEvents } = await import(
+  "./ingestion-dispatcher"
+);
 
 const workspace_id = randomUUID();
 const first_event_id = randomUUID();
@@ -64,6 +66,13 @@ describe("dispatchPendingIntegrationEvents", () => {
       dispatched: 0
     });
     expect(markIntegrationEventDispatched).not.toHaveBeenCalled();
+  });
+
+  it("refuses a sweep interval that would hammer the outbox, and defaults without one", () => {
+    expect(dispatchIntervalMs(undefined)).toBe(2_000);
+    expect(dispatchIntervalMs("5000")).toBe(5_000);
+    expect(() => dispatchIntervalMs("10")).toThrow(/at least 250/);
+    expect(() => dispatchIntervalMs("nem numero")).toThrow(/at least 250/);
   });
 
   it("keeps dispatching the rest of the batch after one failure", async () => {

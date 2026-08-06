@@ -8,6 +8,25 @@ import { integrationEventJobId, type IntegrationEventJobData } from "@marctco/do
 import { logger } from "./logger";
 
 export const DISPATCH_BATCH_SIZE = 50;
+export const DEFAULT_DISPATCH_INTERVAL_MS = 2_000;
+const MINIMUM_DISPATCH_INTERVAL_MS = 250;
+
+/**
+ * How often the outbox is swept. Kept pure and separate from the timer so the
+ * refusal of a nonsensical interval is provable without a Redis connection.
+ */
+export function dispatchIntervalMs(configured: string | undefined): number {
+  if (configured === undefined) {
+    return DEFAULT_DISPATCH_INTERVAL_MS;
+  }
+  const interval_ms = Number.parseInt(configured, 10);
+  if (!Number.isInteger(interval_ms) || interval_ms < MINIMUM_DISPATCH_INTERVAL_MS) {
+    throw new Error(
+      `INGESTION_DISPATCH_INTERVAL_MS must be an integer of at least ${MINIMUM_DISPATCH_INTERVAL_MS}`
+    );
+  }
+  return interval_ms;
+}
 
 export interface JobPublisher {
   publish(job_id: string, data: IntegrationEventJobData): Promise<void>;

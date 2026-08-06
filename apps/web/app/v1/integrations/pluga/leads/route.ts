@@ -1,18 +1,13 @@
 import { recordIntegrationEvent, resolveWorkspaceByIntegrationToken } from "@marctco/db";
 import { checkSuspiciousRequestLimit, createMemoryRateLimiter } from "@marctco/domain";
 import { NextResponse } from "next/server";
-import { hashIdentifier } from "../../../../../lib/audit-hash";
 import { bearerToken } from "../../../../../lib/integration-token";
 import { logger } from "../../../../../lib/logger";
+import { requestIp } from "../../../../../lib/request-ip";
 
 export const dynamic = "force-dynamic";
 
 const failedTokenLimiter = createMemoryRateLimiter({ limit: 60, window_ms: 60_000 });
-
-function requestIp(headers: Headers): string {
-  const forwarded = headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || headers.get("x-real-ip") || "unknown";
-}
 
 /**
  * One POST per lead, answered 200 after the PostgreSQL commit — not 202,
@@ -63,12 +58,12 @@ export async function POST(request: Request): Promise<NextResponse> {
 }
 
 function unauthorized(request: Request, result: string): NextResponse {
-  // The refusal reason travels in `result`, which telemetry already allows:
-  // the caller never learns which of the two it was, and the log never carries
-  // the token — only a hash of where the attempt came from.
+  // The refusal reason travels in `result`, which telemetry already allows.
+  // The caller never learns which of the two it was, and the log carries
+  // neither the token nor the address — only the fact and the request id.
   const limit = checkSuspiciousRequestLimit(failedTokenLimiter, {
-    scope: "LANDING_PAGE_TOKEN",
-    token_hash: hashIdentifier(requestIp(request.headers))
+    scope: "AUTH_FAILURE",
+    ip_address: requestIp(request.headers)
   });
   logger.warn({
     event: "integration_event_received",

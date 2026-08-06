@@ -61,6 +61,11 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Conexão de integração | `IntegrationConnection` | — |
 | Evento de integração | `IntegrationEvent` | — |
 | Estado de despacho do evento | `IntegrationEvent.dispatch_status` | `PENDING \| DISPATCHED`; outbox PostgreSQL → BullMQ |
+| Estado do evento | `IntegrationEvent.status` | `RECEIVED \| PROCESSED \| QUARANTINED \| FAILED`. Fonte única da tela de Integrações: `RECEIVED` no commit que aceita o lead, `PROCESSED` quando o worker conclui, `QUARANTINED` sem contato, `FAILED` quando o processamento esgota as tentativas |
+| Instante do recebimento | `IntegrationEvent.received_at` | Verdade sobre a origem; não é o `arrived_at` da Oportunidade |
+| Instante do despacho | `IntegrationEvent.dispatched_at` | Gravado **depois** da confirmação do BullMQ; nulo enquanto `PENDING` |
+| Instante do processamento | `IntegrationEvent.processed_at` | Nulo até o worker concluir |
+| Conexão do evento | `IntegrationEvent.integration_connection_id` | Por qual conexão o lead entrou; FK composta com `workspace_id` |
 | Envelope de assinatura | `Envelope` | — |
 | Quarentena | `IntegrationEvent.status = QUARANTINED` | Estado do evento, não da oportunidade |
 | Marcador "sem telefone" | `Opportunity.missing_phone` | Significa uma coisa só: não dá WhatsApp nem ligação |

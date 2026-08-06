@@ -1,9 +1,9 @@
 import { defaultCommercialPipeline } from "@marctco/domain";
 import type { PrismaClient } from "@prisma/client";
 import { createPrismaClient } from "./client.js";
+import { isUuid } from "./internal/uuid.js";
 import { listUserWorkspaces } from "./workspace-context.js";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sharedPrisma = createPrismaClient();
 
 export interface ProvisionWorkspaceInput {
@@ -45,7 +45,7 @@ export async function provisionWorkspace(
   input: ProvisionWorkspaceInput,
   prisma: PrismaClient = sharedPrisma
 ): Promise<ProvisionedWorkspace> {
-  if (!UUID_PATTERN.test(input.owner_user_id)) {
+  if (!isUuid(input.owner_user_id)) {
     throw new Error(
       `owner_user_id must be a UUID, received: ${JSON.stringify(input.owner_user_id)}`
     );
