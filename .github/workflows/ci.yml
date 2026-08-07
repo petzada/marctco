@@ -107,16 +107,63 @@ jobs:
       - run: pnpm test:a7
       - run: pnpm test:managed-migration
 
+  # Nothing in this pipeline built an image until 2026-08-07, and so every
+  # deploy from tickets 04-06 onward failed for two days while CI stayed green:
+  # `pnpm install` in a full checkout is not the same install the Dockerfile
+  # runs, and a build that passes is not a process that starts. Both halves are
+  # gated here now.
+  image:
+    name: Image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [web, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          tags: marctco-${{ matrix.app }}:ci
+          load: true
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+      # Building proves the install order; only running proves the image can
+      # resolve what it imports. packages/domain went from zero dependencies to
+      # zod and libphonenumber-js, and the missing node_modules showed up
+      # nowhere until a container was actually started.
+      - name: Resolve the domain package inside the image
+        run: |
+          docker run --rm --entrypoint node marctco-${{ matrix.app }}:ci -e "
+            import('/app/packages/domain/dist/index.js')
+              .then((domain) => {
+                const inbound = domain.buildInboundLead(
+                  domain.readLeadPayload({ phone: '(11) 98765-4321' }),
+                  { source: 'META_LEAD_ADS', external_lead_id: 'ci' }
+                );
+                const phones = domain.normalize(inbound).phones;
+                if (phones[0] !== '+5511987654321') {
+                  throw new Error('normalization is wrong inside the image: ' + phones);
+                }
+                console.log('domain resolves and normalizes:', phones[0]);
+              })
+              .catch((error) => { console.error(error.message); process.exit(1); });
+          "
+
   ci:
     name: CI
     if: always()
-    needs: [quality, database]
+    needs: [quality, database, image]
     runs-on: ubuntu-latest
     steps:
       - name: Require every PR gate
         run: |
           test '${{ needs.quality.result }}' = 'success'
           test '${{ needs.database.result }}' = 'success'
+          test '${{ needs.image.result }}' = 'success'
 
   release:
     name: Production migration

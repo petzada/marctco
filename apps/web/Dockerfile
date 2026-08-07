@@ -22,6 +22,13 @@ RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
 COPY packages/db packages/db
 RUN pnpm --filter @marctco/db generate && pnpm --filter @marctco/domain build && pnpm --filter @marctco/db build && pnpm --filter @marctco/web build
+# The runtime copies /app/node_modules whole, so the dev dependencies ship with
+# it and this image is around 1.5 GB. `pnpm prune --prod` is NOT the fix: it
+# refuses to run without a TTY because it removes and reinstalls the modules
+# directory, which would take the Prisma client generated two lines above with
+# it — and that failure would surface on the first query in production, not
+# here. Shrinking this needs `pnpm deploy --filter @marctco/web --prod` building
+# a self-contained tree, which is a change worth its own testing pass.
 
 FROM node:24-alpine AS runtime
 WORKDIR /app
