@@ -131,6 +131,26 @@ jobs:
           load: true
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+          # Deliberately recognisable placeholders, not the real project's. What
+          # is being tested is the wiring, and the step below greps the built
+          # bundle for exactly these strings.
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder-anon-key
+      # `NEXT_PUBLIC_*` is inlined by Next at build time, so "the variable is
+      # set on the Railway service" proves nothing about the JavaScript the
+      # browser downloads. Without this, a broken ARG chain ships a login form
+      # holding empty strings, and the only symptom is a thrown error the first
+      # time somebody clicks "Entrar" — in production, at the worst moment.
+      - name: Prove the public Supabase values reached the client bundle
+        if: matrix.app == 'web'
+        run: |
+          docker run --rm --entrypoint sh marctco-web:ci -c '
+            grep -rq "ci-placeholder.supabase.co" /app/apps/web/.next/static \
+              && grep -rq "ci-placeholder-anon-key" /app/apps/web/.next/static \
+              || { echo "the public Supabase values were not inlined into the client bundle"; exit 1; }
+            echo "public Supabase values are inlined in the client bundle"
+          '
       # Building proves the install order; only running proves the image can
       # resolve what it imports. packages/domain went from zero dependencies to
       # zod and libphonenumber-js, and the missing node_modules showed up

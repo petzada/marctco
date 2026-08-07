@@ -28,6 +28,25 @@ a rede privada, que não conta egress.
   ioredis 5.9.3 já vem com **`family: 0`** (aceita as duas pilhas). Se um dia a
   versão for fixada para baixo, isto volta a importar.
 
+## Resolvido — 2026-08-07, login em produção
+
+`NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` **não existiam no
+serviço `web`**, o que derrubava toda rota autenticada antes de chegar ao
+`/onboarding` — e também o consumo do direito, porque
+`createSupabaseAdminClient()` exige a URL além da service role key.
+
+- [x] **As duas variáveis setadas no Railway** (pelo dono do projeto).
+- [x] **O Dockerfile passou a inliná-las no build.** Setar no serviço não
+  bastava: `NEXT_PUBLIC_*` é inlinado pelo Next **no build**, não lido em
+  runtime, e o formulário de login é client component. Sem `ARG`/`ENV` no
+  Dockerfile, o bundle do browser saía com string vazia e só estourava quando
+  alguém clicasse em "Entrar". Só o par público entra ali; a
+  `SUPABASE_SERVICE_ROLE_KEY` é lida em runtime e nunca é assada numa camada.
+- [x] **O CI prova o inline**, não a existência da variável: constrói a imagem
+  com placeholders reconhecíveis e faz `grep` neles em
+  `apps/web/.next/static`. Verificado nos dois sentidos antes de subir — a
+  imagem corrigida contém os valores, a anterior não.
+
 ## 🟡 Ainda não exercitado ponta a ponta em produção
 
 - [ ] **Postar um lead de teste e conferir que vira Pessoa.** O caminho
