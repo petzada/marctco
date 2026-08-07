@@ -14,6 +14,8 @@ RUN pnpm install --frozen-lockfile
 COPY apps/worker apps/worker
 COPY packages/db packages/db
 RUN pnpm --filter @marctco/db generate && pnpm --filter @marctco/domain build && pnpm --filter @marctco/db build && pnpm --filter @marctco/worker build
+# Same size caveat as apps/web/Dockerfile, and the same reason `pnpm prune
+# --prod` is not the answer here.
 
 FROM node:24-alpine AS runtime
 WORKDIR /app

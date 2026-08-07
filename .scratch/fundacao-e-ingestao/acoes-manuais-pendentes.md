@@ -3,30 +3,54 @@
 > Atualizado em 2026-08-07, na recuperação do build Docker. Production migration
 > verde com 12/12 migrations aplicadas.
 
-## URGENTE — o deploy estava parado desde 2026-08-05
+## 🔴 BLOQUEANTE — `REDIS_URL` ausente nos DOIS serviços
 
-Produção rodava `26a7843` (era do ticket 03) enquanto o banco já tinha 12
-migrations. Os tickets **06, 07, 17 e 08 nunca subiram**: as migrations sobem
-pelo job de release do GitHub, independente do Railway, então o schema andou e o
-código não. Causa e correção no `registro.md`, seção "Recuperação do build
-Docker".
+**A ingestão está meio viva em produção.** O endpoint aceita lead e grava a
+outbox no PostgreSQL — nada se perde, é o desenho do ADR-0007 —, mas **nada é
+despachado nem consumido**. Os leads ficam parados com `dispatch_status = PENDING`.
 
-- [ ] **Acompanhar o primeiro deploy depois do merge da recuperação.** É a
-  primeira vez que quatro fatias sobem juntas. Conferir `/health` do web em
-  `https://web-production-613e6.up.railway.app/health` e `worker ready` nos logs
-  do worker.
-- [ ] **Conferir o `REDIS_URL` do serviço `web` antes de comemorar** — o item do
-  ticket 07 logo abaixo, que nunca chegou a valer porque o código do 07 nunca
-  chegou a rodar em produção. Agora vai.
-- [ ] **Abrir item para o tamanho da imagem do web (1.49 GB).** O runtime passou
-  a copiar `/app/node_modules` inteiro, com devDependencies. `pnpm prune --prod`
-  antes do runtime stage, ou `pnpm deploy`, resolve. Não foi feito junto de
-  propósito: não se arrisca reabrir um deploy parado há dois dias por uma
-  otimização de tamanho.
-- [ ] **Vigiar entrega, não só CI.** Nada no pipeline constrói a imagem, então o
-  CI ficou verde por dois dias enquanto nada era entregue. O único sinal era o
-  painel do Railway. Vale um passo de `docker build` no CI, ou um alerta de
-  deploy falho.
+Verificado em 2026-08-07, com o deploy já verde:
+
+- `railway variables --service web` **não tem** `REDIS_URL`;
+- o log do worker diz, textualmente: `REDIS_URL is absent; integration events
+  will not be consumed`.
+
+O item antigo dizia "falta no `web`". Estava incompleto: **falta nos dois**. O
+serviço Redis existe no Railway desde 2026-08-06; o que falta é referenciá-lo.
+
+- [ ] **`REDIS_URL` no serviço `web`.** O dispatcher roda no processo web, não no
+  worker: `private.claim_pending_events` só é executável por `marctco_app`, e o
+  worker não tem `USAGE` no schema `private`. Sem isso, nada sai da outbox.
+- [ ] **`REDIS_URL` no serviço `worker`.** Sem isso o worker sobe, passa no
+  healthcheck e **não consome fila nenhuma** — que é o estado de agora.
+- [ ] **Depois de setar as duas:** postar um lead de teste no endpoint e conferir
+  que ele vira Pessoa. Esse caminho nunca foi exercitado ponta a ponta em
+  produção, porque o código do ticket 07 só chegou lá hoje.
+
+## Resolvido — 2026-08-07, recuperação do deploy
+
+O deploy do Railway falhava desde 2026-08-05: produção rodava `26a7843` (era do
+ticket 03) enquanto o banco já tinha 12 migrations, e os tickets **06, 07, 17 e
+08 nunca tinham subido**. Causa e correção no `registro.md`, seção "Recuperação
+do build Docker".
+
+- [x] **Build corrigido e deployado.** `6ff4724` ativo nos dois serviços,
+  `/health` do web em 200, worker registrando `worker ready`.
+- [x] **O CI passou a construir e a executar as imagens** (job `Image`, matriz
+  web/worker), e o gate `CI` exige o resultado dele. Era o buraco que deixou
+  quatro tickets fora do ar com o CI verde: `pnpm install` num checkout completo
+  não é o install que o Dockerfile roda, e build que passa não é processo que
+  sobe. O job **executa** a imagem e normaliza um telefone dentro dela.
+
+## Item aberto — tamanho da imagem (não bloqueante)
+
+- [ ] **Web em ~1.5 GB, worker em ~1.3 GB.** O runtime copia `/app/node_modules`
+  inteiro, com devDependencies. **`pnpm prune --prod` foi tentado em 2026-08-07 e
+  não serve:** recusa rodar sem TTY porque **remove e reinstala** o diretório de
+  módulos, o que levaria junto o client do Prisma gerado no build — e essa falha
+  apareceria na primeira query em produção, não no build. O caminho é
+  `pnpm deploy --filter @marctco/web --prod` montando uma árvore auto-contida, e
+  isso merece passada de teste própria.
 
 ## Já resolvido — Ticket 06 / Production migration 002
 
@@ -37,9 +61,10 @@ Bootstrap humano + recoveries (#11/#12/#13) concluídos:
 3. `ALTER SCHEMA private OWNER TO marctco_migrator`
 4. Production migration aplicou migrations `002`–`009`
 
-## Ticket 07 — antes do deploy
+## Ticket 07 — `REDIS_URL`
 
-- [ ] **`REDIS_URL` também no serviço `web` do Railway.** O dispatcher roda no processo web, não no worker: `private.claim_pending_events` só é executável por `marctco_app`, e o worker não tem `USAGE` no schema `private`. Sem a variável no `web`, o endpoint continua aceitando lead e gravando a outbox — nada se perde —, mas nada é publicado na fila.
+Promovido para o topo deste arquivo em 2026-08-07, quando se descobriu que falta
+nos **dois** serviços e não só no `web`. Ver a seção bloqueante lá em cima.
 
 ## Já resolvido — 2026-08-06
 
