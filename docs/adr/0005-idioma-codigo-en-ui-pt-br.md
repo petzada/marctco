@@ -39,7 +39,14 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Gestão | `WorkspaceMember.role = MANAGER` | Operação inteira do workspace |
 | Direção | `WorkspaceMember.role = OWNER` | Operação **e** conta: membros, papéis, segredo de integração. É o papel criado no provisionamento |
 | Plano de ingestão | `IntakePlan` | União discriminada `Quarantine \| Retransmission \| NewOpportunity`; decidido puro, aplicado por `applyIntakePlan` ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)) |
+| Contrato canônico de entrada | `InboundLead` | O contrato `v1` já interpretado, com `source` e `external_lead_id` resolvidos. Zod é a fonte única e o tipo é inferido ([ADR-0008](./0008-fronteira-conector-dominio.md)). **Nunca** `LeadPayload` como tipo de domínio |
+| Lead normalizado | `NormalizedLead` | Saída de `normalize()`. Value object, não entidade. Telefone em `phones[]` E.164, e-mail em `emails[]` minúsculo, `cpf` só dígitos, `installment_amount` decimal com `installment_amount_raw` ao lado |
+| Origem do lead | `LeadSource` | `META_LEAD_ADS \| GOOGLE_LEAD_FORM \| LANDING_PAGE`. Metade da `SubmissionKey`. **Nunca** confundir com `IntegrationProvider` (por qual conexão entrou) nem com `platform` (`fb`/`ig`) |
+| Diagnóstico de normalização | `NormalizationDiagnostic` | `{ field, reason }` e **nenhum valor**: é a única parte do envio que sai do tenant ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 12) |
 | Plano de busca de Pessoa | `PersonLookupPlan` | Quais chaves buscar e com que força; dado inerte — o domínio descreve a busca, `findPersonCandidates` a executa |
+| Força da chave de busca | `PersonLookupStrength` | `STRONG \| MODERATE \| WEAK` — CPF válido, telefone, e-mail isolado, nessa ordem ([ADR-0007](./0007-ingestao-idempotencia.md) §Identidade) |
+| Decisão de Pessoa | `PersonDecision` | União discriminada `NO_CONTACT \| REUSE_PERSON \| NEW_PERSON \| NEW_PERSON_WITH_IDENTITY_CONFLICT`; entra em `decideIntake` como a metade "quem é" do `IntakePlan`. **Nunca** `decideReuseOfPerson` devolvendo um id anulável — a variante do conflito precisa carregar as candidatas |
+| Candidata a Pessoa | `PersonCandidate` | O que `findPersonCandidates` devolve: `person_id`, o `cpf` já gravado e quais tipos de chave casaram |
 | Chave idempotente do envio | `SubmissionKey` | `source` + `external_lead_id`; o que a constraint `UNIQUE(workspace_id, source, external_lead_id)` arbitra ([ADR-0007](./0007-ingestao-idempotencia.md)) |
 | Revisão de ingestão | `IntakeReview` | Pendência **marcada na Oportunidade já criada**, nunca bloqueio; `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE` |
 | Marcador | `IntakeReview` + `Opportunity.missing_phone` | Não é um model: é o conjunto de pendências de um lead. Na UI, **um ícone só** os reúne ([ADR-0007](./0007-ingestao-idempotencia.md)) |

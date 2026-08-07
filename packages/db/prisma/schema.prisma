@@ -88,6 +88,7 @@ model Workspace {
   pipelines               Pipeline[]
   integration_connections IntegrationConnection[]
   integration_events      IntegrationEvent[]
+  persons                 Person[]
 
   @@map("workspaces")
 }
@@ -162,6 +163,79 @@ model IntegrationEvent {
   @@index([dispatch_status, received_at])
   @@index([workspace_id, received_at(sort: Desc), id(sort: Desc)])
   @@map("integration_events")
+}
+
+/// The single record of a physical or legal person in the workspace, with zero
+/// or one valid CPF and many normalized phones and e-mails. Never `Contact`
+/// (ADR-0005).
+///
+/// There is deliberately no unique constraint on `cpf`: keys that point at
+/// different Pessoas create a new one rather than fusing, so two rows may carry
+/// the same CPF while a human has not resolved the conflict yet (ADR-0007).
+model Person {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String  @db.Uuid
+  name         String?
+  /// Digits only, check digits verified before it is written. `text` and not
+  /// `char(11)`: blank padding would make a lookup key that no longer equals
+  /// itself once it leaves the database.
+  cpf          String?
+  /// The tombstone a non-destructive merge leaves behind. It does exactly two
+  /// things — take the row out of active views and preserve the trail — and
+  /// never a third: it never redirects a read (ADR-0007).
+  merged_into_person_id String?       @db.Uuid
+  created_at            DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime      @updatedAt @db.Timestamptz(6)
+  workspace             Workspace     @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  /// `NoAction` and not `Restrict`: a tombstone must not be deletable while
+  /// the canonical row it points at still exists, but deleting a whole
+  /// workspace removes both in one statement, and `Restrict` fires per row and
+  /// would deadlock that cascade against itself.
+  merged_into           Person?       @relation("PersonMerge", fields: [workspace_id, merged_into_person_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  absorbed              Person[]      @relation("PersonMerge")
+  phones                PersonPhone[]
+  emails                PersonEmail[]
+
+  @@unique([workspace_id, id])
+  @@index([workspace_id])
+  @@index([workspace_id, cpf])
+  @@index([workspace_id, merged_into_person_id])
+  @@map("persons")
+}
+
+/// Many per Person, normalized to E.164. Receiving a new one never overwrites
+/// an earlier one — the uniqueness is on the pair, so the write is an insert
+/// that does nothing on conflict (ADR-0007 §Identidade).
+model PersonPhone {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String   @db.Uuid
+  person_id    String   @db.Uuid
+  phone_e164   String
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  person       Person   @relation(fields: [workspace_id, person_id], references: [workspace_id, id], onDelete: Cascade)
+
+  @@unique([person_id, phone_e164])
+  @@index([workspace_id])
+  @@index([workspace_id, phone_e164])
+  @@index([workspace_id, person_id])
+  @@map("person_phones")
+}
+
+/// Many per Person, normalized to lowercase. Same non-destructive rule as
+/// `PersonPhone`.
+model PersonEmail {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String   @db.Uuid
+  person_id    String   @db.Uuid
+  email        String
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  person       Person   @relation(fields: [workspace_id, person_id], references: [workspace_id, id], onDelete: Cascade)
+
+  @@unique([person_id, email])
+  @@index([workspace_id])
+  @@index([workspace_id, email])
+  @@index([workspace_id, person_id])
+  @@map("person_emails")
 }
 
 model Stage {

@@ -14,6 +14,28 @@ Despacha cada ticket a Composer 2.5 via Task (`composer-2.5-fast`,
 Formato de resumo fixo; self-review; confrontar critérios/ADRs; só então
 atualizar Status/registro.
 
+# Atualização de 2026-08-07 — ticket 08 concluído
+
+- **08 contrato v1 + Pessoa: done** (16/18 critérios; os dois restantes exigem
+  escrita e são do 09, com o motivo escrito ao lado no arquivo da issue).
+  Branch `ticket/08-contrato-v1-normaliza-e-resolve-pessoa`, migration
+  `20260807000100_persons_and_contacts`, `pnpm test` 278/278 (1 pulado).
+  Resumo completo em `registro.md`.
+- **Próximo despacho: ticket 09** (Pessoa vira Oportunidade — o tracer bullet
+  fecha). Ordem restante: `09 → (10 · 11 · 13 · 16 em paralelo se worktrees) →
+  12 · 14 → 15`.
+- **Mão humana antes de mesclar o 08:** nenhuma. A migration não cria papel nem
+  toca o schema `private`.
+- **Descobertas do 08 para os próximos:** `readIntegrationEventForProcessing`
+  já devolve o `provider` da conexão (o `target_pipeline_id` do 09 cabe no
+  mesmo `SELECT`); `processIntegrationEventJob` devolve `person_decision` e o
+  09 troca esse retorno pelo `IntakePlan`; `PersonContacts` é sempre o conjunto
+  completo do envio, nunca um delta; `NO_CONTACT` é o gatilho de quarentena do
+  ticket 10, já decidido; `PROVIDER_DEFAULT_SOURCE` rotula Pluga como
+  `META_LEAD_ADS`, então o 13 precisa fazer o Google declarar `source`;
+  a varredura de lápide do Seam 3 foi reescrita em `pg_catalog` e aceita
+  `merged_into_opportunity_id` sem edição.
+
 # Atualização de 2026-08-06 — ticket 17 concluído
 
 - **17 provisionamento: done.** Branch `ticket/17-provisionamento-de-workspace`,

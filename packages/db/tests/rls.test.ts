@@ -33,6 +33,9 @@ const stage_b_entry = randomUUID();
 const stage_b_closing = randomUUID();
 const integration_connection_a = randomUUID();
 const integration_connection_b = randomUUID();
+const person_a = randomUUID();
+const person_b = randomUUID();
+const merged_person_a = randomUUID();
 const active_token_a = "mtco_rls_active_token_a";
 const active_token_b = "mtco_rls_active_token_b";
 const token_hash_a = createHash("sha256").update(active_token_a, "utf8").digest("hex");
@@ -54,6 +57,21 @@ const isolation_cases = [
     read_sql:
       "SELECT workspace_id AS tenant_id FROM integration_events ORDER BY workspace_id",
     write_sql: `INSERT INTO integration_events (id, workspace_id, integration_connection_id, raw, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${integration_connection_b}', '{"nome":"Cross-workspace"}'::jsonb, CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "person_emails",
+    read_sql: "SELECT workspace_id AS tenant_id FROM person_emails ORDER BY workspace_id",
+    write_sql: `INSERT INTO person_emails (id, workspace_id, person_id, email) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', 'cross@workspace.com')`
+  },
+  {
+    table_name: "person_phones",
+    read_sql: "SELECT workspace_id AS tenant_id FROM person_phones ORDER BY workspace_id",
+    write_sql: `INSERT INTO person_phones (id, workspace_id, person_id, phone_e164) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', '+5511900000000')`
+  },
+  {
+    table_name: "persons",
+    read_sql: "SELECT workspace_id AS tenant_id FROM persons ORDER BY workspace_id",
+    write_sql: `INSERT INTO persons (id, workspace_id, name, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'Cross-workspace', CURRENT_TIMESTAMP)`
   },
   {
     table_name: "pipelines",
@@ -176,6 +194,33 @@ beforeAll(async () => {
         }
       ]
     });
+    await transaction.person.createMany({
+      data: [
+        { id: person_a, workspace_id: workspace_a, name: "Pessoa A", cpf: "52998224725" },
+        { id: person_b, workspace_id: workspace_b, name: "Pessoa B" },
+        // A tombstone, so the merge-pointer scan below runs against a schema
+        // where merges have actually happened. Its contacts moved to the
+        // canonical row, which is why it has none.
+        {
+          id: merged_person_a,
+          workspace_id: workspace_a,
+          name: "Pessoa A (absorvida)",
+          merged_into_person_id: person_a
+        }
+      ]
+    });
+    await transaction.personPhone.createMany({
+      data: [
+        { workspace_id: workspace_a, person_id: person_a, phone_e164: "+5511987654321" },
+        { workspace_id: workspace_b, person_id: person_b, phone_e164: "+5511912345678" }
+      ]
+    });
+    await transaction.personEmail.createMany({
+      data: [
+        { workspace_id: workspace_a, person_id: person_a, email: "pessoa.a@exemplo.com" },
+        { workspace_id: workspace_b, person_id: person_b, email: "pessoa.b@exemplo.com" }
+      ]
+    });
   });
   const context = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
   if (!context) {
@@ -217,6 +262,9 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(rows.map((row) => row.table_name)).toEqual([
       "integration_connections",
       "integration_events",
+      "person_emails",
+      "person_phones",
+      "persons",
       "pipelines",
       "stages",
       "workspace_members",
@@ -859,11 +907,10 @@ describe("Seam 3: RLS and schema invariants", () => {
     const referencing_table = "rls_seam3_probe_referencing";
     await client.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_migrator");
-      // No table in this ticket has a merge tombstone yet (Person and
-      // Opportunity land in later tickets). This synthesizes the shape —
-      // a self-referencing "merged_into_<x>_id" column, per ADR-0005 — so
-      // the generic scan below is proven against a real violation instead
-      // of trivially passing because it found nothing to check.
+      // `persons.merged_into_person_id` is a real tombstone, and the seeded
+      // data is deliberately clean. So the probe stays: it synthesizes the
+      // same shape *with* a violation in it, which is what proves the scan
+      // finds one instead of trivially passing because everything is fine.
       await transaction.$executeRawUnsafe(`
         CREATE TABLE ${target_table} (
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -898,83 +945,118 @@ describe("Seam 3: RLS and schema invariants", () => {
         `INSERT INTO ${referencing_table} (probe_target_id) VALUES ('${merged_id}')`
       );
 
-      // Step 1: discover every self-referencing "merged_into_*" tombstone
-      // column in the schema. This is what makes the scan automatic — a
-      // future Person.merged_into_person_id needs no change here.
-      const merge_pointers = await transaction.$queryRaw<
-        Array<{ table_name: string; merge_column: string }>
-      >`
-        SELECT DISTINCT
-          tc.table_name::text AS table_name,
-          kcu.column_name::text AS merge_column
-        FROM information_schema.table_constraints AS tc
-        JOIN information_schema.key_column_usage AS kcu
-          ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
-        JOIN information_schema.constraint_column_usage AS ccu
-          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-        WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema = 'public'
-          AND kcu.column_name LIKE 'merged\_into\_%' ESCAPE '\'
-          AND ccu.table_name = tc.table_name
-      `;
-      expect(merge_pointers).toEqual([
-        { table_name: target_table, merge_column: "merged_into_probe_target_id" }
-      ]);
-
-      // Step 2: every foreign key in the schema that targets one of those
-      // tables is a place an active row could be pointing at a tombstone.
-      const referencing_foreign_keys = await transaction.$queryRaw<
+      // Every foreign key in the schema, with its columns paired in the order
+      // the constraint declares them.
+      //
+      // pg_catalog and not information_schema: a foreign key can span more
+      // than one column, and `constraint_column_usage` reports the referencing
+      // and the referenced columns as two unordered sets. Pairing those by
+      // joining on the constraint name yields the cartesian product — for
+      // `person_phones (workspace_id, person_id) → persons (workspace_id, id)`
+      // it invents a join on `workspace_id = workspace_id`, which counts every
+      // contact row in a workspace that merely *contains* a merged Pessoa as a
+      // violation. `conkey` and `confkey` are ordered arrays, and unnesting
+      // them together is the only pairing that is actually the constraint.
+      const foreign_key_columns = await transaction.$queryRaw<
         Array<{
+          constraint_name: string;
           referencing_table: string;
           referencing_column: string;
           target_table: string;
           target_column: string;
-          merge_column: string;
         }>
       >`
-        WITH merge_pointers AS (
-          SELECT DISTINCT
-            tc.table_name::text AS table_name,
-            kcu.column_name::text AS merge_column
-          FROM information_schema.table_constraints AS tc
-          JOIN information_schema.key_column_usage AS kcu
-            ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
-          JOIN information_schema.constraint_column_usage AS ccu
-            ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-          WHERE tc.constraint_type = 'FOREIGN KEY'
-            AND tc.table_schema = 'public'
-            AND kcu.column_name LIKE 'merged\_into\_%' ESCAPE '\'
-            AND ccu.table_name = tc.table_name
-        )
         SELECT
-          tc.table_name::text AS referencing_table,
-          kcu.column_name::text AS referencing_column,
-          ccu.table_name::text AS target_table,
-          ccu.column_name::text AS target_column,
-          merge_pointers.merge_column::text AS merge_column
-        FROM information_schema.table_constraints AS tc
-        JOIN information_schema.key_column_usage AS kcu
-          ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
-        JOIN information_schema.constraint_column_usage AS ccu
-          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-        JOIN merge_pointers ON merge_pointers.table_name = ccu.table_name
-        WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'
+          foreign_key.conname::text AS constraint_name,
+          referencing.relname::text AS referencing_table,
+          referencing_attribute.attname::text AS referencing_column,
+          target.relname::text AS target_table,
+          target_attribute.attname::text AS target_column
+        FROM pg_constraint AS foreign_key
+        JOIN pg_class AS referencing ON referencing.oid = foreign_key.conrelid
+        JOIN pg_namespace AS referencing_namespace
+          ON referencing_namespace.oid = referencing.relnamespace
+        JOIN pg_class AS target ON target.oid = foreign_key.confrelid
+        CROSS JOIN LATERAL unnest(foreign_key.conkey, foreign_key.confkey)
+          WITH ORDINALITY AS key(referencing_attnum, target_attnum, position)
+        JOIN pg_attribute AS referencing_attribute
+          ON referencing_attribute.attrelid = foreign_key.conrelid
+         AND referencing_attribute.attnum = key.referencing_attnum
+        JOIN pg_attribute AS target_attribute
+          ON target_attribute.attrelid = foreign_key.confrelid
+         AND target_attribute.attnum = key.target_attnum
+        WHERE foreign_key.contype = 'f'
+          AND referencing_namespace.nspname = 'public'
+        ORDER BY foreign_key.conname, key.position
       `;
 
+      const constraints = new Map<
+        string,
+        {
+          referencing_table: string;
+          target_table: string;
+          pairs: Array<{ referencing_column: string; target_column: string }>;
+        }
+      >();
+      for (const column of foreign_key_columns) {
+        const existing = constraints.get(column.constraint_name) ?? {
+          referencing_table: column.referencing_table,
+          target_table: column.target_table,
+          pairs: []
+        };
+        existing.pairs.push({
+          referencing_column: column.referencing_column,
+          target_column: column.target_column
+        });
+        constraints.set(column.constraint_name, existing);
+      }
+
+      // Step 1: discover every self-referencing "merged_into_*" tombstone
+      // column in the schema. This is what makes the scan automatic — a future
+      // Opportunity.merged_into_opportunity_id needs no change here.
+      const merge_pointers = new Map<string, string>();
+      for (const constraint of constraints.values()) {
+        if (constraint.referencing_table !== constraint.target_table) {
+          continue;
+        }
+        for (const pair of constraint.pairs) {
+          if (pair.referencing_column.startsWith("merged_into_")) {
+            merge_pointers.set(constraint.target_table, pair.referencing_column);
+          }
+        }
+      }
+      expect([...merge_pointers].sort()).toEqual([
+        ["persons", "merged_into_person_id"],
+        [target_table, "merged_into_probe_target_id"]
+      ]);
+
+      // Step 2: every foreign key that targets one of those tables is a place
+      // an active row could be pointing at a tombstone.
       let violations = 0;
-      for (const fk of referencing_foreign_keys) {
+      for (const constraint of constraints.values()) {
+        const merge_column = merge_pointers.get(constraint.target_table);
+        if (merge_column === undefined) {
+          continue;
+        }
+        const join_condition = constraint.pairs
+          .map(
+            (pair) =>
+              `referencing."${pair.referencing_column}" = target."${pair.target_column}"`
+          )
+          .join(" AND ");
         const rows = await transaction.$queryRawUnsafe<Array<{ violations: bigint }>>(`
           SELECT COUNT(*) AS violations
-          FROM "${fk.referencing_table}" AS referencing
-          JOIN "${fk.target_table}" AS target
-            ON referencing."${fk.referencing_column}" = target."${fk.target_column}"
-          WHERE target."${fk.merge_column}" IS NOT NULL
+          FROM "${constraint.referencing_table}" AS referencing
+          JOIN "${constraint.target_table}" AS target ON ${join_condition}
+          WHERE target."${merge_column}" IS NOT NULL
         `);
         violations += Number(rows[0]?.violations ?? 0n);
       }
 
-      // The synthetic referencing row proves the scan finds a real
-      // violation, not just that it found nothing to check.
+      // Exactly one: the synthetic referencing row, which proves the scan
+      // finds a real violation rather than passing because it found nothing to
+      // check. The real `persons` tombstone contributes none — a merged Pessoa
+      // has had everything that hung off it repointed at the canonical row.
       expect(violations).toBe(1);
 
       await transaction.$executeRawUnsafe(`DROP TABLE ${referencing_table}`);

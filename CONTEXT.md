@@ -86,6 +86,22 @@ _Avoid_: Chamar de Lead — na UI, Lead é a Oportunidade; EnvioLead nunca apare
 Adaptador que conhece a forma do payload de uma origem de lead e a converte para o contrato canônico de entrada. A Pluga faz o De→Para de Meta/Google; LPs enviam o mesmo vocabulário servidor-servidor. O conector não conhece funil, Pessoa nem Oportunidade.
 _Avoid_: Conector que normaliza ou decide regra de negócio, integração como sinônimo de conector
 
+**Contrato canônico de entrada**:
+O vocabulário de campos que o CRM publica e que toda origem preenche — versionado, de chaves planas, sem campo de negócio obrigatório. Quem converte a forma de uma origem para ele é o Conector de origem; na liberação da quarentena quem o preenche é o gestor, lendo o payload cru ao lado. Campo desconhecido não quebra o processamento e continua guardado no bruto.
+_Avoid_: Esperar "o formato nativo" de uma ferramenta de automação — não existe; rejeitar por HTTP um JSON autenticado que faltou campo; validar o mesmo dado de novo camada abaixo
+
+**Lead normalizado**:
+A submissão depois que o domínio a interpretou: telefone em E.164 com Brasil como país padrão, CPF só dígitos com dígito verificador conferido, e-mail em minúsculas, valor monetário em decimal com o texto original preservado ao lado. É valor, não entidade — não tem identidade nem ciclo de vida. Campo que não pôde ser lido vira diagnóstico sem o valor dentro, nunca motivo para recusar a submissão.
+_Avoid_: Normalizar dentro do conector, deixar o país padrão vazar para o adaptador, guardar telefone "como veio para depois", pôr valor de pessoa num diagnóstico
+
+**Origem do lead**:
+De onde a submissão veio — anúncio do Meta, formulário do Google ou landing page própria. Metade da chave idempotente do envio, junto do identificador que a origem fornece; por isso é valor fechado e não texto livre. Quando o payload não a declara, quem a decide é o conector, pela conexão por onde o evento entrou.
+_Avoid_: Origem como texto livre, deduzir origem do conteúdo do lead, confundir com a plataforma do anúncio (`fb`/`ig`), confundir com a conexão de integração
+
+**Plano de busca de Pessoa**:
+Quais chaves procurar e com que força, decidido pelo domínio e executado por quem tem acesso ao banco. CPF válido é chave forte, telefone é moderada, e-mail isolado é fraca. Existe porque decidir "o que buscar" é metade da regra de identidade: quem busca só por telefone reconhece menos gente do que a regra promete, e nenhum teste puro percebe.
+_Avoid_: Escrever a consulta de identidade fora do módulo que a documenta, injetar uma porta de busca no domínio, buscar só pelo primeiro contato do envio
+
 **Plano de ingestão**:
 O que uma submissão recebida vai produzir, descrito como dado antes de acontecer: quarentena, retransmissão inerte ou Oportunidade nova com seus marcadores. É decidido sem tocar no banco e executado numa transação só, o que faz caber num teste puro aquilo que antes só o ambiente inteiro exercitava. Um plano de retransmissão não tem onde guardar etapa, responsável, situação ou chegada — é assim que o funil não rebobina.
 _Avoid_: Roteiro espalhado pelo worker, plano com campos opcionais que alguém preenche, decidir consultando, um caminho para a ingestão e outro para a liberação da quarentena

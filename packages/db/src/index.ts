@@ -32,6 +32,7 @@ export {
   type ProvisionWorkspaceInput,
   type ProvisionedWorkspace
 } from "./provision-workspace.js";
+export { findPersonCandidates, type PersonCandidate } from "./person.js";
 export {
   claimPendingIntegrationEvents,
   listIntegrationEvents,
