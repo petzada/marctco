@@ -1,6 +1,18 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+/**
+ * Seam 2 exercises the real ingestion path, so the application code must run
+ * without the RLS bypass a superuser connection carries. Rather than a second
+ * set of credentials, the same URL is reused with a startup `role` option: the
+ * session becomes marctco_app, and the policies apply exactly as in production.
+ */
+function appRoleDatabaseUrl(database_url: string): string {
+  const url = new URL(database_url);
+  url.searchParams.set("options", "-c role=marctco_app");
+  return url.toString();
+}
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -43,6 +55,20 @@ export default defineConfig({
           name: "a7",
           include: ["packages/db/tests/a7.test.ts"],
           fileParallelism: false
+        }
+      },
+      {
+        extends: true,
+        test: {
+          name: "seam2",
+          include: ["tests/seam2-*.test.ts"],
+          fileParallelism: false,
+          testTimeout: 40_000,
+          hookTimeout: 40_000,
+          env: {
+            DATABASE_URL: appRoleDatabaseUrl(process.env.DATABASE_URL ?? "postgresql://localhost"),
+            SEAM2_ADMIN_DATABASE_URL: process.env.DATABASE_URL ?? ""
+          }
         }
       },
       {

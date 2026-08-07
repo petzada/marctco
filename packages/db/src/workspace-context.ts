@@ -5,8 +5,8 @@ import {
   type WorkspaceRole
 } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { assertUuid } from "./internal/uuid.js";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sharedPrisma = createPrismaClient();
 
 interface WorkspaceContextRow {
@@ -30,12 +30,6 @@ export interface UserWorkspace {
 
 export interface ResolvedUserContext extends UserWorkspace {
   readonly context: UserContext;
-}
-
-function assertUuid(value: string, label: string): void {
-  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
-    throw new Error(`${label} must be a UUID, received: ${JSON.stringify(value)}`);
-  }
 }
 
 function toUserWorkspace(

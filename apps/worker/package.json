@@ -13,6 +13,7 @@
     "@marctco/db": "workspace:*",
     "@marctco/domain": "workspace:*",
     "bullmq": "5.70.1",
+    "ioredis": "5.9.3",
     "pino": "10.3.1"
   }
 }

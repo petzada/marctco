@@ -6,4 +6,9 @@ export async function register(): Promise<void> {
   await import("./sentry.server.config");
   const { assertSafeDatabaseRole } = await import("@marctco/db");
   await assertSafeDatabaseRole({ process_name: "web" });
+
+  if (process.env.REDIS_URL) {
+    const { startIngestionDispatcher } = await import("./lib/ingestion-queue");
+    startIngestionDispatcher();
+  }
 }

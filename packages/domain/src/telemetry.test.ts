@@ -37,6 +37,65 @@ describe("sanitizeTelemetry", () => {
     expect(sanitized.stack).toContain("Error: falha segura");
   });
 
+  it("keeps a nested error's message and stack, and nothing else it carries", () => {
+    const failure = Object.assign(new Error("ECONNREFUSED"), {
+      raw: { telefone: "+5511999999999" }
+    });
+
+    const sanitized = sanitizeTelemetry({
+      event: "integration_event_dispatch",
+      result: "publish_failed",
+      error: failure
+    });
+
+    expect(sanitized).toMatchObject({
+      event: "integration_event_dispatch",
+      result: "publish_failed",
+      error_message: "ECONNREFUSED"
+    });
+    expect(String(sanitized.error_stack)).toContain("Error: ECONNREFUSED");
+    expect(JSON.stringify(sanitized)).not.toContain("5511999999999");
+  });
+
+  it("drops the part of a database error where Postgres echoes the offending row", () => {
+    const failure = new Error(
+      'duplicate key value violates unique constraint "integration_events_pkey"\n' +
+        "DETAIL: Key (raw)=({\"telefone\": \"+5511999999999\", \"cpf\": \"12345678909\"}) already exists."
+    );
+
+    const sanitized = sanitizeTelemetry({ event: "integration_event_dispatch", error: failure });
+
+    expect(sanitized.error_message).toBe(
+      'duplicate key value violates unique constraint "integration_events_pkey"'
+    );
+    expect(JSON.stringify(sanitized)).not.toContain("5511999999999");
+    expect(JSON.stringify(sanitized)).not.toContain("12345678909");
+  });
+
+  it("keeps the dispatcher's counters, which carry no personal data", () => {
+    expect(
+      sanitizeTelemetry({
+        event: "integration_event_dispatch",
+        result: "pass_complete",
+        claimed: 4,
+        dispatched: 3,
+        job_id: "integration-event-018f4d57"
+      })
+    ).toEqual({
+      event: "integration_event_dispatch",
+      result: "pass_complete",
+      claimed: 4,
+      dispatched: 3,
+      job_id: "integration-event-018f4d57"
+    });
+  });
+
+  it("says nothing when the thrown value is not an error-shaped object", () => {
+    expect(
+      sanitizeTelemetry({ event: "integration_event_dispatch", error: "just a string" })
+    ).toEqual({ event: "integration_event_dispatch" });
+  });
+
   it("permits only hashed identifiers in workspace-access audit events", () => {
     expect(
       sanitizeTelemetry({

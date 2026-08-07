@@ -5,17 +5,13 @@ import { hashIdentifier } from "../../../lib/audit-hash";
 import { logger } from "../../../lib/logger";
 import { onboardingDecision } from "../../../lib/onboarding-decision";
 import { provisioningEntitlement } from "../../../lib/provisioning-entitlement";
+import { requestIp } from "../../../lib/request-ip";
 import { consumeProvisioningEntitlement } from "../../../lib/supabase/admin";
 import { getAuthenticatedSession } from "../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 const unentitledProvisioningLimiter = createMemoryRateLimiter({ limit: 20, window_ms: 60_000 });
-
-function requestIp(requestHeaders: Headers): string {
-  const forwarded = requestHeaders.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip") || "unknown";
-}
 
 /**
  * The write half of `/onboarding`, outside `/workspace/:slug` because there is

@@ -1,4 +1,15 @@
+const errorKeys = new Set(["error", "err"]);
+const MAX_ERROR_MESSAGE = 300;
+// PostgreSQL echoes the offending row in DETAIL/Key(...), and for an ingestion
+// event that row is the payload. Everything from the first of those markers on
+// is dropped: the sentence that names the failure is kept, the values are not.
+const ECHOED_VALUE_MARKERS = /\b(DETAIL|Key \(|HINT|WHERE)\b/;
 const allowedKeys = new Set([
+  "error_message",
+  "error_stack",
+  "claimed",
+  "dispatched",
+  "job_id",
   "workspace_id",
   "integration_event_id",
   "source",
@@ -39,6 +50,12 @@ function asSafePrimitive(value: unknown): string | number | boolean | null | und
   return undefined;
 }
 
+function withoutEchoedValues(text: string): string {
+  const marker = ECHOED_VALUE_MARKERS.exec(text);
+  const kept = marker?.index === undefined ? text : text.slice(0, marker.index);
+  return kept.trim().slice(0, MAX_ERROR_MESSAGE);
+}
+
 export function sanitizeTelemetry(value: unknown): SafeTelemetry {
   const source = asRecord(value);
   if (!source) {
@@ -47,6 +64,22 @@ export function sanitizeTelemetry(value: unknown): SafeTelemetry {
 
   const safe: SafeTelemetry = {};
   for (const [key, candidate] of Object.entries(source)) {
+    // A thrown error is the one nested value worth keeping: without it, every
+    // "publish failed" line says only that something failed. Only the two
+    // fields an Error is allowed to contribute survive, and a message that is
+    // not a string does not become one.
+    if (errorKeys.has(key)) {
+      const failure = asRecord(candidate);
+      const message = asSafePrimitive(failure?.message);
+      const stack = asSafePrimitive(failure?.stack);
+      if (typeof message === "string") {
+        safe.error_message = withoutEchoedValues(message);
+      }
+      if (typeof stack === "string") {
+        safe.error_stack = withoutEchoedValues(stack);
+      }
+      continue;
+    }
     if (!allowedKeys.has(key)) {
       continue;
     }

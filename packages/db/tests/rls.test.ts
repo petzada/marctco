@@ -50,6 +50,12 @@ const isolation_cases = [
     write_sql: `INSERT INTO integration_connections (id, workspace_id, provider, contract_version, token_hash, token_last4, status, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'LANDING_PAGE', 'v1', '${cross_workspace_token_hash}', 'rker', 'ACTIVE', CURRENT_TIMESTAMP)`
   },
   {
+    table_name: "integration_events",
+    read_sql:
+      "SELECT workspace_id AS tenant_id FROM integration_events ORDER BY workspace_id",
+    write_sql: `INSERT INTO integration_events (id, workspace_id, integration_connection_id, raw, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${integration_connection_b}', '{"nome":"Cross-workspace"}'::jsonb, CURRENT_TIMESTAMP)`
+  },
+  {
     table_name: "pipelines",
     read_sql: "SELECT workspace_id AS tenant_id FROM pipelines ORDER BY workspace_id",
     write_sql: `INSERT INTO pipelines (id, workspace_id, name, type, is_default, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'Cross-workspace', 'LEGAL', false, CURRENT_TIMESTAMP)`
@@ -156,6 +162,20 @@ beforeAll(async () => {
         }
       ]
     });
+    await transaction.integrationEvent.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          integration_connection_id: integration_connection_a,
+          raw: { nome: "Lead A" }
+        },
+        {
+          workspace_id: workspace_b,
+          integration_connection_id: integration_connection_b,
+          raw: { nome: "Lead B" }
+        }
+      ]
+    });
   });
   const context = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
   if (!context) {
@@ -196,6 +216,7 @@ describe("Seam 3: RLS and schema invariants", () => {
 
     expect(rows.map((row) => row.table_name)).toEqual([
       "integration_connections",
+      "integration_events",
       "pipelines",
       "stages",
       "workspace_members",
@@ -1255,6 +1276,141 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
         definer_inserts_pipelines: false
       }
     ]);
+  });
+
+  it("lets the dispatcher find pending work without a tenant, and returns nothing else", async () => {
+    const pending_event_id = randomUUID();
+    await client.$executeRawUnsafe(`
+      INSERT INTO integration_events (id, workspace_id, integration_connection_id, raw, updated_at)
+      VALUES ('${pending_event_id}', '${workspace_a}', '${integration_connection_a}', '{"nome":"Pendente"}'::jsonb, CURRENT_TIMESTAMP)
+    `);
+
+    try {
+      const claimed = await client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+        return transaction.$queryRaw<Array<Record<string, unknown>>>`
+          SELECT * FROM private.claim_pending_events(50::integer)
+        `;
+      });
+
+      const claimed_event = claimed.find((row) => row.id === pending_event_id);
+      expect(claimed_event).toBeDefined();
+      // The payload carries CPF and phone numbers, and this function runs with
+      // no tenant at all: `(id, workspace_id)` is the entire permitted answer.
+      expect(Object.keys(claimed_event ?? {}).sort()).toEqual(["id", "workspace_id"]);
+      expect(claimed_event).toEqual({ id: pending_event_id, workspace_id: workspace_a });
+    } finally {
+      await client.$executeRawUnsafe(
+        `DELETE FROM integration_events WHERE id = '${pending_event_id}'`
+      );
+    }
+  });
+
+  it("keeps the pending-events resolver owned, scoped and executable only as declared", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private' AND procedure.proname = 'claim_pending_events'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: "marctco_private_definer",
+        search_path: ["search_path=pg_catalog"],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+  });
+
+  it("scopes the worker role to its own tenant's events, and to nothing without a GUC", async () => {
+    // The Seam 2 pipeline runs as the app role; this is the same policy seen
+    // from the role the worker actually connects with in production.
+    const unscoped = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_worker");
+      return transaction.$queryRaw<Array<{ id: string }>>`SELECT id FROM integration_events`;
+    });
+    expect(unscoped).toEqual([]);
+
+    const scoped = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_worker");
+      await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
+      return transaction.$queryRaw<Array<{ workspace_id: string }>>`
+        SELECT workspace_id FROM integration_events
+      `;
+    });
+    expect(scoped.length).toBeGreaterThan(0);
+    expect(scoped.every((row) => row.workspace_id === workspace_a)).toBe(true);
+
+    const marks_processed = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_worker");
+      await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
+      return transaction.$executeRawUnsafe(`
+        UPDATE integration_events
+        SET status = 'PROCESSED', processed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE workspace_id = '${workspace_b}'
+      `);
+    });
+    expect(marks_processed, "the worker cannot close another tenant's event").toBe(0);
+  });
+
+  it("keeps the payload out of reach of the tenant-less executor", async () => {
+    const columns = await client.$queryRaw<
+      Array<{ can_read_id: boolean; can_read_workspace: boolean; can_read_raw: boolean }>
+    >`
+      SELECT
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'id', 'SELECT') AS can_read_id,
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'workspace_id', 'SELECT') AS can_read_workspace,
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'raw', 'SELECT') AS can_read_raw
+    `;
+    // `raw` holds CPF and phone numbers, and this executor runs with no tenant.
+    expect(columns).toEqual([
+      { can_read_id: true, can_read_workspace: true, can_read_raw: false }
+    ]);
+  });
+
+  it("keeps the read-only executor read-only across every business table", async () => {
+    // Reusing marctco_private_definer for a third function is only allowed
+    // while Seam 3 can prove the same containment (ADR-0019): it reads what its
+    // functions need and cannot write anywhere.
+    const privileges = await client.$queryRaw<
+      Array<{ table_name: string; can_select: boolean; can_write: boolean }>
+    >`
+      SELECT
+        tablename::text AS table_name,
+        has_table_privilege('marctco_private_definer', ('public.' || quote_ident(tablename))::regclass, 'SELECT') AS can_select,
+        has_table_privilege('marctco_private_definer', ('public.' || quote_ident(tablename))::regclass, 'INSERT')
+          OR has_table_privilege('marctco_private_definer', ('public.' || quote_ident(tablename))::regclass, 'UPDATE')
+          OR has_table_privilege('marctco_private_definer', ('public.' || quote_ident(tablename))::regclass, 'DELETE') AS can_write
+      FROM pg_tables
+      WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
+      ORDER BY tablename
+    `;
+    expect(privileges.filter((row) => row.can_write)).toEqual([]);
+    // `integration_events` is deliberately absent: the executor holds a
+    // column grant there, not a table one, so it can read `(id, workspace_id)`
+    // and never the payload — proved by the column test above.
+    expect(
+      privileges.filter((row) => row.can_select).map((row) => row.table_name)
+    ).toEqual(["integration_connections", "workspace_members", "workspaces"]);
   });
 
   it("keeps every provisioning policy attached to a table the function actually writes", async () => {

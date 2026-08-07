@@ -40,6 +40,9 @@ desktop.ini
 !.vscode/extensions.json
 .idea/
 
+# Worktrees dos agentes — árvores de trabalho locais, não fazem parte do repo
+.claude/worktrees/
+
 # Deliberadamente versionados — não ignorar:
 #   .agents/   skills do projeto
 #   .claude/   configuração do harness

@@ -12,6 +12,10 @@ Bootstrap humano + recoveries (#11/#12/#13) concluídos:
 3. `ALTER SCHEMA private OWNER TO marctco_migrator`
 4. Production migration aplicou migrations `002`–`009`
 
+## Ticket 07 — antes do deploy
+
+- [ ] **`REDIS_URL` também no serviço `web` do Railway.** O dispatcher roda no processo web, não no worker: `private.claim_pending_events` só é executável por `marctco_app`, e o worker não tem `USAGE` no schema `private`. Sem a variável no `web`, o endpoint continua aceitando lead e gravando a outbox — nada se perde —, mas nada é publicado na fila.
+
 ## Já resolvido — 2026-08-06
 
 - **Redis no Railway:** provisionado. BullMQ e o dispatcher (tickets 07 e 15) já têm serviço.
