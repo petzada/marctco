@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizePhone } from "./phone.js";
+import { normalizePhone, readPhone } from "./phone.js";
 
 describe("normalizePhone", () => {
   it("assumes Brazil for a bare mobile number with an area code", () => {
@@ -29,6 +29,14 @@ describe("normalizePhone", () => {
 
   it("refuses a number nobody can be reached on personally", () => {
     expect(normalizePhone("0800 123 4567")).toBeNull();
+  });
+
+  it("tells a number it could not read apart from one nobody answers personally", () => {
+    // Both end up refused, and a manager sent to look for a typo in a valid
+    // 0800 is a manager looking at the wrong thing.
+    expect(readPhone("0800 123 4567")).toEqual({ kind: "NOT_A_PERSONAL_PHONE" });
+    expect(readPhone("não informado")).toEqual({ kind: "NOT_A_PHONE" });
+    expect(readPhone("11987654321")).toEqual({ kind: "E164", value: "+5511987654321" });
   });
 
   it("keeps a genuinely international number in its own country code", () => {

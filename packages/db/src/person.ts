@@ -52,37 +52,42 @@ export async function findPersonCandidates(
     return [];
   }
 
+  // Each key kind is looked up once, off the index that leads with
+  // `workspace_id` — the column RLS has already pinned — and the result serves
+  // twice: as the set of Pessoas worth returning, and as the answer to "which
+  // kind matched". Written out in both places instead, one copy eventually
+  // stops agreeing with the other and a row comes back claiming it matched
+  // nothing.
+  //
+  // The lookups drive, and `persons` is reached by id afterwards. Starting
+  // from `persons` and testing each row would make the hottest read in
+  // ingestion grow with the size of the customer base rather than with the
+  // number of keys in the submission.
   const rows = await withAccessContext(prisma, context, async (transaction) =>
     transaction.$queryRaw<CandidateRow[]>`
+      WITH matched_by_cpf AS (
+        SELECT id AS person_id FROM persons WHERE cpf = ANY(${cpfs}::text[])
+      ),
+      matched_by_phone AS (
+        SELECT person_id FROM person_phones WHERE phone_e164 = ANY(${phones}::text[])
+      ),
+      matched_by_email AS (
+        SELECT person_id FROM person_emails WHERE email = ANY(${emails}::text[])
+      ),
+      candidate AS (
+        SELECT person_id FROM matched_by_cpf
+        UNION SELECT person_id FROM matched_by_phone
+        UNION SELECT person_id FROM matched_by_email
+      )
       SELECT
         person.id AS person_id,
         person.cpf,
-        (person.cpf IS NOT NULL AND person.cpf = ANY(${cpfs}::text[])) AS matched_cpf,
-        EXISTS (
-          SELECT 1 FROM person_phones AS phone
-          WHERE phone.person_id = person.id
-            AND phone.phone_e164 = ANY(${phones}::text[])
-        ) AS matched_phone,
-        EXISTS (
-          SELECT 1 FROM person_emails AS email
-          WHERE email.person_id = person.id
-            AND email.email = ANY(${emails}::text[])
-        ) AS matched_email
-      FROM persons AS person
+        EXISTS (SELECT 1 FROM matched_by_cpf AS m WHERE m.person_id = person.id) AS matched_cpf,
+        EXISTS (SELECT 1 FROM matched_by_phone AS m WHERE m.person_id = person.id) AS matched_phone,
+        EXISTS (SELECT 1 FROM matched_by_email AS m WHERE m.person_id = person.id) AS matched_email
+      FROM candidate
+      JOIN persons AS person ON person.id = candidate.person_id
       WHERE person.merged_into_person_id IS NULL
-        AND (
-          (person.cpf IS NOT NULL AND person.cpf = ANY(${cpfs}::text[]))
-          OR EXISTS (
-            SELECT 1 FROM person_phones AS phone
-            WHERE phone.person_id = person.id
-              AND phone.phone_e164 = ANY(${phones}::text[])
-          )
-          OR EXISTS (
-            SELECT 1 FROM person_emails AS email
-            WHERE email.person_id = person.id
-              AND email.email = ANY(${emails}::text[])
-          )
-        )
       ORDER BY person.id
       LIMIT ${MAX_CANDIDATES}::integer
     `

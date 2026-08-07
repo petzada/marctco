@@ -40,7 +40,7 @@ export function isLeadSource(value: unknown): value is LeadSource {
  */
 const scalar = z.union([z.string(), z.number(), z.boolean()]);
 
-const optional_text = scalar
+const optionalText = scalar
   .transform((value) => {
     const text = String(value).trim();
     return text === "" ? undefined : text;
@@ -48,7 +48,7 @@ const optional_text = scalar
   .optional()
   .catch(undefined);
 
-const optional_text_list = z
+const optionalTextList = z
   .union([scalar, z.array(z.unknown())])
   .transform((value) => {
     const items = Array.isArray(value) ? value : [value];
@@ -67,7 +67,7 @@ const optional_text_list = z
   .optional()
   .catch(undefined);
 
-const optional_flag = z
+const optionalFlag = z
   .union([z.boolean(), z.string(), z.number()])
   .transform((value) => {
     if (typeof value === "boolean") {
@@ -85,7 +85,7 @@ const optional_flag = z
   .optional()
   .catch(undefined);
 
-const optional_answers = z
+const optionalAnswers = z
   .record(z.string(), z.unknown())
   .transform((value) => {
     const answers: Record<string, string> = {};
@@ -111,40 +111,40 @@ const optional_answers = z
  * `IntegrationEvent.raw`, the single copy of the payload (ADR-0014). A future
  * version of the contract can start reading one without any old event losing it.
  */
-const lead_payload_schema = z
+const leadPayloadSchema = z
   .object({
-    schema_version: optional_text,
-    source: optional_text,
-    external_lead_id: optional_text,
-    occurred_at: optional_text,
+    schema_version: optionalText,
+    source: optionalText,
+    external_lead_id: optionalText,
+    occurred_at: optionalText,
 
-    name: optional_text,
+    name: optionalText,
     // Both spellings, singular and plural. The plural is the published
     // contract; the singular is the shape somebody mapping one Meta form
     // question will reach for first, and refusing it would cost a lead to
     // teach a lesson about pluralisation.
-    phone: optional_text,
-    phones: optional_text_list,
-    email: optional_text,
-    emails: optional_text_list,
-    cpf: optional_text,
+    phone: optionalText,
+    phones: optionalTextList,
+    email: optionalText,
+    emails: optionalTextList,
+    cpf: optionalText,
 
-    financing_type: optional_text,
-    financial_institution: optional_text,
-    installment_amount: optional_text,
+    financing_type: optionalText,
+    financial_institution: optionalText,
+    installment_amount: optionalText,
 
-    form_id: optional_text,
-    form_name: optional_text,
-    campaign_id: optional_text,
-    campaign_name: optional_text,
-    adset_id: optional_text,
-    adset_name: optional_text,
-    ad_id: optional_text,
-    ad_name: optional_text,
-    platform: optional_text,
-    is_organic: optional_flag,
+    form_id: optionalText,
+    form_name: optionalText,
+    campaign_id: optionalText,
+    campaign_name: optionalText,
+    adset_id: optionalText,
+    adset_name: optionalText,
+    ad_id: optionalText,
+    ad_name: optionalText,
+    platform: optionalText,
+    is_organic: optionalFlag,
 
-    answers: optional_answers
+    answers: optionalAnswers
   })
   // A body that is not even a JSON object still committed as an event and
   // still answered 200. It reads as a submission with nothing in it, which is
@@ -152,7 +152,7 @@ const lead_payload_schema = z
   .catch({});
 
 /** Attribution travels together because it is read together, and never decides anything. */
-const attribution_schema = z.object({
+const attributionSchema = z.object({
   form_id: z.string().nullable(),
   form_name: z.string().nullable(),
   campaign_id: z.string().nullable(),
@@ -191,7 +191,7 @@ export const inboundLeadSchema = z.object({
   financial_institution: z.string().nullable(),
   installment_amount: z.string().nullable(),
 
-  attribution: attribution_schema,
+  attribution: attributionSchema,
   answers: z.record(z.string(), z.string()).readonly()
 });
 
@@ -215,7 +215,7 @@ export interface LeadPayloadReading {
  * built and that the CRM already committed and acknowledged.
  */
 export function readLeadPayload(raw: unknown): LeadPayloadReading {
-  const payload = lead_payload_schema.parse(raw);
+  const payload = leadPayloadSchema.parse(raw);
   const declared = payload.source?.toUpperCase().replace(/[\s-]+/g, "_") ?? null;
 
   return {

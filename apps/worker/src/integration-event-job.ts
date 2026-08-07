@@ -11,18 +11,22 @@ import {
   type IntegrationEventJobData,
   type PersonDecision
 } from "@marctco/domain";
-import { connectV1 } from "./connector-v1.js";
+import { connectLeadSource } from "./connector-v1.js";
 
 export interface ProcessedIntegrationEvent {
   readonly integration_event_id: string;
   readonly workspace_id: string;
   /**
-   * Which Pessoa this submission belongs to. Ticket 09 turns it into the
-   * `IntakePlan` that `applyIntakePlan` writes; here it is decided and
-   * returned, so the sequence the worker runs is settled before anything
-   * writes (ADR-0017).
+   * Which *kind* of decision was reached, and deliberately not the decision
+   * itself. BullMQ stores whatever a processor resolves as the job's
+   * `returnvalue` in Redis, and a `PersonDecision` carries the submission's
+   * name, phones, e-mails and CPF. Returning it would put a second copy of the
+   * payload outside Postgres, outside RLS and outside the 90-day expiry — the
+   * one copy rule of ADR-0014 broken by a convenience nobody needs, since the
+   * decision's only consumer is the next line of this same function
+   * (ADR-0006 regra 12).
    */
-  readonly person_decision: PersonDecision;
+  readonly person_decision_kind: PersonDecision["kind"];
 }
 
 function assertJobData(data: unknown): asserts data is IntegrationEventJobData {
@@ -62,13 +66,15 @@ export async function processIntegrationEventJob(
   });
 
   const event = await readIntegrationEventForProcessing(context);
-  const { inbound } = connectV1({
+  const { inbound } = connectLeadSource({
     raw: event.raw,
     integration_event_id: event.id,
     provider: event.provider
   });
   const normalized = normalize(inbound);
   const candidates = await findPersonCandidates(context, planPersonLookup(normalized));
+  // Stays local. Ticket 09 feeds it straight into `decideIntake` a few lines
+  // below this one; it has no reason to travel anywhere else.
   const person_decision = decidePersonIdentity({ normalized, candidates });
 
   if (event.status !== "PROCESSED") {
@@ -78,6 +84,6 @@ export async function processIntegrationEventJob(
   return {
     integration_event_id: data.integration_event_id,
     workspace_id: data.workspace_id,
-    person_decision
+    person_decision_kind: person_decision.kind
   };
 }

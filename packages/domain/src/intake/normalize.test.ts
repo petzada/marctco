@@ -90,7 +90,7 @@ describe("normalize", () => {
     ]);
   });
 
-  it("reads the financing type a Brazilian mapping is likely to send", () => {
+  it("reads the code value and the glossary's own PT-BR term for it", () => {
     expect(normalize(inbound({ financing_type: "veiculo" })).financing_type).toBe("VEHICLE");
     expect(normalize(inbound({ financing_type: "Veículo" })).financing_type).toBe("VEHICLE");
     expect(normalize(inbound({ financing_type: "IMÓVEL" })).financing_type).toBe("REAL_ESTATE");
@@ -100,12 +100,18 @@ describe("normalize", () => {
     expect(normalize(inbound({ financing_type: "OTHER" })).financing_type).toBe("OTHER");
   });
 
-  it("reports a financing type it does not know instead of guessing", () => {
-    const normalized = normalize(inbound({ financing_type: "consórcio de barco" }));
-    expect(normalized.financing_type).toBeNull();
-    expect(normalized.diagnostics).toEqual([
-      { field: "financing_type", reason: "UNKNOWN_FINANCING_TYPE" }
-    ]);
+  it("reports a financing type outside the glossary instead of guessing at one", () => {
+    // "Consignado" is a different product from an empréstimo pessoal to
+    // everybody who sells either, and nothing in the docs says which one the
+    // CRM should call it. Guessing here would be a product decision taken in a
+    // lookup table.
+    for (const word of ["consórcio de barco", "consignado", "carro"]) {
+      const normalized = normalize(inbound({ financing_type: word }));
+      expect(normalized.financing_type, word).toBeNull();
+      expect(normalized.diagnostics).toEqual([
+        { field: "financing_type", reason: "UNKNOWN_FINANCING_TYPE" }
+      ]);
+    }
   });
 
   it("reads the ISO instant and refuses the ambiguous date formats", () => {

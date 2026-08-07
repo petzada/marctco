@@ -36,32 +36,44 @@ const UNREACHABLE_TYPES: ReadonlySet<NumberType> = new Set<NumberType>([
 ]);
 
 /**
- * E.164 or nothing. A phone the CRM cannot express in E.164 is a phone it
- * cannot dial, and storing the raw string "for later" is how two records of the
- * same person stop matching each other.
+ * What a phone field turned out to be. Three answers and not two, because "we
+ * could not read this" and "this is a real number nobody answers personally"
+ * are different facts about somebody's form, and telling a manager the wrong
+ * one sends them looking at the wrong thing.
  */
-export function normalizePhone(value: string | null | undefined): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (trimmed === "") {
-    return null;
+export type PhoneReading =
+  | { readonly kind: "E164"; readonly value: string }
+  | { readonly kind: "NOT_A_PHONE" }
+  | { readonly kind: "NOT_A_PERSONAL_PHONE" };
+
+export function readPhone(value: string | null | undefined): PhoneReading {
+  if (typeof value !== "string" || value.trim() === "") {
+    return { kind: "NOT_A_PHONE" };
   }
 
-  const parsed = parsePhoneNumberFromString(trimmed, DEFAULT_PHONE_COUNTRY);
+  const parsed = parsePhoneNumberFromString(value.trim(), DEFAULT_PHONE_COUNTRY);
   if (!parsed || !parsed.isValid()) {
-    return null;
+    return { kind: "NOT_A_PHONE" };
   }
   if (
     parsed.country === DEFAULT_PHONE_COUNTRY &&
     !BRAZILIAN_NATIONAL_LENGTHS.has(parsed.nationalNumber.length)
   ) {
-    return null;
+    return { kind: "NOT_A_PHONE" };
   }
   const type = parsed.getType();
   if (type !== undefined && UNREACHABLE_TYPES.has(type)) {
-    return null;
+    return { kind: "NOT_A_PERSONAL_PHONE" };
   }
-  return parsed.number;
+  return { kind: "E164", value: parsed.number };
+}
+
+/**
+ * E.164 or nothing. A phone the CRM cannot express in E.164 is a phone it
+ * cannot dial, and storing the raw string "for later" is how two records of the
+ * same person stop matching each other.
+ */
+export function normalizePhone(value: string | null | undefined): string | null {
+  const reading = readPhone(value);
+  return reading.kind === "E164" ? reading.value : null;
 }

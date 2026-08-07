@@ -36,10 +36,16 @@ export {
 export { normalizeCpf } from "./intake/cpf.js";
 export { normalizeEmail } from "./intake/email.js";
 export { normalizeDecimalAmount } from "./intake/money.js";
-export { DEFAULT_PHONE_COUNTRY, normalizePhone } from "./intake/phone.js";
+export {
+  DEFAULT_PHONE_COUNTRY,
+  normalizePhone,
+  readPhone,
+  type PhoneReading
+} from "./intake/phone.js";
 export {
   PERSON_LOOKUP_KEY_KINDS,
   PERSON_LOOKUP_STRENGTHS,
+  PERSON_LOOKUP_STRENGTH_BY_KIND,
   lookupValuesOfKind,
   planPersonLookup,
   type PersonLookupKey,

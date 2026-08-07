@@ -25,7 +25,7 @@ import type { IntegrationProvider } from "@marctco/db";
  * copying it in here is how three adapters end up disagreeing.
  */
 
-export interface ConnectV1Input {
+export interface LeadSourceConnectorInput {
   /** `IntegrationEvent.raw`, exactly as it was committed. */
   readonly raw: unknown;
   readonly integration_event_id: string;
@@ -57,7 +57,8 @@ const PROVIDER_DEFAULT_SOURCE: Readonly<Record<IntegrationProvider, LeadSource>>
   LANDING_PAGE: "LANDING_PAGE"
 };
 
-export function connectV1(input: ConnectV1Input): ConnectedLead {
+/** The `LeadSourceConnector` of ADR-0005, for the `v1` contract. */
+export function connectLeadSource(input: LeadSourceConnectorInput): ConnectedLead {
   if (typeof input.integration_event_id !== "string" || input.integration_event_id === "") {
     throw new Error("A v1 connector needs the id of the event it is interpreting");
   }

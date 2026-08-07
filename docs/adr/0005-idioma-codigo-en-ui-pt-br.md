@@ -47,6 +47,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Força da chave de busca | `PersonLookupStrength` | `STRONG \| MODERATE \| WEAK` — CPF válido, telefone, e-mail isolado, nessa ordem ([ADR-0007](./0007-ingestao-idempotencia.md) §Identidade) |
 | Decisão de Pessoa | `PersonDecision` | União discriminada `NO_CONTACT \| REUSE_PERSON \| NEW_PERSON \| NEW_PERSON_WITH_IDENTITY_CONFLICT`; entra em `decideIntake` como a metade "quem é" do `IntakePlan`. **Nunca** `decideReuseOfPerson` devolvendo um id anulável — a variante do conflito precisa carregar as candidatas |
 | Candidata a Pessoa | `PersonCandidate` | O que `findPersonCandidates` devolve: `person_id`, o `cpf` já gravado e quais tipos de chave casaram |
+| Contatos da Pessoa | `PersonContacts` | O conjunto **completo** que a submissão traz — nunca um delta. A não-sobrescrita é da constraint `UNIQUE(person_id, phone_e164)`, não da decisão |
 | Chave idempotente do envio | `SubmissionKey` | `source` + `external_lead_id`; o que a constraint `UNIQUE(workspace_id, source, external_lead_id)` arbitra ([ADR-0007](./0007-ingestao-idempotencia.md)) |
 | Revisão de ingestão | `IntakeReview` | Pendência **marcada na Oportunidade já criada**, nunca bloqueio; `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE` |
 | Marcador | `IntakeReview` + `Opportunity.missing_phone` | Não é um model: é o conjunto de pendências de um lead. Na UI, **um ícone só** os reúne ([ADR-0007](./0007-ingestao-idempotencia.md)) |

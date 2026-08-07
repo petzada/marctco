@@ -88,10 +88,7 @@ describe("processIntegrationEventJob", () => {
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
-    expect(processed.person_decision).toMatchObject({
-      kind: "REUSE_PERSON",
-      person_id: known_person_id
-    });
+    expect(processed.person_decision_kind).toBe("REUSE_PERSON");
   });
 
   it("decides a new Pessoa with a marked conflict when the keys disagree", async () => {
@@ -103,10 +100,7 @@ describe("processIntegrationEventJob", () => {
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
-    expect(processed.person_decision).toMatchObject({
-      kind: "NEW_PERSON_WITH_IDENTITY_CONFLICT",
-      candidate_person_ids: [known_person_id, other_person_id]
-    });
+    expect(processed.person_decision_kind).toBe("NEW_PERSON_WITH_IDENTITY_CONFLICT");
   });
 
   it("decides no Pessoa for a submission with no phone and no e-mail", async () => {
@@ -121,8 +115,28 @@ describe("processIntegrationEventJob", () => {
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
-    expect(processed.person_decision).toEqual({ kind: "NO_CONTACT" });
+    expect(processed.person_decision_kind).toBe("NO_CONTACT");
     expect(findPersonCandidates).toHaveBeenCalledOnce();
+  });
+
+  it("returns no personal data at all — BullMQ keeps the return value in Redis", async () => {
+    // A processor's resolved value is stored as the job's `returnvalue`, which
+    // is outside Postgres, outside RLS and outside the 90-day expiry. A
+    // PersonDecision carries the submission's name, phones, e-mails and CPF;
+    // returning one would be a second copy of the payload (ADR-0014).
+    findPersonCandidates.mockResolvedValue([]);
+
+    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
+
+    expect(Object.keys(processed).sort()).toEqual([
+      "integration_event_id",
+      "person_decision_kind",
+      "workspace_id"
+    ]);
+    const serialized = JSON.stringify(processed);
+    expect(serialized).not.toContain("Fulano");
+    expect(serialized).not.toContain("98765");
+    expect(serialized).not.toContain("+5511987654321");
   });
 
   it("refuses a job whose data is not the pair of identifiers", async () => {

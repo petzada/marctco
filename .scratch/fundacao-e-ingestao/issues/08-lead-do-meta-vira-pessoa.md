@@ -58,11 +58,15 @@ O ADR vence (degrau 1 da escada de `AGENTS.md`). `decidePersonIdentity` devolve 
 
 O contrato aceita `phone`/`phones` e `email`/`emails`. O plural é o publicado; o singular existe porque é o que quem mapeia uma pergunta de formulário Meta escreve primeiro, e recusar custaria um lead para ensinar uma lição sobre plural.
 
+### E-mail sozinho não é conflito
+
+Uma Pessoa única encontrada **só** pelo e-mail devolve `NEW_PERSON`, não `NEW_PERSON_WITH_IDENTITY_CONFLICT`. O ADR-0007 condiciona o `IDENTITY_CONFLICT` a "quando as chaves recebidas apontam para Pessoas **diferentes**", e uma chave apontando para uma Pessoa não é isso; do e-mail o ADR exige apenas que "não autorize fusão automática", o que `NEW_PERSON` já cumpre. Marcar mesmo assim poria revisão em todo `contato@empresa.com.br` e em todo e-mail que uma família divide — contra o aviso do próprio ADR de que alerta que não se resolve mata o sinal dos vizinhos.
+
 ### Achados para os tickets seguintes
 
 - **`PROVIDER_DEFAULT_SOURCE` em `connector-v1.ts` mapeia `PLUGA → META_LEAD_ADS`.** É o único destino Pluga desta fatia. O **ticket 13** precisa fazer o Google declarar `source` no payload (e o **14** precisa pôr `source` no modelo copiável), senão lead do Google entra rotulado como Meta.
 - **`readIntegrationEventForProcessing` agora devolve `provider`**, lido por `JOIN` com `integration_connections` na mesma transação sob RLS. O ticket 09 precisa do `target_pipeline_id` da mesma conexão — cabe no mesmo `SELECT`.
-- **`processIntegrationEventJob` devolve `person_decision`.** O ticket 09 troca esse retorno pelo `IntakePlan` de `decideIntake`, sem mover nada do que já está aqui.
+- **`processIntegrationEventJob` devolve `person_decision_kind`, e nunca a decisão.** O `main.ts` devolve o resultado do processador ao BullMQ, que **guarda o valor de retorno em Redis**; um `PersonDecision` carrega nome, telefones, e-mails e CPF, e devolvê-lo seria uma segunda cópia do payload fora do Postgres, fora da RLS e sem prazo (ADR-0014). O 09 acrescenta o `IntakePlan` **dentro** da função, onde ele já está.
 - **A varredura de lápide do Seam 3 estava furada para FK composta** e foi reescrita em `pg_catalog` com pareamento por ordinal. Com `information_schema`, a FK `person_phones (workspace_id, person_id) → persons (workspace_id, id)` produzia o produto cartesiano e inventava um join `workspace_id = workspace_id`, contando todo contato de um workspace que apenas *contém* uma Pessoa mesclada como violação. O `Opportunity.merged_into_opportunity_id` do ticket 09 entra na varredura sem nenhuma edição.
 - **`persons.cpf` é `text`, não `char(11)`** — bpchar preenche com espaço na leitura, e uma chave de busca que deixa de ser igual a si mesma fora do banco não é chave.
 - **O ponteiro de mesclagem é `NO ACTION`, não `RESTRICT`.** Apagar um workspace remove lápide e canônica no mesmo comando em cascata, e `RESTRICT` é verificado por linha enquanto `NO ACTION` é verificado no fim — com `RESTRICT` a cascata falha contra si mesma.

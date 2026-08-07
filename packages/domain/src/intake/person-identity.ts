@@ -1,4 +1,8 @@
 import type { NormalizedLead } from "./normalize.js";
+import {
+  PERSON_LOOKUP_STRENGTH_BY_KIND,
+  type PersonLookupKeyKind
+} from "./person-lookup.js";
 
 /**
  * Which Pessoa a submission belongs to — the arbitration half of the identity
@@ -69,10 +73,11 @@ export type PersonDecision =
     }
   | {
       /**
-       * The keys point at different Pessoas, or the only match was too weak to
-       * fuse on. A new Pessoa is created with this submission's contacts, no
-       * link to any existing record is made, and the candidates are recorded
-       * for a human to resolve by merging later.
+       * The keys point at **different** Pessoas. A new Pessoa is created with
+       * this submission's contacts, no link to any existing record is made,
+       * and the candidates are recorded for a human to resolve by merging
+       * later. A single Pessoa matched only weakly is not this case — it is
+       * `NEW_PERSON`.
        */
       readonly kind: "NEW_PERSON_WITH_IDENTITY_CONFLICT";
       readonly contacts: PersonContacts;
@@ -93,6 +98,11 @@ export function decidePersonIdentity(input: DecidePersonIdentityInput): PersonDe
     emails: normalized.emails,
     cpf: normalized.cpf
   };
+  const conflict = (candidates: readonly PersonCandidate[]): PersonDecision => ({
+    kind: "NEW_PERSON_WITH_IDENTITY_CONFLICT",
+    contacts,
+    candidate_person_ids: candidates.map((candidate) => candidate.person_id)
+  });
 
   // A CPF alone does not rescue a submission from quarantine. It identifies,
   // but nobody can be called on it: releasing one would create a card with an
@@ -104,38 +114,57 @@ export function decidePersonIdentity(input: DecidePersonIdentityInput): PersonDe
   const candidates = input.candidates.filter(
     (candidate) => candidate.matched.cpf || candidate.matched.phone || candidate.matched.email
   );
-  const candidate_person_ids = candidates.map((candidate) => candidate.person_id);
 
   if (candidates.length === 0) {
     return { kind: "NEW_PERSON", contacts };
   }
 
-  // More than one Pessoa answers to the keys of a single submission. No key
-  // wins by fixed priority — not even CPF — because choosing one would
-  // reintroduce "the phone decides" through the back door, and the wrong link
-  // is the one that never undoes itself: an attendant reads somebody else's
-  // history and greets the client by the wrong name.
+  // More than one Pessoa answers to the keys of a single submission — the
+  // literal condition ADR-0007 attaches IDENTITY_CONFLICT to. No key wins by
+  // fixed priority, not even CPF, because choosing one would reintroduce "the
+  // phone decides" through the back door, and the wrong link is the one that
+  // never undoes itself: an attendant reads somebody else's history and greets
+  // the client by the wrong name.
   if (candidates.length > 1) {
-    return { kind: "NEW_PERSON_WITH_IDENTITY_CONFLICT", contacts, candidate_person_ids };
+    return conflict(candidates);
   }
 
   const [candidate] = candidates as [PersonCandidate];
 
   // The submission carries a CPF and the single candidate carries a different
-  // one. That is a contradiction, and a phone stops identifying the moment one
+  // one. Two keys, two Pessoas — one of them being hypothetical does not make
+  // it less of a contradiction, and a phone stops identifying the moment one
   // exists.
   if (contacts.cpf !== null && candidate.cpf !== null && candidate.cpf !== contacts.cpf) {
-    return { kind: "NEW_PERSON_WITH_IDENTITY_CONFLICT", contacts, candidate_person_ids };
+    return conflict(candidates);
   }
 
-  if (candidate.matched.cpf || candidate.matched.phone) {
+  if (identifiesOnItsOwn(candidate)) {
     return { kind: "REUSE_PERSON", person_id: candidate.person_id, contacts };
   }
 
-  // Matched on the e-mail and nothing else. An isolated e-mail never fuses
-  // records automatically — shared household addresses and
-  // `contato@empresa.com.br` are common enough that it would merge strangers —
-  // but the near miss is worth a human's eye, so it is a conflict rather than
-  // a silent second Pessoa.
-  return { kind: "NEW_PERSON_WITH_IDENTITY_CONFLICT", contacts, candidate_person_ids };
+  // Matched on nothing but a WEAK key. It does not fuse — shared
+  // household addresses and `contato@empresa.com.br` are common enough that it
+  // would merge strangers — and it is **not** a conflict either: the keys of
+  // this submission point at one Pessoa, not at different ones, which is the
+  // condition ADR-0007 gates IDENTITY_CONFLICT on. Marking it would put a
+  // review on every address a family shares, and an alert nobody can resolve
+  // kills the signal of the ones beside it.
+  return { kind: "NEW_PERSON", contacts };
+}
+
+/**
+ * Whether what this candidate matched on is enough to reuse the record. The
+ * strengths come from `PERSON_LOOKUP_STRENGTH_BY_KIND`, the same table
+ * `planPersonLookup` stamps onto the keys — so "a phone identifies, an e-mail
+ * does not" is one fact in one place instead of a rule the lookup half and the
+ * arbitration half each remember separately.
+ */
+function identifiesOnItsOwn(candidate: PersonCandidate): boolean {
+  const matched: readonly PersonLookupKeyKind[] = [
+    ...(candidate.matched.cpf ? (["CPF"] as const) : []),
+    ...(candidate.matched.phone ? (["PHONE"] as const) : []),
+    ...(candidate.matched.email ? (["EMAIL"] as const) : [])
+  ];
+  return matched.some((kind) => PERSON_LOOKUP_STRENGTH_BY_KIND[kind] !== "WEAK");
 }

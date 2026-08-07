@@ -112,16 +112,26 @@ describe("decidePersonIdentity", () => {
     });
   });
 
-  it("never fuses records on an e-mail alone, and marks the near miss", () => {
+  it("never fuses records on an e-mail alone", () => {
     const decision = decidePersonIdentity({
       normalized: normalizedLead({ email: "contato@empresa.com.br" }),
       candidates: [candidate(PERSON_A, { email: true })]
     });
 
-    expect(decision).toMatchObject({
-      kind: "NEW_PERSON_WITH_IDENTITY_CONFLICT",
-      candidate_person_ids: [PERSON_A]
+    expect(decision).toMatchObject({ kind: "NEW_PERSON" });
+  });
+
+  it("does not call one weakly matched Pessoa a conflict", () => {
+    // IDENTITY_CONFLICT is gated on keys pointing at *different* Pessoas.
+    // Marking this would put a review on every address a family shares, and an
+    // alert nobody can resolve kills the signal of the ones beside it.
+    const decision = decidePersonIdentity({
+      normalized: normalizedLead({ email: "familia@exemplo.com", phone: "11987654321" }),
+      candidates: [candidate(PERSON_A, { email: true })]
     });
+
+    expect(decision.kind).toBe("NEW_PERSON");
+    expect(decision).not.toHaveProperty("candidate_person_ids");
   });
 
   it("creates a new Pessoa with the submission's contacts when keys point at different Pessoas", () => {

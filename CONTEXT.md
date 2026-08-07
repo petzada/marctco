@@ -102,6 +102,18 @@ _Avoid_: Origem como texto livre, deduzir origem do conteúdo do lead, confundir
 Quais chaves procurar e com que força, decidido pelo domínio e executado por quem tem acesso ao banco. CPF válido é chave forte, telefone é moderada, e-mail isolado é fraca. Existe porque decidir "o que buscar" é metade da regra de identidade: quem busca só por telefone reconhece menos gente do que a regra promete, e nenhum teste puro percebe.
 _Avoid_: Escrever a consulta de identidade fora do módulo que a documenta, injetar uma porta de busca no domínio, buscar só pelo primeiro contato do envio
 
+**Decisão de Pessoa**:
+A quem a submissão pertence: uma Pessoa conhecida reconhecida sem contradição, uma Pessoa nova, uma Pessoa nova com as candidatas registradas para revisão, ou nenhuma Pessoa porque não veio contato. Decidida sem tocar no banco, a partir do que a busca devolveu. A variante do conflito carrega as candidatas dentro dela — não dá para gravá-la sem olhar quem eram.
+_Avoid_: Escolher a Pessoa mais provável e seguir, deixar a lista de candidatas como campo opcional, tratar uma única Pessoa fracamente encontrada como conflito
+
+**Diagnóstico de normalização**:
+O registro de que um campo chegou e não pôde ser lido — qual campo e por quê, **nunca o valor**. É a única parte de uma submissão que sai do tenant, e o payload tem CPF e telefone dentro. Quem precisa do conteúdo lê em Integrações, dentro do workspace.
+_Avoid_: Pôr o valor recebido no diagnóstico, transformar diagnóstico em recusa da submissão, confundir "campo não veio" com "campo veio errado"
+
+**Contatos da Pessoa**:
+O conjunto de nome, telefones, e-mails e CPF que uma submissão traz, gravado como acréscimo e nunca como substituição. Receber um contato novo jamais apaga o anterior — a Pessoa acumula formas de ser encontrada, porque é assim que ela é reconhecida da próxima vez.
+_Avoid_: Gravar só o primeiro contato, sobrescrever o telefone antigo pelo novo, calcular a diferença em vez de mandar o conjunto inteiro
+
 **Plano de ingestão**:
 O que uma submissão recebida vai produzir, descrito como dado antes de acontecer: quarentena, retransmissão inerte ou Oportunidade nova com seus marcadores. É decidido sem tocar no banco e executado numa transação só, o que faz caber num teste puro aquilo que antes só o ambiente inteiro exercitava. Um plano de retransmissão não tem onde guardar etapa, responsável, situação ou chegada — é assim que o funil não rebobina.
 _Avoid_: Roteiro espalhado pelo worker, plano com campos opcionais que alguém preenche, decidir consultando, um caminho para a ingestão e outro para a liberação da quarentena

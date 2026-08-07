@@ -19,8 +19,12 @@ atualizar Status/registro.
 - **08 contrato v1 + Pessoa: done** (16/18 critérios; os dois restantes exigem
   escrita e são do 09, com o motivo escrito ao lado no arquivo da issue).
   Branch `ticket/08-contrato-v1-normaliza-e-resolve-pessoa`, migration
-  `20260807000100_persons_and_contacts`, `pnpm test` 278/278 (1 pulado).
+  `20260807000100_persons_and_contacts`, `pnpm test` 285 passando (1 pulado).
   Resumo completo em `registro.md`.
+- **O ticket 09 ganhou três critérios novos**, carregados do 08 e do review:
+  `IntakeReview` com `IDENTITY_CONFLICT` (nenhum critério o mencionava — só o
+  `POSSIBLE_DUPLICATE`), a escrita de contatos por `ON CONFLICT DO NOTHING`, e
+  `Opportunity.missing_phone`, que estava na spec e em critério nenhum.
 - **Próximo despacho: ticket 09** (Pessoa vira Oportunidade — o tracer bullet
   fecha). Ordem restante: `09 → (10 · 11 · 13 · 16 em paralelo se worktrees) →
   12 · 14 → 15`.

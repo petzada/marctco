@@ -1,7 +1,7 @@
 import { normalizeCpf } from "./cpf.js";
 import { normalizeEmail } from "./email.js";
 import { normalizeDecimalAmount } from "./money.js";
-import { normalizePhone } from "./phone.js";
+import { readPhone } from "./phone.js";
 import type { InboundLead, LeadSource } from "./inbound-lead.js";
 
 /**
@@ -23,26 +23,25 @@ export const FINANCING_TYPES = ["VEHICLE", "REAL_ESTATE", "PERSONAL_LOAN", "OTHE
 export type FinancingType = (typeof FINANCING_TYPES)[number];
 
 /**
- * The PT-BR words a Pluga mapping is likely to carry in a financing field, and
- * the code value each means (ADR-0005: the translation lives outside the
- * database, never inside it).
+ * The code value, plus the PT-BR term the glossary itself uses for it
+ * (`CONTEXT.md` §Tipo de financiamento, ADR-0005). Nothing wider: a synonym
+ * table is a product decision in disguise, and every word not in the glossary
+ * would be one taken here with no source — "consignado", for one, is a
+ * different product from an empréstimo pessoal to everybody who sells either.
+ *
+ * A word outside this map produces a diagnostic and a null type. That costs
+ * nothing: the financing type is optional, never selects a pipeline, and never
+ * identifies a Pessoa (ADR-0007 §Mecanismo 2).
  */
 const FINANCING_TYPE_SYNONYMS: ReadonlyMap<string, FinancingType> = new Map([
   ["VEHICLE", "VEHICLE"],
   ["VEICULO", "VEHICLE"],
-  ["CARRO", "VEHICLE"],
-  ["AUTO", "VEHICLE"],
   ["REAL_ESTATE", "REAL_ESTATE"],
   ["IMOVEL", "REAL_ESTATE"],
-  ["IMOBILIARIO", "REAL_ESTATE"],
-  ["CASA", "REAL_ESTATE"],
   ["PERSONAL_LOAN", "PERSONAL_LOAN"],
   ["EMPRESTIMO_PESSOAL", "PERSONAL_LOAN"],
-  ["EMPRESTIMO", "PERSONAL_LOAN"],
-  ["CONSIGNADO", "PERSONAL_LOAN"],
   ["OTHER", "OTHER"],
-  ["OUTRO", "OTHER"],
-  ["OUTROS", "OTHER"]
+  ["OUTRO", "OTHER"]
 ]);
 
 /**
@@ -56,6 +55,7 @@ export interface NormalizationDiagnostic {
   readonly field: string;
   readonly reason:
     | "NOT_A_PHONE"
+    | "NOT_A_PERSONAL_PHONE"
     | "NOT_AN_EMAIL"
     | "NOT_A_VALID_CPF"
     | "NOT_AN_AMOUNT"
@@ -93,8 +93,15 @@ export interface NormalizedLead {
 export function normalize(inbound: InboundLead): NormalizedLead {
   const diagnostics: NormalizationDiagnostic[] = [];
 
-  const phones = normalizeContacts(inbound.phones, normalizePhone, "phones", "NOT_A_PHONE", diagnostics);
-  const emails = normalizeContacts(inbound.emails, normalizeEmail, "emails", "NOT_AN_EMAIL", diagnostics);
+  const phones = normalizeContacts(inbound.phones, "phones", (value) => {
+    const reading = readPhone(value);
+    return reading.kind === "E164" ? { value: reading.value } : { reason: reading.kind };
+  });
+  const emails = normalizeContacts(inbound.emails, "emails", (value) => {
+    const email = normalizeEmail(value);
+    return email === null ? { reason: "NOT_AN_EMAIL" } : { value: email };
+  });
+  diagnostics.push(...phones.diagnostics, ...emails.diagnostics);
 
   const cpf = normalizeCpf(inbound.cpf);
   if (inbound.cpf !== null && cpf === null) {
@@ -128,8 +135,8 @@ export function normalize(inbound: InboundLead): NormalizedLead {
     external_lead_id: inbound.external_lead_id,
     occurred_at,
     name: emptyToNull(inbound.name),
-    phones,
-    emails,
+    phones: phones.values,
+    emails: emails.values,
     cpf,
     financing_type,
     financial_institution: emptyToNull(inbound.financial_institution),
@@ -141,31 +148,38 @@ export function normalize(inbound: InboundLead): NormalizedLead {
   };
 }
 
+type ContactReading =
+  | { readonly value: string }
+  | { readonly reason: NormalizationDiagnostic["reason"] };
+
 /**
  * Every value is kept, not just the first: a person who filled in a mobile and
  * a landline has two ways to be reached and two ways to be recognised later
  * (ADR-0007 §Identidade). Repeats collapse, because the same number written
  * two ways is one number once it is in E.164.
+ *
+ * The reader says why a value did not survive, so the reason is the reader's
+ * to know rather than something the caller declares up front for the whole
+ * list — which is what let a toll-free number be filed as "not a phone".
  */
 function normalizeContacts(
   values: readonly string[],
-  normalizeOne: (value: string) => string | null,
   field: string,
-  reason: NormalizationDiagnostic["reason"],
-  diagnostics: NormalizationDiagnostic[]
-): readonly string[] {
+  read: (value: string) => ContactReading
+): { readonly values: readonly string[]; readonly diagnostics: readonly NormalizationDiagnostic[] } {
   const normalized: string[] = [];
+  const diagnostics: NormalizationDiagnostic[] = [];
   for (const [index, value] of values.entries()) {
-    const one = normalizeOne(value);
-    if (one === null) {
-      diagnostics.push({ field: `${field}[${index}]`, reason });
+    const reading = read(value);
+    if (!("value" in reading)) {
+      diagnostics.push({ field: `${field}[${index}]`, reason: reading.reason });
       continue;
     }
-    if (!normalized.includes(one)) {
-      normalized.push(one);
+    if (!normalized.includes(reading.value)) {
+      normalized.push(reading.value);
     }
   }
-  return normalized;
+  return { values: normalized, diagnostics };
 }
 
 function normalizeFinancingType(value: string | null): FinancingType | null {
