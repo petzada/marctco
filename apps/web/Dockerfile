@@ -21,6 +21,19 @@ COPY packages/domain packages/domain
 RUN pnpm install --frozen-lockfile
 COPY apps/web apps/web
 COPY packages/db packages/db
+# `NEXT_PUBLIC_*` is inlined by Next at BUILD time, not read from the
+# environment at runtime. Setting these on the Railway service is therefore not
+# enough on its own: the login form is a client component, and without the
+# values baked in here its bundle ships empty strings and throws the moment
+# somebody clicks "Entrar". Railway passes service variables to a Dockerfile
+# build as build args, but only for the names the Dockerfile declares.
+#
+# Only the public pair belongs here. SUPABASE_SERVICE_ROLE_KEY is read at
+# runtime by the server and must never be baked into an image layer.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 RUN pnpm --filter @marctco/db generate && pnpm --filter @marctco/domain build && pnpm --filter @marctco/db build && pnpm --filter @marctco/web build
 # The runtime copies /app/node_modules whole, so the dev dependencies ship with
 # it and this image is around 1.5 GB. `pnpm prune --prod` is NOT the fix: it
