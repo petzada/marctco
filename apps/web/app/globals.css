@@ -12,6 +12,10 @@
  *   {spacing.foo}     -> --spacing-foo    -> p-foo / px-foo / gap-foo / m-foo / w-foo / h-foo / top-foo ...
  *   {rounded.foo}     -> --radius-foo     -> rounded-foo
  *   {shadow.foo}      -> --shadow-foo     -> shadow-foo
+ *   (content widths)  -> --max-width-foo  -> max-w-foo
+ *
+ * Widths get their own namespace rather than riding the spacing scale —
+ * see "Content widths" below for the collision that forces it.
  *
  * Components consume these classes; a component that writes a literal hex or
  * a literal px for spacing/radius is violating DESIGN.md ("Iteration Guide" #3).
@@ -83,7 +87,14 @@
    * one-family system end to end.
    * --------------------------------------------------------------------- */
   --font-*: initial;
-  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* `--font-inter` is defined by next/font in app/layout.tsx, which self-hosts
+   * the file and puts the variable on <html>. Naming the family here without
+   * loading it anywhere is what this system did before, and it meant every
+   * screen silently rendered in system-ui — with the em-tracking ladder below
+   * tuned for a face that was never on the page. The literal fallbacks stay
+   * after it for the swap window. */
+  --font-sans: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* Weight ladder is 400 / 500 / 600 only — DESIGN.md "Typography >
@@ -206,6 +217,33 @@
   --spacing-xxl: 48px;
   --spacing-section: 80px;
   --spacing-section-lg: 96px;
+
+  /* ---------------------------------------------------------------------
+   * Content widths
+   * DESIGN.md "Layout > Grid & Container" and the `modal` component row.
+   *
+   * These exist because of a real collision, not for tidiness. Tailwind
+   * resolves `max-w-*` / `w-*` / `min-w-*` against `--spacing-*` BEFORE
+   * `--container-*`, and the named spacing steps above (`sm`, `md`, `lg`,
+   * `xl`) share their names with Tailwind's container scale. So `max-w-md`
+   * did not mean 28rem — it compiled to `max-width: var(--spacing-md)`,
+   * i.e. a 16px-wide card, and `max-w-xl` to 32px. Every centered panel in
+   * the app collapsed into an unreadable column of overlapping text.
+   *
+   * The `--max-width-*` namespace is resolved ahead of both, so a width
+   * written here can't be shadowed by a spacing step. `--container-*` is
+   * reset for the same reason `--color-*` is: leaving it reachable means
+   * `max-w-md` keeps compiling to a spacing value while looking like it
+   * asks for a container one. With the reset, container-scale names emit
+   * no rule at all — a missing width is visible, a 16px one reads as a
+   * styling opinion.
+   * --------------------------------------------------------------------- */
+  --container-*: initial;
+
+  --max-width-dialog: 560px;
+  --max-width-prose: 720px;
+  --max-width-content: 1280px;
+  --max-width-content-wide: 1440px;
 
   /* ---------------------------------------------------------------------
    * Border radius

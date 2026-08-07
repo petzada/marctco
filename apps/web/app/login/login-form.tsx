@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { createSupabaseBrowserClient } from "../../lib/supabase/client";
+import { fieldClassName, primaryActionClassName } from "../entry-shell";
 
 export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +43,17 @@ export function LoginForm() {
           E-mail
         </label>
         <input
-          className="min-h-10 rounded-md border border-hairline bg-canvas px-sm text-body text-ink outline-none placeholder:text-ink-muted focus:border-primary focus:ring-2 focus:ring-primary-focus"
+          className={fieldClassName}
           id="email"
           name="email"
           type="email"
           autoComplete="email"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          aria-invalid={error !== null}
+          aria-describedby={error ? "login-error" : undefined}
           required
         />
       </div>
@@ -55,20 +62,31 @@ export function LoginForm() {
           Senha
         </label>
         <input
-          className="min-h-10 rounded-md border border-hairline bg-canvas px-sm text-body text-ink outline-none placeholder:text-ink-muted focus:border-primary focus:ring-2 focus:ring-primary-focus"
+          className={fieldClassName}
           id="password"
           name="password"
           type="password"
           autoComplete="current-password"
+          aria-invalid={error !== null}
+          aria-describedby={error ? "login-error" : undefined}
           required
         />
       </div>
-      {error ? <p className="text-caption text-danger-ink">{error}</p> : null}
-      <button
-        className="min-h-10 rounded-md bg-primary px-md text-button text-on-primary transition-[background-color,transform] duration-150 ease-out hover:bg-primary-hover active:scale-[0.98] disabled:bg-ink-disabled"
-        disabled={submitting}
-        type="submit"
-      >
+      {/*
+       * The message is announced, not just drawn: a screen reader user who
+       * submits and hears nothing has no way to know the attempt failed.
+       * `aria-live` sits on the wrapper so it is in the accessibility tree
+       * before the text arrives — a live region mounted together with its
+       * content is not announced.
+       */}
+      <div aria-live="polite" role="status">
+        {error ? (
+          <p className="text-caption text-danger-ink" id="login-error">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <button className={primaryActionClassName} disabled={submitting} type="submit">
         {submitting ? "Entrando" : "Entrar"}
       </button>
     </form>

@@ -15,6 +15,14 @@ const { POST } = await import("./route");
 const owner = randomUUID();
 const slug = randomUUID();
 
+/**
+ * The origin here is a fiction, and that is the point: these assertions used
+ * to expect it echoed back in `location`, which is what let the redirects ship
+ * pointing at the internal container host. In production the request carries
+ * the container's own hostname, never the public one, so any expectation built
+ * from this URL was testing the mock rather than the behaviour. The locations
+ * below are relative and name no host — see lib/redirect-response.ts.
+ */
 function provisionRequest(): Request {
   return new Request("https://app.marctco.test/onboarding/provision", { method: "post" });
 }
@@ -46,9 +54,7 @@ describe("POST /onboarding/provision", () => {
       workspace_name: "Assessoria Horizonte"
     });
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(
-      `https://app.marctco.test/workspace/${slug}`
-    );
+    expect(response.headers.get("location")).toBe(`/workspace/${slug}`);
   });
 
   it("spends the right before the workspace exists, never after", async () => {
@@ -74,7 +80,7 @@ describe("POST /onboarding/provision", () => {
 
     expect(provisionWorkspace).not.toHaveBeenCalled();
     expect(consumeProvisioningEntitlement).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe("https://app.marctco.test/onboarding");
+    expect(response.headers.get("location")).toBe("/onboarding");
   });
 
   it("creates nothing for a login that already belongs to a workspace", async () => {
@@ -85,7 +91,7 @@ describe("POST /onboarding/provision", () => {
     const response = await POST(provisionRequest());
 
     expect(provisionWorkspace).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe("https://app.marctco.test/access");
+    expect(response.headers.get("location")).toBe("/access");
   });
 
   it("creates nothing when the right cannot be spent", async () => {
@@ -94,9 +100,7 @@ describe("POST /onboarding/provision", () => {
     const response = await POST(provisionRequest());
 
     expect(provisionWorkspace).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe(
-      "https://app.marctco.test/onboarding?error=configuration"
-    );
+    expect(response.headers.get("location")).toBe("/onboarding?error=configuration");
   });
 
   it("sends an unauthenticated request to the login screen", async () => {
@@ -105,6 +109,6 @@ describe("POST /onboarding/provision", () => {
     const response = await POST(provisionRequest());
 
     expect(listUserWorkspaces).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe("https://app.marctco.test/login");
+    expect(response.headers.get("location")).toBe("/login");
   });
 });
