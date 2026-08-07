@@ -4,12 +4,14 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/worker/package.json apps/worker/package.json
-COPY packages/domain/package.json packages/domain/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/db/prisma packages/db/prisma
+# Before the install, and the whole package — see apps/web/Dockerfile for why:
+# the root `postinstall` builds this package, and that build needs its tsconfig
+# and sources to exist.
+COPY packages/domain packages/domain
 RUN pnpm install --frozen-lockfile
 COPY apps/worker apps/worker
-COPY packages/domain packages/domain
 COPY packages/db packages/db
 RUN pnpm --filter @marctco/db generate && pnpm --filter @marctco/domain build && pnpm --filter @marctco/db build && pnpm --filter @marctco/worker build
 
@@ -24,6 +26,10 @@ COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 COPY --from=build /app/apps/worker/node_modules ./apps/worker/node_modules
 COPY --from=build /app/packages/domain/package.json ./packages/domain/package.json
 COPY --from=build /app/packages/domain/dist ./packages/domain/dist
+# The worker is the process that actually normalizes a lead, so it is the one
+# that would fall over first without the dependencies packages/domain gained
+# with the `v1` contract.
+COPY --from=build /app/packages/domain/node_modules ./packages/domain/node_modules
 COPY --from=build /app/packages/db/package.json ./packages/db/package.json
 COPY --from=build /app/packages/db/dist ./packages/db/dist
 COPY --from=build /app/packages/db/node_modules ./packages/db/node_modules

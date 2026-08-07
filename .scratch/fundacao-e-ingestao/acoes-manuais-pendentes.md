@@ -1,7 +1,32 @@
 # Ações manuais pendentes — fundação e ingestão
 
-> Atualizado no fechamento do gate 06 (2026-08-05). Production migration verde:
-> https://github.com/petzada/marctco/actions/runs/31031305105 — schema up to date (9/9).
+> Atualizado em 2026-08-07, na recuperação do build Docker. Production migration
+> verde com 12/12 migrations aplicadas.
+
+## URGENTE — o deploy estava parado desde 2026-08-05
+
+Produção rodava `26a7843` (era do ticket 03) enquanto o banco já tinha 12
+migrations. Os tickets **06, 07, 17 e 08 nunca subiram**: as migrations sobem
+pelo job de release do GitHub, independente do Railway, então o schema andou e o
+código não. Causa e correção no `registro.md`, seção "Recuperação do build
+Docker".
+
+- [ ] **Acompanhar o primeiro deploy depois do merge da recuperação.** É a
+  primeira vez que quatro fatias sobem juntas. Conferir `/health` do web em
+  `https://web-production-613e6.up.railway.app/health` e `worker ready` nos logs
+  do worker.
+- [ ] **Conferir o `REDIS_URL` do serviço `web` antes de comemorar** — o item do
+  ticket 07 logo abaixo, que nunca chegou a valer porque o código do 07 nunca
+  chegou a rodar em produção. Agora vai.
+- [ ] **Abrir item para o tamanho da imagem do web (1.49 GB).** O runtime passou
+  a copiar `/app/node_modules` inteiro, com devDependencies. `pnpm prune --prod`
+  antes do runtime stage, ou `pnpm deploy`, resolve. Não foi feito junto de
+  propósito: não se arrisca reabrir um deploy parado há dois dias por uma
+  otimização de tamanho.
+- [ ] **Vigiar entrega, não só CI.** Nada no pipeline constrói a imagem, então o
+  CI ficou verde por dois dias enquanto nada era entregue. O único sinal era o
+  painel do Railway. Vale um passo de `docker build` no CI, ou um alerta de
+  deploy falho.
 
 ## Já resolvido — Ticket 06 / Production migration 002
 
