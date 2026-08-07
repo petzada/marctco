@@ -47,16 +47,52 @@ serviço `web`**, o que derrubava toda rota autenticada antes de chegar ao
   `apps/web/.next/static`. Verificado nos dois sentidos antes de subir — a
   imagem corrigida contém os valores, a anterior não.
 
-## 🟡 Ainda não exercitado ponta a ponta em produção
+## 🟡 O que falta — nesta ordem
 
-- [ ] **Postar um lead de teste e conferir que vira Pessoa.** O caminho
-  `POST → outbox → dispatcher → BullMQ → worker → Person` nunca rodou em
-  produção, porque o código dos tickets 07 e 08 só chegou lá em 2026-08-07.
-  O que está provado hoje é que o worker **conecta** no Redis e que o dispatcher
-  **sobe**; o caminho de publicação só é exercitado quando existe evento
-  pendente — o dispatcher nem fala com o Redis numa passada com zero eventos.
-  **Depende de:** um workspace provisionado em produção, que por sua vez depende
-  da marcação em `app_metadata` logo abaixo.
+**O domínio de produção é `https://web-production-33d67.up.railway.app`.** O
+endereço com `613e6` que aparece no registro do ticket 01 é antigo e responde
+404 do edge do Railway em tudo. Confirme sempre com
+`railway variables --service web | grep RAILWAY_PUBLIC_DOMAIN`.
+
+### 1. Marcar o usuário em `app_metadata`
+
+No SQL Editor do Supabase (mais confiável que o campo do painel):
+
+```sql
+update auth.users
+set raw_app_meta_data =
+  coalesce(raw_app_meta_data, '{}'::jsonb)
+  || jsonb_build_object(
+       'can_provision_workspace', true,
+       'workspace_name', 'Assessoria Exemplo'
+     )
+where email = 'pessoa@exemplo.com';
+```
+
+- [ ] `can_provision_workspace` é **booleano `true`**, não a string `"true"` — a
+  checagem é estrita e aspas anulam a marcação.
+- [ ] `workspace_name` é **obrigatório** e não pode ser só espaço; o nome é
+  trimado e vazio nega o direito. Marcação sem nome não concede nada.
+- [ ] Sempre `app_metadata`, **nunca** `user_metadata` — os dois viajam no mesmo
+  JWT, mas `user_metadata` é reescrevível pelo browser com
+  `supabase.auth.updateUser()`.
+- [ ] **O usuário precisa sair e entrar de novo.** As claims vêm de
+  `getClaims()`, do JWT, e `app_metadata` é assado no token na emissão; com o
+  token antigo a tela continua dizendo "seu acesso está sendo preparado".
+- [ ] Só funciona para um login **sem nenhuma associação** — quem já pertence a
+  um workspace é mandado para `/access` e nunca provisiona.
+- [ ] O direito é **gasto antes** de o workspace nascer. Se o provisionamento
+  falhar depois disso, o log diz `right_spent_without_workspace` e **a marcação
+  precisa ser refeita**.
+
+### 2. Lead de teste ponta a ponta
+
+- [ ] `POST → outbox → dispatcher → BullMQ → worker → Person` nunca rodou em
+  produção, porque o código dos tickets 07 e 08 só chegou lá em 2026-08-07. O
+  que está provado é que o worker **conecta** no Redis e o dispatcher **sobe**;
+  o caminho de publicação só é exercitado quando existe evento pendente — numa
+  passada com zero eventos o dispatcher nem abre a conexão. **Depende do passo
+  1**, porque sem workspace não há conexão de integração e portanto não há token.
 
 ## Resolvido — 2026-08-07, recuperação do deploy
 

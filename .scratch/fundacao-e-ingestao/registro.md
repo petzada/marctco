@@ -86,7 +86,7 @@
 - **O que foi construído:** Nada além do que já estava mesclado. Esta entrada fecha a validação externa do ticket 01.
 - **Arquivos-chave criados/alterados:** `.scratch/fundacao-e-ingestao/issues/01-esqueleto-vivo-monorepo-ci-deploy.md` — dois critérios marcados.
 - **Critérios de aceite:** 38 de 39 marcados. Marquei a colocação das credenciais e o deploy separado com Wait for CI. Resta apenas a confirmação de que Railway e Supabase estão na mesma região, que a CLI do Railway não expõe.
-- **Testes:** Deploy de `main@b68c1fc` verde nos dois serviços. Web `/health` responde HTTP 200 em `https://web-production-613e6.up.railway.app`. Worker registra `worker ready` e o healthcheck passa. CI de `main` verde, incluindo `Production migration`.
+- **Testes:** Deploy de `main@b68c1fc` verde nos dois serviços. Web `/health` responde HTTP 200 em `https://web-production-613e6.up.railway.app` (**domínio antigo — o atual é `web-production-33d67`; ver a nota de 2026-08-07**). Worker registra `worker ready` e o healthcheck passa. CI de `main` verde, incluindo `Production migration`.
 - **Branch / PR:** `ticket/01-close-railway-deploy`, sobre `main` em `b68c1fc`, que mesclou https://github.com/petzada/marctco/pull/3.
 - **Decisões que tomei sozinho:** Nenhuma além das já registradas.
 - **Descobertas que afetam tickets seguintes:** A senha de `marctco_worker` no Railway não correspondia à do papel no Supabase; o `ALTER ROLE` corrigiu e o papel passa na autoverificação. Os dois serviços entram em `WAITING` no commit de merge antes de construir, o que prova Wait for CI ativo. Não existe serviço Redis no projeto Railway — os tickets de fila precisarão provisioná-lo.
@@ -311,3 +311,10 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **Só o par público entra na imagem.** A `SUPABASE_SERVICE_ROLE_KEY` é lida em runtime pelo servidor e não é assada em camada nenhuma. O anon key é público por desenho — vai para o browser de qualquer forma.
 - **O CI passou a provar o inline, não a existência da variável.** O job `Image` constrói o web com placeholders reconhecíveis e faz `grep` neles em `apps/web/.next/static`. Verificado nos dois sentidos antes de subir: a imagem corrigida contém os valores; a imagem anterior, construída sem os `--build-arg`, não — ou seja, o gate reprova de verdade o estado que existia até hoje.
 - **Precisa de mão humana:** marcar o usuário em `app_metadata` e então o lead de teste. Nada mais.
+
+### Login provado em produção, e o domínio mudou — 2026-08-07
+
+- **O inline foi provado no ar, não só na imagem.** Baixei o `/login` de produção, extraí os chunks que a página referencia e achei a **URL real do projeto Supabase** dentro de `/_next/static/chunks/`. É o bundle que o browser executa, então o formulário de login deixa de estourar ao clicar em "Entrar". O `/onboarding` responde 307 para o login quando não há sessão, que é o comportamento certo.
+- **O domínio público do web mudou e o registro estava desatualizado.** O `registro.md` do ticket 01 gravava `web-production-613e6.up.railway.app`; o atual é **`web-production-33d67.up.railway.app`** (`RAILWAY_PUBLIC_DOMAIN` do serviço). Bati no domínio velho e recebi 404 em **todas** as rotas, inclusive `/health` — e por um instante pareceu que o deploy tinha derrubado a aplicação. O que denunciou foi o cabeçalho: `x-railway-fallback: true`, com corpo `"Application not found"`. Ou seja, 404 do **edge** do Railway, não do Next. **Lição barata:** ler corpo e cabeçalhos de um 404 antes de concluir qualquer coisa — 404 de roteador de borda e 404 de aplicação contam histórias opostas.
+- **Regra prática daqui pra frente:** o domínio sai de `railway variables --service web | grep RAILWAY_PUBLIC_DOMAIN`, nunca de um endereço copiado de registro antigo.
+- **Precisa de mão humana:** só a marcação em `app_metadata` e o lead de teste.
