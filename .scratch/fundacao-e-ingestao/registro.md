@@ -264,3 +264,26 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **Testes depois do review:** **285 passando, 1 pulado** (eram 278).
 - **Branch:** `ticket/08-contrato-v1-normaliza-e-resolve-pessoa`, a partir de `main`.
 - **Precisa de mão humana:** Nada. A migration `20260807000100_persons_and_contacts` não cria papel nem toca o schema `private`, então roda como `marctco_migrator` sem bootstrap.
+
+### Recuperação do build Docker — deploy parado desde o ticket 06
+
+- **O sintoma:** o deploy do Railway falhava desde **2026-08-05 17:42**, e ninguém tinha visto. Produção rodava `26a7843` (era do ticket 03) enquanto o banco já tinha avançado 12 migrations. Os tickets **06, 07, 17 e 08 nunca subiram** — as migrations sobem pelo job de release do GitHub, que é independente do Railway, então o schema andou e o código não.
+
+| Deploy | Commit | Resultado |
+|---|---|---|
+| 2026-08-07 | `7253d7c` ticket 08 | FAILED |
+| 2026-08-07 | `ec55493` ticket 07 | FAILED |
+| 2026-08-06 | `d5b0e7a` ticket 17 | FAILED |
+| 2026-08-05 | `8abe548` ticket 06 | FAILED |
+| 2026-08-05 | `26a7843` ticket 03 | SUCCESS ← o que estava no ar |
+
+- **A causa:** `error TS5058: The specified path does not exist: 'tsconfig.build.json'`. O `postinstall` da raiz passou a rodar `pnpm --filter @marctco/domain build` no commit `8fd7969` (tickets 04–06). Os dois Dockerfiles rodam `pnpm install --frozen-lockfile` num ponto em que só os `package.json` foram copiados — o `tsconfig.build.json` e o `src/` de `packages/domain` só entram três linhas depois. O `postinstall` falha, o install falha, o build falha. Os Dockerfiles não mudavam desde o ticket 01, quando o `postinstall` era só `prisma generate` e funcionava com o `packages/db/prisma` já copiado.
+- **Por que o CI não pegou:** o CI roda `pnpm install` num checkout completo, onde o arquivo existe. Nada no pipeline construía a imagem. **Essa é a lição desta recuperação:** um CI verde não dizia nada sobre a entrega, e o único sinal de que quatro tickets não estavam em produção era o painel do Railway, que ninguém abria.
+- **A correção:** `COPY packages/domain packages/domain` **antes** do install, nos dois Dockerfiles. O custo é que mudança em `packages/domain` invalida a camada de dependência; é a troca certa, porque o pacote é pequeno e muda menos que `apps/web`, e a alternativa (`--ignore-scripts`) puliria também os scripts de ciclo de vida que esbuild, sharp e os engines do Prisma precisam.
+- **Segundo defeito, esse introduzido pelo ticket 08:** `packages/domain` não tinha dependência nenhuma até o contrato `v1` trazer `zod` e `libphonenumber-js`. O runtime stage do web nunca copiou `packages/domain/node_modules` — não havia o que copiar. Com as dependências novas, `packages/domain/dist/index.js` não resolvia os próprios imports, e o container morria no boot com `Cannot find package 'zod'`. O worker tinha o mesmo buraco.
+- **Por que a correção do web não foi simétrica à do worker:** o worker já copiava `/app/node_modules` inteiro, então bastou acrescentar o `node_modules` do pacote. O web só tinha o `node_modules` que o *file tracing* do Next produz, que não inclui o `.pnpm` — copiar só o `node_modules` do pacote deixaria **symlinks pendurados**, que é pior que diretório ausente: parece instalado e quebra na primeira requisição em vez de no boot. O web passou a copiar `/app/node_modules` também.
+- **Erro meu no meio do caminho, registrado porque a conclusão errada era plausível:** eu tinha concluído, por `grep` no `apps/web/dist` e nos chunks do Next, que o web não carregava `packages/domain/dist` em runtime — o Next empacota o pacote nos próprios chunks, e o `libphonenumber` sai no tree-shaking do web porque quem normaliza é o worker. Estava errado: a `instrumentation` roda **fora** dos chunks e importa o pacote pelo `exports.default`. Só descobri porque subi o container em vez de confiar na leitura estática. **Build passar não é o mesmo que o processo subir**, e foi exatamente essa confusão que deixou o deploy quebrado por dois dias.
+- **Como foi verificado:** `docker build` dos dois Dockerfiles; `docker run` do worker executando a pipeline inteira dentro do container (`readLeadPayload → normalize → planPersonLookup → decidePersonIdentity`, com telefone saindo em E.164 e o plano com as três forças); `docker run` do web subindo e respondendo `/health` com **200 `{"status":"ok"}`**, que é o mesmo healthcheck que o Railway usa. `pnpm test` 285/285, lint verde.
+- **Pendência aceita, não bloqueante:** a imagem do web ficou em **1.49 GB** (a do worker é 1.3 GB, e já era assim). O `/app/node_modules` copiado inclui devDependencies. Um `pnpm prune --prod` antes do runtime stage, ou um `pnpm deploy`, resolveria — deliberadamente **não** foi feito agora para não arriscar reabrir um deploy que está parado há dois dias por uma otimização de tamanho. Fica como item próprio.
+- **O que este merge coloca em produção:** os tickets **06, 07, 17 e 08 de uma vez**. As migrations correspondentes já estão aplicadas, então o código sobe para um schema que já o espera — mas é a primeira vez que quatro fatias sobem juntas, e vale acompanhar o primeiro deploy.
+- **Precisa de mão humana:** acompanhar o deploy no Railway depois do merge, e conferir `/health` do web e `worker ready` nos logs do worker.
