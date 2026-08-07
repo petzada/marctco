@@ -3,29 +3,41 @@
 > Atualizado em 2026-08-07, na recuperação do build Docker. Production migration
 > verde com 12/12 migrations aplicadas.
 
-## 🔴 BLOQUEANTE — `REDIS_URL` ausente nos DOIS serviços
+## Resolvido — 2026-08-07, `REDIS_URL` nos dois serviços
 
-**A ingestão está meio viva em produção.** O endpoint aceita lead e grava a
-outbox no PostgreSQL — nada se perde, é o desenho do ADR-0007 —, mas **nada é
-despachado nem consumido**. Os leads ficam parados com `dispatch_status = PENDING`.
+Estava ausente em **ambos**, não só no `web` como o item antigo dizia. Setado
+por **referência**, não por valor colado, nos dois serviços:
 
-Verificado em 2026-08-07, com o deploy já verde:
+```bash
+railway variables --service web    --set 'REDIS_URL=${{Redis.REDIS_URL}}'
+railway variables --service worker --set 'REDIS_URL=${{Redis.REDIS_URL}}'
+```
 
-- `railway variables --service web` **não tem** `REDIS_URL`;
-- o log do worker diz, textualmente: `REDIS_URL is absent; integration events
-  will not be consumed`.
+Referência e não literal por três motivos: a senha não passa por clipboard nem
+por print, rotação de credencial acompanha sozinha, e `redis.railway.internal` é
+a rede privada, que não conta egress.
 
-O item antigo dizia "falta no `web`". Estava incompleto: **falta nos dois**. O
-serviço Redis existe no Railway desde 2026-08-06; o que falta é referenciá-lo.
+- [x] **`REDIS_URL` no `web`.** O log passou a registrar
+  `integration_event_dispatch result="started"`, que só acontece depois de
+  `createIngestionQueue()` — a função lança se a variável faltar.
+- [x] **`REDIS_URL` no `worker`.** O aviso `REDIS_URL is absent; integration
+  events will not be consumed` **sumiu**; o log diz só `worker ready`, e não há
+  nenhum `ECONNREFUSED`/`ENOTFOUND` depois de dois minutos no ar.
+- **Nota sobre `family`:** não foi preciso mexer no código. A rede privada do
+  Railway é IPv6-only e o padrão histórico do ioredis era `family: 4`, mas o
+  ioredis 5.9.3 já vem com **`family: 0`** (aceita as duas pilhas). Se um dia a
+  versão for fixada para baixo, isto volta a importar.
 
-- [ ] **`REDIS_URL` no serviço `web`.** O dispatcher roda no processo web, não no
-  worker: `private.claim_pending_events` só é executável por `marctco_app`, e o
-  worker não tem `USAGE` no schema `private`. Sem isso, nada sai da outbox.
-- [ ] **`REDIS_URL` no serviço `worker`.** Sem isso o worker sobe, passa no
-  healthcheck e **não consome fila nenhuma** — que é o estado de agora.
-- [ ] **Depois de setar as duas:** postar um lead de teste no endpoint e conferir
-  que ele vira Pessoa. Esse caminho nunca foi exercitado ponta a ponta em
-  produção, porque o código do ticket 07 só chegou lá hoje.
+## 🟡 Ainda não exercitado ponta a ponta em produção
+
+- [ ] **Postar um lead de teste e conferir que vira Pessoa.** O caminho
+  `POST → outbox → dispatcher → BullMQ → worker → Person` nunca rodou em
+  produção, porque o código dos tickets 07 e 08 só chegou lá em 2026-08-07.
+  O que está provado hoje é que o worker **conecta** no Redis e que o dispatcher
+  **sobe**; o caminho de publicação só é exercitado quando existe evento
+  pendente — o dispatcher nem fala com o Redis numa passada com zero eventos.
+  **Depende de:** um workspace provisionado em produção, que por sua vez depende
+  da marcação em `app_metadata` logo abaixo.
 
 ## Resolvido — 2026-08-07, recuperação do deploy
 

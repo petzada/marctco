@@ -33,9 +33,12 @@ Duas lições que valem para toda sessão seguinte:
    `packages/domain` passou por um `docker build` local e morreu no boot. O job
    `Image` **executa** o container, não só o constrói.
 
-**Pendência bloqueante agora:** `REDIS_URL` falta nos **dois** serviços do
-Railway. A ingestão está meio viva — o endpoint aceita lead e grava a outbox,
-mas nada é despachado nem consumido. Ver `acoes-manuais-pendentes.md`.
+**A fila está ligada.** `REDIS_URL` foi setada nos dois serviços por referência
+(`${{Redis.REDIS_URL}}`) em 2026-08-07; faltava nos dois, não só no `web`. O
+worker conecta e o dispatcher sobe. O que **ainda não foi exercitado** é o
+caminho ponta a ponta em produção — `POST → outbox → dispatcher → BullMQ →
+worker → Person` —, porque não há lead nem workspace lá. Depende da marcação em
+`app_metadata`. Ver `acoes-manuais-pendentes.md`.
 
 ## O ticket
 
@@ -51,8 +54,9 @@ mas nada é despachado nem consumido. Ver `acoes-manuais-pendentes.md`.
 - **Próximo despacho: ticket 09** (Pessoa vira Oportunidade — o tracer bullet
   fecha). Ordem restante: `09 → (10 · 11 · 13 · 16 em paralelo se worktrees) →
   12 · 14 → 15`.
-- **Mão humana pendente:** as duas `REDIS_URL` e um lead de teste depois delas.
-  A migration do 08 não pediu nada — não cria papel nem toca o schema `private`.
+- **Mão humana pendente:** marcar um usuário apto em `app_metadata` para nascer
+  o primeiro workspace, e então o lead de teste ponta a ponta. As duas
+  `REDIS_URL` já foram setadas.
 - **Descobertas do 08 para os próximos:** `readIntegrationEventForProcessing`
   já devolve o `provider` da conexão (o `target_pipeline_id` do 09 cabe no
   mesmo `SELECT`); `processIntegrationEventJob` devolve `person_decision_kind` (nunca a decisão — o BullMQ guarda o retorno em Redis) e o
@@ -115,9 +119,9 @@ Bloqueadores do 17: 03, 04, 05 — todos done. Fronteira: 17.
 - Ticket 17: `private.provision_workspace` + importar `defaultCommercialPipeline` de `@marctco/domain` (nunca duplicar em SQL); direito em `app_metadata` (nunca `user_metadata`); onboarding em `/onboarding`.
 - Ticket 07: `resolveWorkspaceByIntegrationToken` → GUC → leitura sob RLS; body sem workspace/origem.
 - Migrations pós-foundation em Supabase: release como `marctco_migrator`; papéis `NOLOGIN` novos podem exigir bootstrap humano (CREATE ROLE + GRANT membership) se o migrator não tiver CREATEROLE; schema `private` agora owned by `marctco_migrator`.
-- Redis Railway provisionado em 2026-08-06, mas **`REDIS_URL` não está setada em
-  serviço nenhum** — verificado em 2026-08-07. Deixou de ser adiável: o código
-  dos tickets 07 e 08 está em produção e a fila não roda.
+- Redis Railway provisionado; `REDIS_URL` setada em `web` e `worker` por
+  referência (`${{Redis.REDIS_URL}}`) em 2026-08-07. A fila roda; falta só
+  exercitá-la com um lead real.
 - Vitest unit precisa alias `@marctco/db` → source no CI.
 
 ## Ações manuais pendentes
@@ -125,7 +129,7 @@ Bloqueadores do 17: 03, 04, 05 — todos done. Fronteira: 17.
 Arquivo: `.scratch/fundacao-e-ingestao/acoes-manuais-pendentes.md`
 
 - Crítico 002: **resolvido** (CREATE ROLE + GRANT + ALTER SCHEMA + Production migration verde).
-- **Bloqueante agora: `REDIS_URL` nos serviços `web` e `worker`** — falta nos dois.
+- `REDIS_URL` nos serviços `web` e `worker`: **resolvido** em 2026-08-07.
 - Por cliente novo: marcar usuário apto em Supabase `app_metadata` (painel; nunca `user_metadata`).
 
 ## PRs recentes
