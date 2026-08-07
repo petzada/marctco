@@ -1,10 +1,11 @@
 import { listUserWorkspaces, provisionWorkspace } from "@marctco/db";
 import { checkSuspiciousRequestLimit, createMemoryRateLimiter } from "@marctco/domain";
-import { NextResponse } from "next/server";
+import type { NextResponse } from "next/server";
 import { hashIdentifier } from "../../../lib/audit-hash";
 import { logger } from "../../../lib/logger";
 import { onboardingDecision } from "../../../lib/onboarding-decision";
 import { provisioningEntitlement } from "../../../lib/provisioning-entitlement";
+import { redirectTo } from "../../../lib/redirect-response";
 import { requestIp } from "../../../lib/request-ip";
 import { consumeProvisioningEntitlement } from "../../../lib/supabase/admin";
 import { getAuthenticatedSession } from "../../../lib/supabase/server";
@@ -22,13 +23,13 @@ const unentitledProvisioningLimiter = createMemoryRateLimiter({ limit: 20, windo
 export async function POST(request: Request): Promise<NextResponse> {
   const session = await getAuthenticatedSession();
   if (!session) {
-    return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+    return redirectTo("/login");
   }
 
   const workspaces = await listUserWorkspaces({ authenticated_user_id: session.user_id });
   const decision = onboardingDecision(provisioningEntitlement(session.claims), workspaces);
   if (decision.kind === "member") {
-    return NextResponse.redirect(new URL("/access", request.url), { status: 303 });
+    return redirectTo("/access");
   }
   if (decision.kind === "wait") {
     // Um login sem associação e sem o direito não cria nada. A tentativa é
@@ -45,7 +46,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       user_id_hash: hashIdentifier(session.user_id),
       request_id: request.headers.get("x-request-id") ?? undefined
     });
-    return NextResponse.redirect(new URL("/onboarding", request.url), { status: 303 });
+    return redirectTo("/onboarding");
   }
 
   // Spending the right first is what makes it consumed by provisioning rather
@@ -62,9 +63,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       user_id_hash: hashIdentifier(session.user_id),
       error
     });
-    return NextResponse.redirect(new URL("/onboarding?error=configuration", request.url), {
-      status: 303
-    });
+    return redirectTo("/onboarding?error=configuration");
   }
 
   let provisioned;
@@ -92,7 +91,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     user_id_hash: hashIdentifier(session.user_id),
     workspace_slug_hash: hashIdentifier(provisioned.slug)
   });
-  return NextResponse.redirect(new URL(`/workspace/${provisioned.slug}`, request.url), {
-    status: 303
-  });
+  return redirectTo(`/workspace/${provisioned.slug}`);
 }
