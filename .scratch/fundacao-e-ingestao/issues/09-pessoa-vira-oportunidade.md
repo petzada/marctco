@@ -34,6 +34,9 @@ A idempotência tem um dono só: a constraint mais o worker. Nunca um pré-check
 - [ ] Funil de destino é `IntegrationConnection.target_pipeline_id` quando presente, senão o `Pipeline` comercial com `is_default = true`
 - [ ] `FinancingType` **não** participa da escolha do funil, em nenhuma hipótese
 - [ ] Segunda Oportunidade **em aberto** da mesma Pessoa cria a Oportunidade **e** um `IntakeReview(POSSIBLE_DUPLICATE)` ligando-a à anterior — nunca impede a criação. O gatilho **não** é semelhança de financiamento: vale inclusive quando não veio dado algum de financiamento, que é o caso mais comum
+- [ ] **Carregado do ticket 08** — `IntakeReview` nasce aqui, com `type: IDENTITY_CONFLICT | POSSIBLE_DUPLICATE`, e a variante `NEW_PERSON_WITH_IDENTITY_CONFLICT` de `decidePersonIdentity` grava um `IDENTITY_CONFLICT` com as `candidate_person_ids` que ela carrega. O 08 decidiu e provou a regra no Seam 1; a linha não cabia lá porque uma revisão pendura numa Oportunidade
+- [ ] **Carregado do ticket 08** — a escrita de contatos é `INSERT … ON CONFLICT DO NOTHING` sobre `UNIQUE(person_id, phone_e164)` e `UNIQUE(person_id, email)`, e `PersonContacts` chega como o conjunto **completo** do envio. Receber um contato que a Pessoa já tem não altera linha nenhuma; nenhum contato anterior é sobrescrito
+- [ ] `Opportunity.missing_phone` gravado quando o envio traz e-mail mas não traz telefone — o marcador significa uma coisa só: não dá para WhatsApp nem ligar ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md) §Quarentena). Sem coluna aqui, todo lead recebido até o ticket 10 nasce sem o marcador e não há como reconstruí-lo
 - [ ] `arrived_at` gravado no momento da ingestão, igual ao `received_at` do envio. Lead que passa pela quarentena recebe o instante da liberação (ticket 10)
 - [ ] `assigned_user_id` nasce nulo — atribuição é da Fase 2
 - [ ] `financing_type`, `financial_institution` e `installment_amount` são anuláveis e não bloqueiam criação

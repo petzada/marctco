@@ -14,5 +14,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --project domain"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.10",
+    "zod": "^4.4.3"
   }
 }

@@ -7,7 +7,7 @@ import type {
 } from "@prisma/client";
 import { createJobContext, type JobContext, type UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
-import { hashIntegrationToken } from "./integration-connection.js";
+import { hashIntegrationToken, type IntegrationProvider } from "./integration-connection.js";
 import { assertUuid } from "./internal/uuid.js";
 import { withAccessContext } from "./internal/scoped-transaction.js";
 
@@ -36,7 +36,7 @@ export interface PendingIntegrationEvent {
   readonly workspace_id: string;
 }
 
-export interface IntegrationEventForProcessing {
+interface IntegrationEventFacts {
   readonly id: string;
   readonly integration_connection_id: string;
   readonly status: IntegrationEventStatus;
@@ -44,7 +44,16 @@ export interface IntegrationEventForProcessing {
   readonly received_at: Date;
 }
 
-export interface IntegrationEventRecord extends IntegrationEventForProcessing {
+export interface IntegrationEventForProcessing extends IntegrationEventFacts {
+  /**
+   * Which connection the event came through, read in the same transaction.
+   * The connector needs it to decide the origin of a payload that did not
+   * declare one, and it is not on the event itself (ADR-0008).
+   */
+  readonly provider: IntegrationProvider;
+}
+
+export interface IntegrationEventRecord extends IntegrationEventFacts {
   readonly dispatch_status: IntegrationEventDispatchStatus;
   readonly dispatched_at: Date | null;
   readonly processed_at: Date | null;
@@ -183,9 +192,18 @@ export async function readIntegrationEventForProcessing(
 ): Promise<IntegrationEventForProcessing> {
   const events = await withAccessContext(prisma, context, async (transaction) =>
     transaction.$queryRaw<IntegrationEventForProcessing[]>`
-      SELECT id, integration_connection_id, status::text AS status, raw, received_at
-      FROM integration_events
-      WHERE id = ${context.integration_event_id}::uuid
+      SELECT
+        event.id,
+        event.integration_connection_id,
+        event.status::text AS status,
+        event.raw,
+        event.received_at,
+        connection.provider::text AS provider
+      FROM integration_events AS event
+      JOIN integration_connections AS connection
+        ON connection.workspace_id = event.workspace_id
+       AND connection.id = event.integration_connection_id
+      WHERE event.id = ${context.integration_event_id}::uuid
     `
   );
   const event = events[0];
