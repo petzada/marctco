@@ -14,13 +14,36 @@ Despacha cada ticket a Composer 2.5 via Task (`composer-2.5-fast`,
 Formato de resumo fixo; self-review; confrontar critérios/ADRs; só então
 atualizar Status/registro.
 
-# Atualização de 2026-08-07 — ticket 08 concluído
+# Atualização de 2026-08-07 — ticket 08 concluído E DEPLOY RESTABELECIDO
+
+## Leia isto antes de qualquer coisa
+
+**O deploy do Railway estava quebrado desde 2026-08-05 e ninguém tinha visto.**
+Produção rodava `26a7843` (era do ticket 03) enquanto o banco já tinha 12
+migrations: as migrations sobem pelo job de release do GitHub, que é
+independente do Railway, então o schema andou e o código não. Os tickets 06, 07,
+17 e 08 **nunca tinham subido**. Corrigido e deployado — produção está em
+`a1681e4`, com os quatro tickets no ar.
+
+Duas lições que valem para toda sessão seguinte:
+
+1. **CI verde não é entrega.** Nada no pipeline construía imagem. Agora constrói
+   — job `Image`, matriz web/worker — e o gate `CI` exige o resultado.
+2. **Build que passa não é processo que sobe.** O `node_modules` ausente do
+   `packages/domain` passou por um `docker build` local e morreu no boot. O job
+   `Image` **executa** o container, não só o constrói.
+
+**Pendência bloqueante agora:** `REDIS_URL` falta nos **dois** serviços do
+Railway. A ingestão está meio viva — o endpoint aceita lead e grava a outbox,
+mas nada é despachado nem consumido. Ver `acoes-manuais-pendentes.md`.
+
+## O ticket
 
 - **08 contrato v1 + Pessoa: done** (16/18 critérios; os dois restantes exigem
   escrita e são do 09, com o motivo escrito ao lado no arquivo da issue).
-  Branch `ticket/08-contrato-v1-normaliza-e-resolve-pessoa`, migration
-  `20260807000100_persons_and_contacts`, `pnpm test` 285 passando (1 pulado).
-  Resumo completo em `registro.md`.
+  Migration `20260807000100_persons_and_contacts` aplicada em produção,
+  `pnpm test` 285 passando (1 pulado). Resumo completo em `registro.md`.
+- **Branches:** todas as mescladas foram apagadas; o remoto tem só `main`.
 - **O ticket 09 ganhou três critérios novos**, carregados do 08 e do review:
   `IntakeReview` com `IDENTITY_CONFLICT` (nenhum critério o mencionava — só o
   `POSSIBLE_DUPLICATE`), a escrita de contatos por `ON CONFLICT DO NOTHING`, e
@@ -28,11 +51,11 @@ atualizar Status/registro.
 - **Próximo despacho: ticket 09** (Pessoa vira Oportunidade — o tracer bullet
   fecha). Ordem restante: `09 → (10 · 11 · 13 · 16 em paralelo se worktrees) →
   12 · 14 → 15`.
-- **Mão humana antes de mesclar o 08:** nenhuma. A migration não cria papel nem
-  toca o schema `private`.
+- **Mão humana pendente:** as duas `REDIS_URL` e um lead de teste depois delas.
+  A migration do 08 não pediu nada — não cria papel nem toca o schema `private`.
 - **Descobertas do 08 para os próximos:** `readIntegrationEventForProcessing`
   já devolve o `provider` da conexão (o `target_pipeline_id` do 09 cabe no
-  mesmo `SELECT`); `processIntegrationEventJob` devolve `person_decision` e o
+  mesmo `SELECT`); `processIntegrationEventJob` devolve `person_decision_kind` (nunca a decisão — o BullMQ guarda o retorno em Redis) e o
   09 troca esse retorno pelo `IntakePlan`; `PersonContacts` é sempre o conjunto
   completo do envio, nunca um delta; `NO_CONTACT` é o gatilho de quarentena do
   ticket 10, já decidido; `PROVIDER_DEFAULT_SOURCE` rotula Pluga como
@@ -92,7 +115,9 @@ Bloqueadores do 17: 03, 04, 05 — todos done. Fronteira: 17.
 - Ticket 17: `private.provision_workspace` + importar `defaultCommercialPipeline` de `@marctco/domain` (nunca duplicar em SQL); direito em `app_metadata` (nunca `user_metadata`); onboarding em `/onboarding`.
 - Ticket 07: `resolveWorkspaceByIntegrationToken` → GUC → leitura sob RLS; body sem workspace/origem.
 - Migrations pós-foundation em Supabase: release como `marctco_migrator`; papéis `NOLOGIN` novos podem exigir bootstrap humano (CREATE ROLE + GRANT membership) se o migrator não tiver CREATEROLE; schema `private` agora owned by `marctco_migrator`.
-- Redis Railway ausente — adiável para 07/15.
+- Redis Railway provisionado em 2026-08-06, mas **`REDIS_URL` não está setada em
+  serviço nenhum** — verificado em 2026-08-07. Deixou de ser adiável: o código
+  dos tickets 07 e 08 está em produção e a fila não roda.
 - Vitest unit precisa alias `@marctco/db` → source no CI.
 
 ## Ações manuais pendentes
@@ -100,8 +125,8 @@ Bloqueadores do 17: 03, 04, 05 — todos done. Fronteira: 17.
 Arquivo: `.scratch/fundacao-e-ingestao/acoes-manuais-pendentes.md`
 
 - Crítico 002: **resolvido** (CREATE ROLE + GRANT + ALTER SCHEMA + Production migration verde).
-- Adiável 07/15: Redis no Railway (`us-west-1`).
-- Adiável 17: marcar usuário apto em Supabase `app_metadata` (painel; nunca `user_metadata`).
+- **Bloqueante agora: `REDIS_URL` nos serviços `web` e `worker`** — falta nos dois.
+- Por cliente novo: marcar usuário apto em Supabase `app_metadata` (painel; nunca `user_metadata`).
 
 ## PRs recentes
 
