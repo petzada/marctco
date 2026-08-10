@@ -18,6 +18,7 @@ export {
 export {
   CONTRACT_VERSION,
   LEAD_SOURCES,
+  MAX_EXTERNAL_LEAD_ID_LENGTH,
   buildInboundLead,
   inboundLeadSchema,
   isLeadSource,
@@ -60,6 +61,17 @@ export {
   type PersonContacts,
   type PersonDecision
 } from "./intake/person-identity.js";
+export {
+  decideIntake,
+  planSubmission,
+  reusedPersonId,
+  type DecideIntakeInput,
+  type IntakeDestination,
+  type IntakePlan,
+  type IntakeReviewPlan,
+  type SubmissionInsert,
+  type SubmissionKey
+} from "./intake/intake-plan.js";
 export {
   PIPELINE_TYPES,
   STAGE_ROLES,

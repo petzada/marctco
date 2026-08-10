@@ -14,6 +14,15 @@ import { POST } from "../apps/web/app/v1/integrations/pluga/leads/route";
 import { dispatchPendingIntegrationEvents } from "../apps/web/lib/ingestion-dispatcher";
 import { createIngestionQueue } from "../apps/web/lib/ingestion-queue";
 import { processIntegrationEventJob } from "../apps/worker/src/integration-event-job";
+// Named readers, so the raw Prisma client stays inside packages/db where the
+// boundary of ADR-0016 puts it. They read what the path under test wrote; they
+// never make anything happen.
+import {
+  closeSeamInspection,
+  inspectCards,
+  inspectDefaultEntryStage,
+  inspectSubmissions
+} from "../packages/db/tests/seam-inspection";
 
 // Everything here runs through the same named operations the application uses,
 // against a real Postgres and a real Redis. The application's connection is the
@@ -75,6 +84,7 @@ afterAll(async () => {
   }
   await queue.close();
   await redis.quit();
+  await closeSeamInspection();
 });
 
 describe("Seam 2: a POST becomes a durable event, a job, and a processed event", () => {
@@ -206,7 +216,7 @@ describe("Seam 2: a POST becomes a durable event, a job, and a processed event",
       await vi.waitFor(
         async () => {
           const events = await listIntegrationEvents(tenant.context);
-          expect(events.filter((event) => event.status === "PROCESSED")).toHaveLength(
+          expect(events.filter((event) => event.status !== "RECEIVED")).toHaveLength(
             queued.length
           );
         },
@@ -216,8 +226,15 @@ describe("Seam 2: a POST becomes a durable event, a job, and a processed event",
       await worker.close();
     }
 
+    // Every payload above was mapped to `nome`/`telefone`, which the `v1`
+    // contract does not read — the exact shape of a mis-mapped automation. No
+    // phone and no e-mail is the one submission that produces no card, so all
+    // of them land in quarantine, visibly, instead of disappearing.
     const processed = await listIntegrationEvents(tenant.context);
-    expect(processed.every((event) => event.processed_at !== null)).toBe(true);
+    expect(processed.every((event) => event.status === "QUARANTINED")).toBe(true);
+    // `processed_at` belongs to PROCESSED alone: an event waiting for a human
+    // to complete it has not been processed.
+    expect(processed.every((event) => event.processed_at === null)).toBe(true);
   });
 
   it("fails loudly when a job claims an event from another workspace", async () => {
@@ -270,5 +287,216 @@ describe("Seam 2: a POST becomes a durable event, a job, and a processed event",
 
     expect(response.status).toBe(400);
     await expect(listIntegrationEvents(tenant.context)).resolves.toHaveLength(before.length);
+  });
+});
+
+
+describe("Seam 2: the tracer bullet closes — a submission becomes a Pessoa and a card", () => {
+  let carrier: SeededWorkspace;
+  let entry: { pipeline_id: string; stage_id: string };
+
+  /**
+   * POST a lead, publish it, and let a real BullMQ worker process it. What the
+   * tests below assert is the state that whole path left in PostgreSQL — the
+   * authenticated handler, the outbox, the dispatcher, the queue and the worker
+   * under RLS, with nothing stubbed between them.
+   */
+  async function deliver(body: Record<string, unknown>): Promise<void> {
+    const response = await POST(leadRequest(carrier.token, JSON.stringify(body)));
+    expect(response.status).toBe(200);
+    await drainQueue();
+  }
+
+  async function drainQueue(): Promise<void> {
+    await dispatchPendingIntegrationEvents(queue.publisher, 100);
+    const worker = new Worker(
+      INTEGRATION_EVENT_QUEUE,
+      async (job: Job) => processIntegrationEventJob(job.data),
+      { connection: new IORedis(redis_url, { maxRetriesPerRequest: null }) }
+    );
+    try {
+      await vi.waitFor(
+        async () => {
+          const events = await listIntegrationEvents(carrier.context, { limit: 500 });
+          expect(events.filter((event) => event.status === "RECEIVED")).toHaveLength(0);
+        },
+        { timeout: 30_000, interval: 250 }
+      );
+    } finally {
+      await worker.close();
+    }
+  }
+
+  beforeAll(async () => {
+    carrier = await seedWorkspace(randomUUID(), `Seam 2 tracer ${randomUUID()}`);
+    entry = await inspectDefaultEntryStage(carrier.workspace_id);
+  });
+
+  it("puts an unambiguous lead in the ENTRY stage of the default commercial pipeline", async () => {
+    await deliver({
+      external_lead_id: "tracer-1",
+      name: "Maria Souza",
+      phone: "(11) 98765-4321",
+      email: "Maria@Exemplo.com",
+      cpf: "529.982.247-25"
+    });
+
+    const [card] = await inspectCards(carrier.workspace_id);
+    if (!card) {
+      throw new Error("the unambiguous lead produced no card");
+    }
+    expect(card).toMatchObject({
+      pipeline_id: entry.pipeline_id,
+      stage_id: entry.stage_id,
+      area: "COMMERCIAL",
+      status: "OPEN",
+      assigned_user_id: null,
+      missing_phone: false,
+      merged_into_opportunity_id: null
+    });
+    expect(card.reviews).toEqual([]);
+
+    // Normalization survived the whole path, and the clock started at the
+    // instant the lead actually arrived rather than whenever the queue drained.
+    expect(card.person).toEqual({
+      name: "Maria Souza",
+      cpf: "52998224725",
+      phones: ["+5511987654321"],
+      emails: ["maria@exemplo.com"]
+    });
+    const [submission] = await inspectSubmissions(carrier.workspace_id, "tracer-1");
+    expect(submission?.opportunity_id).toBe(card.id);
+    expect(card.arrived_at).toEqual(submission?.received_at);
+  });
+
+  it("gives the same Pessoa a second card, born linked to the first with no financing data", async () => {
+    // A genuinely new transmission from the same phone. Nothing is held: the
+    // card exists and carries the warning, which is what stops two attendants
+    // calling the same client (ADR-0007 §Mecanismo 2). No financing data
+    // arrived, which is the common case and exactly where a similarity test
+    // would have produced no link at all.
+    await deliver({ external_lead_id: "tracer-2", name: "Maria Souza", phone: "11987654321" });
+
+    const cards = await inspectCards(carrier.workspace_id);
+    expect(cards).toHaveLength(2);
+    const [first, second] = cards;
+    if (!first || !second) {
+      throw new Error("expected two cards");
+    }
+    expect(second.person_id).toBe(first.person_id);
+    expect(second.reviews).toEqual([
+      {
+        type: "POSSIBLE_DUPLICATE",
+        candidate_person_ids: [],
+        related_opportunity_id: first.id
+      }
+    ]);
+    // Both are attendable right now; neither waited on a human.
+    expect([first.status, second.status]).toEqual(["OPEN", "OPEN"]);
+  });
+
+  it("creates a card with a marked identity conflict rather than holding the lead", async () => {
+    // A phone that belongs to Maria and a CPF that belongs to somebody else:
+    // the keys point at different Pessoas, so a new Pessoa is created, no link
+    // to an existing record is made, and the candidates are recorded for a
+    // human to merge later.
+    await deliver({
+      external_lead_id: "tracer-3",
+      name: "Maria S.",
+      phone: "11987654321",
+      cpf: "111.444.777-35"
+    });
+
+    const cards = await inspectCards(carrier.workspace_id);
+    expect(cards).toHaveLength(3);
+    const conflicted = cards[2];
+    const maria = cards[0];
+    if (!conflicted || !maria) {
+      throw new Error("expected a third card");
+    }
+    expect(conflicted.person_id).not.toBe(maria.person_id);
+    expect(conflicted.status).toBe("OPEN");
+    expect(conflicted.reviews).toEqual([
+      {
+        type: "IDENTITY_CONFLICT",
+        candidate_person_ids: [maria.person_id],
+        related_opportunity_id: null
+      }
+    ]);
+  });
+
+  it("marks a lead that brought an e-mail and no phone, and lets it into the funnel", async () => {
+    await deliver({
+      external_lead_id: "tracer-4",
+      name: "Sem telefone",
+      email: "sem@exemplo.com"
+    });
+
+    const cards = await inspectCards(carrier.workspace_id);
+    expect(cards).toHaveLength(4);
+    expect(cards[3]).toMatchObject({ missing_phone: true, status: "OPEN" });
+  });
+
+  it("quarantines a submission with no phone and no e-mail, and creates no card", async () => {
+    await deliver({ external_lead_id: "tracer-5", name: "Sem contato", cpf: "529.982.247-25" });
+
+    // A valid CPF does not rescue it: it identifies, but nobody is called on it.
+    expect(await inspectCards(carrier.workspace_id)).toHaveLength(4);
+    const [submission] = await inspectSubmissions(carrier.workspace_id, "tracer-5");
+    expect(submission?.opportunity_id).toBeNull();
+    const events = await listIntegrationEvents(carrier.context, { limit: 500 });
+    expect(events.filter((event) => event.status === "QUARANTINED")).toHaveLength(1);
+  });
+
+  it("produces one card for two simultaneous transmissions of the same external id", async () => {
+    const body = JSON.stringify({
+      external_lead_id: "tracer-race",
+      name: "Corrida",
+      phone: "11955554444"
+    });
+    const [first, second] = await Promise.all([
+      POST(leadRequest(carrier.token, body)),
+      POST(leadRequest(carrier.token, body))
+    ]);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    await drainQueue();
+
+    // Two events, two transmissions, one submission and one card. Nothing but
+    // the constraint could have decided that.
+    const submissions = await inspectSubmissions(carrier.workspace_id, "tracer-race");
+    expect(submissions).toHaveLength(1);
+    expect(submissions[0]?.transmission_count).toBe(2);
+
+    const cards = await inspectCards(carrier.workspace_id);
+    expect(cards).toHaveLength(5);
+    expect(cards.filter((card) => card.id === submissions[0]?.opportunity_id)).toHaveLength(1);
+  });
+
+  it("leaves a retransmission inert: the resend moves the pointer and nothing else", async () => {
+    const before = (await inspectCards(carrier.workspace_id)).find((card) =>
+      card.person.phones.includes("+5511955554444")
+    );
+    if (!before) {
+      throw new Error("expected the raced card");
+    }
+
+    await deliver({ external_lead_id: "tracer-race", name: "Corrida", phone: "11955554444" });
+
+    const [submission] = await inspectSubmissions(carrier.workspace_id, "tracer-race");
+    expect(submission?.transmission_count).toBe(3);
+    const cards = await inspectCards(carrier.workspace_id);
+    expect(cards.find((card) => card.id === before.id)).toEqual(before);
+    expect(cards).toHaveLength(5);
+  });
+
+  it("keeps every card and submission inside the workspace that received it", async () => {
+    // The other tenants in this file received only contact-less payloads, so a
+    // card appearing there would mean a workspace boundary was crossed rather
+    // than that a lead was processed.
+    for (const other of [tenant, neighbour]) {
+      await expect(inspectCards(other.workspace_id)).resolves.toEqual([]);
+    }
+    await expect(inspectCards(carrier.workspace_id)).resolves.toHaveLength(5);
+    await expect(inspectSubmissions(neighbour.workspace_id)).resolves.toEqual([]);
   });
 });

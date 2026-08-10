@@ -34,10 +34,17 @@ export {
 } from "./provision-workspace.js";
 export { findPersonCandidates, type PersonCandidate } from "./person.js";
 export {
+  applyIntakePlan,
+  findOpenOpportunitiesOfPerson,
+  recordLeadSubmission,
+  resolveIntakeDestination,
+  type AppliedIntakePlan,
+  type RecordLeadSubmissionInput
+} from "./intake.js";
+export {
   claimPendingIntegrationEvents,
   listIntegrationEvents,
   markIntegrationEventDispatched,
-  markIntegrationEventProcessed,
   readIntegrationEventForProcessing,
   recordIntegrationEvent,
   type IntegrationEventCursor,

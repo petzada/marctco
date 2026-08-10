@@ -318,3 +318,47 @@ O ticket 03 entregou a infraestrutura; estes seis critérios só podem ser marca
 - **O domínio público do web mudou e o registro estava desatualizado.** O `registro.md` do ticket 01 gravava `web-production-613e6.up.railway.app`; o atual é **`web-production-33d67.up.railway.app`** (`RAILWAY_PUBLIC_DOMAIN` do serviço). Bati no domínio velho e recebi 404 em **todas** as rotas, inclusive `/health` — e por um instante pareceu que o deploy tinha derrubado a aplicação. O que denunciou foi o cabeçalho: `x-railway-fallback: true`, com corpo `"Application not found"`. Ou seja, 404 do **edge** do Railway, não do Next. **Lição barata:** ler corpo e cabeçalhos de um 404 antes de concluir qualquer coisa — 404 de roteador de borda e 404 de aplicação contam histórias opostas.
 - **Regra prática daqui pra frente:** o domínio sai de `railway variables --service web | grep RAILWAY_PUBLIC_DOMAIN`, nunca de um endereço copiado de registro antigo.
 - **Precisa de mão humana:** só a marcação em `app_metadata` e o lead de teste.
+
+## Ticket 09 — Pessoa vira Oportunidade — CONCLUÍDO
+
+- **O que foi construído:** o tracer bullet fecha. A ingestão virou três fases puras em `packages/domain` (`planSubmission` → o chamador insere → `planPersonLookup` → `decideIntake`), e `applyIntakePlan` executa o plano numa transação em `packages/db`. `IntakePlan` é união discriminada `QUARANTINE | RETRANSMISSION | NEW_OPPORTUNITY`, com `now` como argumento. Schema novo: `lead_submissions` (com a `UNIQUE(workspace_id, source, external_lead_id)` que arbitra a idempotência), `opportunities` e `intake_reviews`, os três com RLS forçada e policy. O worker deixou de sequenciar regra: ele carrega valores entre funções puras e aplica o plano.
+- **Arquivos-chave criados/alterados:** `packages/domain/src/intake/intake-plan.ts` (+ teste), `packages/db/src/intake.ts` (+ `packages/db/tests/intake.test.ts`), `packages/db/tests/seam-inspection.ts`, migration `20260808000100_lead_submissions_and_opportunities`, `packages/db/prisma/schema.prisma`, `apps/worker/src/integration-event-job.ts`, `packages/db/src/integration-event.ts`, `tests/seam2-ingestion.test.ts`, `packages/db/tests/rls.test.ts`.
+- **Critérios de aceite:** 23 de 23. Fecharam também os **dois critérios que o ticket 08 carregou** (`IntakeReview(IDENTITY_CONFLICT)` gravado, e contato antigo nunca sobrescrito).
+- **Testes:** `pnpm test` **353 passando, 1 pulado** (era 285). `pnpm typecheck`, `pnpm lint`, `pnpm check:migrations` e `pnpm db:drift` verdes. Seam 1: 22 casos sobre o plano. Seam 2: 19, incluindo `POST → outbox → dispatcher → BullMQ real → worker → Person + Opportunity`.
+- **Self-review:** `/code-review` em dois eixos. Standards apontou 4 itens (CONTEXT.md não emendado antes da tabela do ADR-0005; dois tipos sem linha na tabela; ADR-0016 não emendado; `markIntegrationEventProcessed` sem chamador) — **todos corrigidos**. Spec apontou 4, dos quais **um era defeito real** (janela de dois cards, abaixo) e os outros três viraram emenda de documento ou correção pequena. Nenhum ficou aceito sem conserto.
+
+### O defeito que o review pegou, e que teria escapado de toda a suíte
+
+O ADR-0017 manda inserir a submissão **entre** a primeira fase e a terceira, o que põe o insert numa transação e a aplicação do plano noutra. Entre os dois commits o envio existe com `opportunity_id` nulo, e nesse instante "já recebi esta transmissão" e "já está no funil" **deixam de ser o mesmo fato**.
+
+`decideIntake` trata `DUPLICATE` sem card como envio novo — precisa tratar, senão um plano que não commitou engole o lead para sempre, já que a variante `Retransmission` existe para proteger um card e ali não há card. Sozinho, isso abria a porta oposta: dois workers na mesma chave tomariam ambos esse caminho e escreveriam **dois cards para uma submissão**. Nenhum teste sequencial veria isso.
+
+Quem fecha é a condição na escrita: `applyIntakePlan` grava `opportunity_id` com `WHERE … AND opportunity_id IS NULL`, e a transação que não afeta linha nenhuma desfaz tudo e falha alto (ADR-0013 — condição arbitra escrita concorrente). O perdedor não deixa nem Pessoa órfã; sua retentativa lê o card e vai inerte. Há teste que roda as duas aplicações em paralelo.
+
+**A lição:** três fases puras compram teste barato e cobram uma transação a mais. O preço não é o commit extra — é que **toda janela entre commits precisa de uma condição que a feche**, e quem escreve a fase seguinte não vê a janela.
+
+### Decisões que tomei sozinho
+
+- **`markIntegrationEventProcessed` foi removida.** O estado final do evento passou a ser gravado por `applyIntakePlan`, na mesma transação das linhas que ele descreve. Operação separada só rodaria antes ou depois daquele commit, e as duas ordens deixam um instante em que a tela de Integrações e o funil discordam. `processed_at` continua sendo de `PROCESSED` e de mais nada — evento em quarentena não foi processado, está esperando alguém completá-lo (o `CHECK` de `20260806000200` já dizia isso, e foi ele que me corrigiu).
+- **`installment_amount` é `numeric` sem precisão.** Um campo mal mapeado carregando número absurdo não pode estourar largura de coluna e custar a escrita inteira — o valor bruto continua no payload do evento.
+- **`external_lead_id` é `VARCHAR(255)`, e `readLeadPayload` degrada para ausente um id declarado maior que isso.** Sem o limite, a constraint que existe para nenhum lead entrar duas vezes seria o que recusaria a linha e perderia um. O conector cai no `IntegrationEvent.id`, o mesmo caminho de toda origem sem id.
+- **`IntakeReview.resolution` não foi criada.** É do ticket 11, que sabe a forma das três resoluções; coluna anulável é aditiva. O que existe é o `CHECK` que faz a união valer no banco: cada tipo carrega a própria evidência ou a linha é recusada.
+- **A inspeção do Seam 2 mora em `packages/db/tests/seam-inspection.ts`.** O teste ponta a ponta precisa olhar cards e revisões, e não existe operação nomeada que os leia até o ticket 12. Em vez de afrouxar a barreira do ADR-0016 (que proíbe `@prisma/client` fora de `packages/db`), o client cru ficou **dentro** do pacote e o teste da raiz importa leitores nomeados. Nenhuma guarda foi enfraquecida.
+
+### Descobertas que afetam tickets seguintes
+
+- **`applyIntakePlan(ctx, plan)` e `recordLeadSubmission(ctx, input)` são o caminho compartilhado**: o ticket 14 ("completar e liberar") chama exatamente as mesmas funções, com `now` = instante da liberação. `recordLeadSubmission` recebe `integration_event_id` como argumento (e não do contexto) justamente para o chamador que carrega `UserContext`.
+- **`resolveIntakeDestination(ctx, target_pipeline_id)` não tem argumento para financiamento e não vai ter** — é assim que "a classificação nunca escolhe funil" virou propriedade da assinatura.
+- **O ticket 10** herda a quarentena já funcionando: evento em `QUARANTINED`, envio apontando para a transmissão mais recente, sem Pessoa e sem card. Falta a tela e a liberação. A contagem de transmissões de um envio re-quarentenado **não** incrementa; quem decide se deve é quem tem a tela.
+- **O ticket 11** herda `merged_into_opportunity_id` (já varrido pela varredura de lápide do Seam 3, sem edição nenhuma, como o ticket 08 previu) e a variante `Retransmission` carregando `opportunity_id`. Falta a linha do tempo (não há model de timeline nesta fatia) e as três resoluções.
+- **`opportunities.pipeline_id` é `RESTRICT`**: um funil com cards não é apagável. O teste de operações de pipeline no Seam 3 precisou de um funil próprio para o card por causa disso. Se o ticket 12 quiser permitir apagar funil com cards, isso é regra nova e precisa de decisão.
+- **A ADR-0016 foi emendada**: são **cinco** operações aceitando as duas variantes de contexto, não duas. Todas as cinco são do caminho de ingestão — as três fases puras do ADR-0017 cada uma exigem uma leitura sob o tenant, e o caminho é literalmente o mesmo para os dois chamadores. `spec.md` recebeu a nota de supersessão.
+- **`processIntegrationEventJob` devolve `intake_plan_kind`** (nulo quando o evento já estava `PROCESSED`), nunca o plano: o BullMQ guarda o retorno em Redis, e um `IntakePlan` carrega nome, telefone, e-mail e CPF.
+
+### Documentos emendados
+
+`CONTEXT.md` (dois termos novos: Destino da ingestão, Resultado do insert do envio), `docs/adr/0005` (nove linhas novas na tabela canônica), `docs/adr/0016` (regra 2: cinco operações, com a nota de emenda), `.scratch/fundacao-e-ingestao/spec.md` (nota de supersessão), issues 08 e 09.
+
+### Precisa de mão humana
+
+Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_metadata` no Supabase para nascer o primeiro workspace, e então o lead de teste ponta a ponta em produção. A migration `20260808000100` sobe pelo job de release como as anteriores.

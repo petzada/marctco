@@ -51,6 +51,13 @@ export interface IntegrationEventForProcessing extends IntegrationEventFacts {
    * declare one, and it is not on the event itself (ADR-0008).
    */
   readonly provider: IntegrationProvider;
+  /**
+   * The funnel this connection overrides the workspace default with, or null
+   * to use the default. It rides along on the same read because it belongs to
+   * the same connection row, and a second round trip for one nullable column
+   * would be paid on every lead (ADR-0009).
+   */
+  readonly target_pipeline_id: string | null;
 }
 
 export interface IntegrationEventRecord extends IntegrationEventFacts {
@@ -198,7 +205,8 @@ export async function readIntegrationEventForProcessing(
         event.status::text AS status,
         event.raw,
         event.received_at,
-        connection.provider::text AS provider
+        connection.provider::text AS provider,
+        connection.target_pipeline_id
       FROM integration_events AS event
       JOIN integration_connections AS connection
         ON connection.workspace_id = event.workspace_id
@@ -267,21 +275,10 @@ export async function listIntegrationEvents(
   );
 }
 
-/** Closes the loop for an event the worker finished with. */
-export async function markIntegrationEventProcessed(
-  context: JobContext,
-  prisma: PrismaClient = sharedPrisma
-): Promise<void> {
-  await withAccessContext(prisma, context, async (transaction) => {
-    const updated = await transaction.$executeRaw`
-      UPDATE integration_events
-      SET status = 'PROCESSED',
-          processed_at = COALESCE(processed_at, CURRENT_TIMESTAMP),
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${context.integration_event_id}::uuid
-    `;
-    if (updated === 0) {
-      throw new Error(EVENT_NOT_VISIBLE);
-    }
-  });
-}
+// An event's final state is no longer settled on its own: `applyIntakePlan`
+// writes it in the same transaction as the rows it describes (ticket 09).
+// A separate `markIntegrationEventProcessed` could only ever run before or
+// after that commit, and either order leaves a moment where the Integrações
+// screen and the funnel disagree — a card with an event still reading
+// RECEIVED, or the reverse. The named surface of ADR-0016 is deliberate, so
+// the operation is gone rather than left exported with no caller.

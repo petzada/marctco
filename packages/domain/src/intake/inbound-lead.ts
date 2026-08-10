@@ -20,6 +20,17 @@ import { z } from "zod";
 export const CONTRACT_VERSION = "v1";
 
 /**
+ * How long an origin's own id may be before the contract stops believing it.
+ * It is the width of `LeadSubmission.external_lead_id`, and the reason is the
+ * unique index over it: a value that does not fit would make the insert throw,
+ * and the constraint that exists so no lead is lost twice would be the thing
+ * losing one. Over the limit the id reads as absent, and the connector falls
+ * back to the `IntegrationEvent.id` — the same path taken by every origin that
+ * supplies no id at all (ADR-0007 §Mecanismo 1).
+ */
+export const MAX_EXTERNAL_LEAD_ID_LENGTH = 255;
+
+/**
  * Where the submission came from. Half of the idempotency key
  * (`source` + `external_lead_id`, ADR-0007), which is why it is an enum and
  * not free text: a source that spells itself two ways deduplicates nothing.
@@ -218,9 +229,15 @@ export function readLeadPayload(raw: unknown): LeadPayloadReading {
   const payload = leadPayloadSchema.parse(raw);
   const declared = payload.source?.toUpperCase().replace(/[\s-]+/g, "_") ?? null;
 
+  const declared_external_lead_id = payload.external_lead_id ?? null;
+
   return {
     declared_source: isLeadSource(declared) ? declared : null,
-    declared_external_lead_id: payload.external_lead_id ?? null,
+    declared_external_lead_id:
+      declared_external_lead_id !== null &&
+      declared_external_lead_id.length <= MAX_EXTERNAL_LEAD_ID_LENGTH
+        ? declared_external_lead_id
+        : null,
     fields: {
       schema_version: payload.schema_version ?? CONTRACT_VERSION,
       occurred_at: payload.occurred_at ?? null,

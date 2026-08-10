@@ -114,6 +114,14 @@ _Avoid_: Pôr o valor recebido no diagnóstico, transformar diagnóstico em recu
 O conjunto de nome, telefones, e-mails e CPF que uma submissão traz, gravado como acréscimo e nunca como substituição. Receber um contato novo jamais apaga o anterior — a Pessoa acumula formas de ser encontrada, porque é assim que ela é reconhecida da próxima vez.
 _Avoid_: Gravar só o primeiro contato, sobrescrever o telefone antigo pelo novo, calcular a diferença em vez de mandar o conjunto inteiro
 
+**Destino da ingestão**:
+O funil e a etapa onde um lead recebido nasce, resolvidos antes de decidir qualquer coisa: a sobrescrita da conexão de integração quando ela existe, senão o funil comercial padrão, e sempre a etapa de entrada daquele funil. Não tem onde carregar tipo de financiamento — é por isso que a classificação não escolhe funil, em hipótese nenhuma.
+_Avoid_: Buscar a etapa pelo rótulo, cair no padrão quando a sobrescrita aponta para fora do workspace, deixar o financiamento entrar na escolha
+
+**Resultado do insert do envio**:
+O que a gravação idempotente do EnvioLead respondeu: envio novo, ou envio que já existia e o que ele já produziu. É **entrada** da decisão de ingestão, nunca saída dela — sem ele não se sabe se a submissão é nova ou retransmissão, e é só por isso que a ingestão tem três fases e não uma. "Já existia" e "já tem card" são fatos diferentes, e quem os confunde ou duplica o card ou engole o lead.
+_Avoid_: Pré-checar duplicata com um SELECT, capturar a violação de unicidade, tratar envio duplicado sem card como retransmissão
+
 **Plano de ingestão**:
 O que uma submissão recebida vai produzir, descrito como dado antes de acontecer: quarentena, retransmissão inerte ou Oportunidade nova com seus marcadores. É decidido sem tocar no banco e executado numa transação só, o que faz caber num teste puro aquilo que antes só o ambiente inteiro exercitava. Um plano de retransmissão não tem onde guardar etapa, responsável, situação ou chegada — é assim que o funil não rebobina.
 _Avoid_: Roteiro espalhado pelo worker, plano com campos opcionais que alguém preenche, decidir consultando, um caminho para a ingestão e outro para a liberação da quarentena
