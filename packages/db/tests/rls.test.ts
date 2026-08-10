@@ -518,6 +518,16 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(rows.every((row) => row.indexed)).toBe(true);
   });
 
+  it("indexes only unresolved Opportunity reviews for marker lookups", async () => {
+    const rows = await client.$queryRaw<Array<{ predicate: string | null }>>`
+      SELECT pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      WHERE index.indexrelid =
+        'public.intake_reviews_workspace_id_opportunity_id_idx'::regclass
+    `;
+    expect(rows).toEqual([{ predicate: "(resolution IS NULL)" }]);
+  });
+
   it("keeps the private schema unreachable to the worker role", async () => {
     const privileges = await client.$queryRaw<Array<{ can_use: boolean }>>`
       SELECT has_schema_privilege('marctco_worker', 'private', 'USAGE') AS can_use

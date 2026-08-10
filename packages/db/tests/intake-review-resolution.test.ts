@@ -234,6 +234,43 @@ describe("resolveIntakeReview", () => {
     ).rejects.toThrow(/already resolved/i);
   });
 
+  it("arbitrates concurrent duplicate decisions into one audit row", async () => {
+    const fixture = await seedPossibleDuplicate();
+    const duplicate_review_id = randomUUID();
+    await seeder.intakeReview.create({
+      data: {
+        id: duplicate_review_id,
+        workspace_id,
+        opportunity_id: fixture.canonical_opportunity_id,
+        type: "POSSIBLE_DUPLICATE",
+        related_opportunity_id: fixture.reviewed_opportunity_id
+      }
+    });
+
+    const results = await Promise.allSettled(
+      [fixture.review_id, duplicate_review_id].map((review_id) =>
+        resolveIntakeReview(
+          context,
+          {
+            review_id,
+            resolution: "NEW_FINANCING",
+            reason: "Uma decisão para o mesmo par",
+            resolved_at
+          },
+          app
+        )
+      )
+    );
+    expect(results.map((result) => result.status).sort()).toEqual(["fulfilled", "rejected"]);
+    await expect(
+      seeder.intakeReview.findMany({
+        where: {
+          id: { in: [fixture.review_id, duplicate_review_id] }
+        }
+      })
+    ).resolves.toMatchObject([{ resolution: "NEW_FINANCING" }]);
+  });
+
   it("merges by transferring every FK, records re-entry, and sends later resends to the canonical card", async () => {
     const fixture = await seedPossibleDuplicate();
     const first_event_id = randomUUID();
@@ -407,6 +444,283 @@ describe("resolveIntakeReview", () => {
     const active = await findOpenOpportunitiesOfPerson(context, person_id, app);
     expect(active).toContain(fixture.canonical_opportunity_id);
     expect(active).not.toContain(fixture.reviewed_opportunity_id);
+  });
+
+  it("normalizes a three-Opportunity chain, collapses its pending pair, and leaves NEW_FINANCING unlinked", async () => {
+    const oldest_opportunity_id = randomUUID();
+    const intermediate_opportunity_id = randomUUID();
+    const newest_opportunity_id = randomUUID();
+    const newest_to_intermediate_review_id = randomUUID();
+    await seeder.opportunity.createMany({
+      data: [
+        {
+          id: oldest_opportunity_id,
+          workspace_id,
+          person_id,
+          pipeline_id,
+          stage_id,
+          area: "COMMERCIAL",
+          status: "OPEN",
+          arrived_at: new Date("2026-08-01T10:00:00.000Z")
+        },
+        {
+          id: intermediate_opportunity_id,
+          workspace_id,
+          person_id,
+          pipeline_id,
+          stage_id,
+          area: "COMMERCIAL",
+          status: "OPEN",
+          arrived_at: new Date("2026-08-02T10:00:00.000Z")
+        },
+        {
+          id: newest_opportunity_id,
+          workspace_id,
+          person_id,
+          pipeline_id,
+          stage_id,
+          area: "COMMERCIAL",
+          status: "OPEN",
+          arrived_at: new Date("2026-08-03T10:00:00.000Z")
+        }
+      ]
+    });
+    await seeder.intakeReview.createMany({
+      data: [
+        {
+          workspace_id,
+          opportunity_id: intermediate_opportunity_id,
+          type: "POSSIBLE_DUPLICATE",
+          related_opportunity_id: oldest_opportunity_id
+        },
+        {
+          id: newest_to_intermediate_review_id,
+          workspace_id,
+          opportunity_id: newest_opportunity_id,
+          type: "POSSIBLE_DUPLICATE",
+          related_opportunity_id: intermediate_opportunity_id
+        },
+        {
+          workspace_id,
+          opportunity_id: newest_opportunity_id,
+          type: "POSSIBLE_DUPLICATE",
+          related_opportunity_id: oldest_opportunity_id
+        }
+      ]
+    });
+
+    await resolveIntakeReview(
+      context,
+      {
+        review_id: newest_to_intermediate_review_id,
+        resolution: "SAME_FINANCING",
+        reason: "O envio mais novo repete o financiamento intermediário",
+        resolved_at
+      },
+      app
+    );
+
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: newest_opportunity_id } })
+    ).resolves.toMatchObject({ merged_into_opportunity_id: intermediate_opportunity_id });
+    const pending_after_merge = await seeder.intakeReview.findMany({
+      where: {
+        workspace_id,
+        type: "POSSIBLE_DUPLICATE",
+        resolution: null,
+        opportunity_id: { in: [oldest_opportunity_id, intermediate_opportunity_id] },
+        related_opportunity_id: { in: [oldest_opportunity_id, intermediate_opportunity_id] }
+      }
+    });
+    expect(pending_after_merge).toHaveLength(1);
+    expect(pending_after_merge[0]).toMatchObject({
+      opportunity_id: intermediate_opportunity_id,
+      related_opportunity_id: oldest_opportunity_id
+    });
+
+    await resolveIntakeReview(
+      context,
+      {
+        review_id: pending_after_merge[0]!.id,
+        resolution: "NEW_FINANCING",
+        reason: "Os dois contratos restantes são distintos",
+        resolved_at: new Date("2026-08-10T19:00:00.000Z")
+      },
+      app
+    );
+    await expect(
+      seeder.intakeReview.count({
+        where: {
+          workspace_id,
+          type: "POSSIBLE_DUPLICATE",
+          resolution: null,
+          OR: [
+            {
+              opportunity_id: intermediate_opportunity_id,
+              related_opportunity_id: oldest_opportunity_id
+            },
+            {
+              opportunity_id: oldest_opportunity_id,
+              related_opportunity_id: intermediate_opportunity_id
+            }
+          ]
+        }
+      })
+    ).resolves.toBe(0);
+    await expect(
+      seeder.intakeReview.findUniqueOrThrow({
+        where: { id: newest_to_intermediate_review_id }
+      })
+    ).resolves.toMatchObject({ resolution: "SAME_FINANCING" });
+  });
+
+  it("uses id as the deterministic tie-breaker when arrivals are equal", async () => {
+    const ids = [randomUUID(), randomUUID()].sort();
+    const older_opportunity_id = ids[0]!;
+    const newer_opportunity_id = ids[1]!;
+    const inverted_review_id = randomUUID();
+    const arrived_at = new Date("2026-08-04T10:00:00.000Z");
+    await seeder.opportunity.createMany({
+      data: ids.map((id) => ({
+        id,
+        workspace_id,
+        person_id,
+        pipeline_id,
+        stage_id,
+        area: "COMMERCIAL" as const,
+        status: "OPEN" as const,
+        arrived_at
+      }))
+    });
+    await seeder.intakeReview.create({
+      data: {
+        id: inverted_review_id,
+        workspace_id,
+        opportunity_id: older_opportunity_id,
+        type: "POSSIBLE_DUPLICATE",
+        related_opportunity_id: newer_opportunity_id
+      }
+    });
+
+    await resolveIntakeReview(
+      context,
+      {
+        review_id: inverted_review_id,
+        resolution: "SAME_FINANCING",
+        reason: "A ordem da revisão não decide a canônica",
+        resolved_at
+      },
+      app
+    );
+
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: newer_opportunity_id } })
+    ).resolves.toMatchObject({ merged_into_opportunity_id: older_opportunity_id });
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: older_opportunity_id } })
+    ).resolves.toMatchObject({ merged_into_opportunity_id: null });
+  });
+
+  it("keeps the explicit workspace scope even with an RLS-bypassing client", async () => {
+    const foreign_workspace_id = randomUUID();
+    const foreign_review_id = randomUUID();
+    const foreign_opportunity_ids = [randomUUID(), randomUUID()];
+    const foreign_person_id = randomUUID();
+    const foreign_absorbed_person_id = randomUUID();
+    const foreign_pipeline_id = randomUUID();
+    const foreign_stage_id = randomUUID();
+    const foreign_closing_stage_id = randomUUID();
+    await seeder.workspace.create({
+      data: {
+        id: foreign_workspace_id,
+        slug: randomUUID(),
+        name: "Outro workspace",
+        persons: {
+          create: [
+            { id: foreign_person_id, name: "Outra pessoa" },
+            { id: foreign_absorbed_person_id, name: "Pessoa absorvível" }
+          ]
+        },
+        pipelines: {
+          create: {
+            id: foreign_pipeline_id,
+            name: "Comercial",
+            type: "COMMERCIAL",
+            is_default: true,
+            stages: {
+              create: [
+                {
+                  id: foreign_stage_id,
+                  label: "Entrada",
+                  position: 1,
+                  role: "ENTRY"
+                },
+                {
+                  id: foreign_closing_stage_id,
+                  label: "Conclusão",
+                  position: 2,
+                  role: "CLOSING"
+                }
+              ]
+            }
+          }
+        }
+      }
+    });
+    await seeder.opportunity.createMany({
+      data: foreign_opportunity_ids.map((id, index) => ({
+        id,
+        workspace_id: foreign_workspace_id,
+        person_id: foreign_person_id,
+        pipeline_id: foreign_pipeline_id,
+        stage_id: foreign_stage_id,
+        area: "COMMERCIAL" as const,
+        status: "OPEN" as const,
+        arrived_at: new Date(`2026-08-0${index + 1}T10:00:00.000Z`)
+      }))
+    });
+    await seeder.intakeReview.create({
+      data: {
+        id: foreign_review_id,
+        workspace_id: foreign_workspace_id,
+        opportunity_id: foreign_opportunity_ids[1]!,
+        type: "POSSIBLE_DUPLICATE",
+        related_opportunity_id: foreign_opportunity_ids[0]!
+      }
+    });
+
+    try {
+      await expect(
+        resolveIntakeReview(
+          context,
+          {
+            review_id: foreign_review_id,
+            resolution: "NEW_FINANCING",
+            reason: "Não pode atravessar tenant",
+            resolved_at
+          },
+          seeder
+        )
+      ).rejects.toThrow(/not found/i);
+      await expect(
+        seeder.intakeReview.findUniqueOrThrow({ where: { id: foreign_review_id } })
+      ).resolves.toMatchObject({ resolution: null });
+      await expect(
+        mergePersons(
+          context,
+          {
+            absorbed_person_id: foreign_absorbed_person_id,
+            canonical_person_id: foreign_person_id
+          },
+          seeder
+        )
+      ).rejects.toThrow(/both Pessoas/i);
+      await expect(
+        seeder.person.findUniqueOrThrow({ where: { id: foreign_absorbed_person_id } })
+      ).resolves.toMatchObject({ merged_into_person_id: null });
+    } finally {
+      await seeder.workspace.delete({ where: { id: foreign_workspace_id } });
+    }
   });
 
   it("archives INVALID_OR_SPAM with its reason and physically preserves the card", async () => {

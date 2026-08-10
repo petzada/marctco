@@ -457,6 +457,7 @@ async function writeReview(
         related.id
       FROM opportunities AS related
       WHERE related.id = ${related_opportunity_id}::uuid
+        AND related.workspace_id = ${workspace_id}::uuid
         AND related.status = 'OPEN'
         AND related.merged_into_opportunity_id IS NULL
     `;

@@ -43,7 +43,8 @@ export async function mergePersons(
     >`
       SELECT id, merged_into_person_id
       FROM persons
-      WHERE id IN (${input.absorbed_person_id}::uuid, ${input.canonical_person_id}::uuid)
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND id IN (${input.absorbed_person_id}::uuid, ${input.canonical_person_id}::uuid)
       ORDER BY id
       FOR UPDATE
     `;
@@ -60,7 +61,9 @@ export async function mergePersons(
           updated_at = CURRENT_TIMESTAMP
       FROM persons AS absorbed
       WHERE canonical.id = ${input.canonical_person_id}::uuid
+        AND canonical.workspace_id = ${context.workspace_id}::uuid
         AND absorbed.id = ${input.absorbed_person_id}::uuid
+        AND absorbed.workspace_id = ${context.workspace_id}::uuid
     `;
 
     // Exact duplicate values already survive on the canonical Pessoa. Remove
@@ -69,31 +72,38 @@ export async function mergePersons(
       DELETE FROM person_phones AS absorbed
       USING person_phones AS canonical
       WHERE absorbed.person_id = ${input.absorbed_person_id}::uuid
+        AND absorbed.workspace_id = ${context.workspace_id}::uuid
         AND canonical.person_id = ${input.canonical_person_id}::uuid
+        AND canonical.workspace_id = ${context.workspace_id}::uuid
         AND canonical.phone_e164 = absorbed.phone_e164
     `;
     await transaction.$executeRaw`
       UPDATE person_phones
       SET person_id = ${input.canonical_person_id}::uuid
-      WHERE person_id = ${input.absorbed_person_id}::uuid
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND person_id = ${input.absorbed_person_id}::uuid
     `;
     await transaction.$executeRaw`
       DELETE FROM person_emails AS absorbed
       USING person_emails AS canonical
       WHERE absorbed.person_id = ${input.absorbed_person_id}::uuid
+        AND absorbed.workspace_id = ${context.workspace_id}::uuid
         AND canonical.person_id = ${input.canonical_person_id}::uuid
+        AND canonical.workspace_id = ${context.workspace_id}::uuid
         AND canonical.email = absorbed.email
     `;
     await transaction.$executeRaw`
       UPDATE person_emails
       SET person_id = ${input.canonical_person_id}::uuid
-      WHERE person_id = ${input.absorbed_person_id}::uuid
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND person_id = ${input.absorbed_person_id}::uuid
     `;
     await transaction.$executeRaw`
       UPDATE opportunities
       SET person_id = ${input.canonical_person_id}::uuid,
           updated_at = CURRENT_TIMESTAMP
-      WHERE person_id = ${input.absorbed_person_id}::uuid
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND person_id = ${input.absorbed_person_id}::uuid
     `;
 
     // Candidate ids are evidence rather than FKs, but leaving a merged Pessoa
@@ -110,7 +120,8 @@ export async function mergePersons(
         FROM unnest(candidate_person_ids) AS candidate
         ORDER BY 1
       )
-      WHERE ${input.absorbed_person_id}::uuid = ANY(candidate_person_ids)
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND ${input.absorbed_person_id}::uuid = ANY(candidate_person_ids)
     `;
 
     const merged = await transaction.$executeRaw`
@@ -118,6 +129,7 @@ export async function mergePersons(
       SET merged_into_person_id = ${input.canonical_person_id}::uuid,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${input.absorbed_person_id}::uuid
+        AND workspace_id = ${context.workspace_id}::uuid
         AND merged_into_person_id IS NULL
     `;
     if (merged !== 1) {
@@ -140,10 +152,12 @@ export async function mergePersons(
         older.id
       FROM opportunities AS newer
       JOIN opportunities AS older
-        ON older.person_id = newer.person_id
+        ON older.workspace_id = newer.workspace_id
+       AND older.person_id = newer.person_id
        AND older.id <> newer.id
        AND (older.arrived_at, older.id) < (newer.arrived_at, newer.id)
-      WHERE newer.person_id = ${input.canonical_person_id}::uuid
+      WHERE newer.workspace_id = ${context.workspace_id}::uuid
+        AND newer.person_id = ${input.canonical_person_id}::uuid
         AND newer.status = 'OPEN'
         AND older.status = 'OPEN'
         AND newer.merged_into_opportunity_id IS NULL
@@ -151,7 +165,8 @@ export async function mergePersons(
         AND NOT EXISTS (
           SELECT 1
           FROM intake_reviews AS existing
-          WHERE existing.type = 'POSSIBLE_DUPLICATE'
+          WHERE existing.workspace_id = ${context.workspace_id}::uuid
+            AND existing.type = 'POSSIBLE_DUPLICATE'
             AND (
               (
                 existing.opportunity_id = newer.id

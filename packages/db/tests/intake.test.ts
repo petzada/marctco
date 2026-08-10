@@ -487,6 +487,47 @@ describe("applyIntakePlan: NEW_OPPORTUNITY", () => {
     });
   });
 
+  it("validates a related Opportunity with the explicit workspace scope", async () => {
+    const neighbour_pipeline = await seeder.pipeline.findFirstOrThrow({
+      where: { workspace_id: neighbour_workspace, type: "COMMERCIAL" }
+    });
+    const neighbour_stage = await seeder.stage.findFirstOrThrow({
+      where: { workspace_id: neighbour_workspace, pipeline_id: neighbour_pipeline.id, role: "ENTRY" }
+    });
+    const foreign_opportunity = await seeder.opportunity.create({
+      data: {
+        workspace_id: neighbour_workspace,
+        person_id: neighbour_person,
+        pipeline_id: neighbour_pipeline.id,
+        stage_id: neighbour_stage.id,
+        area: "COMMERCIAL",
+        status: "OPEN",
+        arrived_at: RECEIVED_AT
+      }
+    });
+    const submitted = await submit(`foreign-related-${randomUUID()}`);
+
+    await expect(
+      applyIntakePlan(
+        submitted.job,
+        newOpportunityPlan(submitted, {
+          reviews: [
+            {
+              type: "POSSIBLE_DUPLICATE",
+              related_opportunity_id: foreign_opportunity.id
+            }
+          ]
+        }),
+        // Superuser bypasses RLS: only the explicit workspace predicate can
+        // turn this into zero visible related Opportunities.
+        seeder
+      )
+    ).rejects.toThrow(/stopped being active/i);
+    await expect(
+      seeder.leadSubmission.findUniqueOrThrow({ where: { id: submitted.lead_submission_id } })
+    ).resolves.toMatchObject({ opportunity_id: null });
+  });
+
   it("refuses a review whose type does not carry its own evidence", async () => {
     // The union of the plan, restated where the row lands: a conflict with no
     // candidates is a review nobody can resolve, and a possible duplicate with

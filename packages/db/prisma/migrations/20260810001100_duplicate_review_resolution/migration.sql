@@ -62,6 +62,14 @@ ALTER TABLE intake_reviews
     )
   );
 
+-- Every reader of markers asks only for unresolved reviews. Keeping resolved
+-- audit rows out of this index makes that hot path smaller without losing the
+-- historical rows themselves.
+DROP INDEX intake_reviews_workspace_id_opportunity_id_idx;
+CREATE INDEX intake_reviews_workspace_id_opportunity_id_idx
+  ON intake_reviews(workspace_id, opportunity_id)
+  WHERE resolution IS NULL;
+
 CREATE TABLE opportunity_timeline_events (
   id UUID NOT NULL DEFAULT gen_random_uuid(),
   workspace_id UUID NOT NULL,
@@ -109,6 +117,6 @@ GRANT USAGE ON TYPE possible_duplicate_resolution, opportunity_timeline_event_ty
   TO marctco_app, marctco_worker;
 -- A Pessoa merge removes only contact rows whose normalized value already
 -- exists on the canonical Pessoa; every distinct row is transferred.
-GRANT DELETE ON TABLE person_phones, person_emails TO marctco_app;
+GRANT DELETE ON TABLE person_phones, person_emails, intake_reviews TO marctco_app;
 
 RESET ROLE;
