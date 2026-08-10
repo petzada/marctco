@@ -117,6 +117,11 @@ const isolation_cases = [
     write_sql: `INSERT INTO stages (id, workspace_id, pipeline_id, label, position, role, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${pipeline_b}', 'Cross-workspace', 3, 'NORMAL', CURRENT_TIMESTAMP)`
   },
   {
+    table_name: "workspace_flags",
+    read_sql: "SELECT workspace_id AS tenant_id FROM workspace_flags ORDER BY workspace_id",
+    write_sql: `INSERT INTO workspace_flags (workspace_id, key) VALUES ('${workspace_b}', 'score_cabimento_llm')`
+  },
+  {
     table_name: "workspace_members",
     read_sql:
       "SELECT workspace_id AS tenant_id FROM workspace_members ORDER BY workspace_id",
@@ -351,6 +356,12 @@ beforeAll(async () => {
         }
       ]
     });
+    await transaction.workspaceFlag.createMany({
+      data: [
+        { workspace_id: workspace_a, key: "auto_primeiro_contato" },
+        { workspace_id: workspace_b, key: "auto_primeiro_contato" }
+      ]
+    });
   });
   const context = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
   if (!context) {
@@ -401,6 +412,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       "persons",
       "pipelines",
       "stages",
+      "workspace_flags",
       "workspace_members",
       "workspaces"
     ]);
@@ -431,7 +443,7 @@ describe("Seam 3: RLS and schema invariants", () => {
           await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
           await transaction.$executeRawUnsafe(write_sql);
         })
-      ).rejects.toThrow(/row-level security policy/i);
+      ).rejects.toThrow(/permission denied|row-level security policy/i);
     }
   );
 

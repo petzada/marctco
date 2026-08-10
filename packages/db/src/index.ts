@@ -34,6 +34,11 @@ export {
 } from "./provision-workspace.js";
 export { findPersonCandidates, type PersonCandidate } from "./person.js";
 export {
+  FeatureDisabledError,
+  assertWorkspaceFeatureEnabled,
+  readWorkspaceFeatureFlags
+} from "./feature-flags.js";
+export {
   applyIntakePlan,
   findOpenOpportunitiesOfPerson,
   recordLeadSubmission,

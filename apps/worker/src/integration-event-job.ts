@@ -3,6 +3,7 @@ import {
   createJobContext,
   findOpenOpportunitiesOfPerson,
   findPersonCandidates,
+  readWorkspaceFeatureFlags,
   readIntegrationEventForProcessing,
   recordLeadSubmission,
   resolveIntakeDestination
@@ -17,6 +18,10 @@ import {
   type IntakePlan,
   type IntegrationEventJobData
 } from "@marctco/domain";
+import {
+  planOpportunityPostCreationEffects,
+  type OpportunityPostCreationEffect
+} from "@marctco/domain/feature-flags";
 import { connectLeadSource } from "./connector-v1.js";
 
 export interface ProcessedIntegrationEvent {
@@ -35,6 +40,8 @@ export interface ProcessedIntegrationEvent {
    * already processed.
    */
   readonly intake_plan_kind: IntakePlan["kind"] | null;
+  /** Planned on the server and intentionally has no consumer in this slice. */
+  readonly post_creation_effects: readonly OpportunityPostCreationEffect[];
 }
 
 function assertJobData(data: unknown): asserts data is IntegrationEventJobData {
@@ -87,7 +94,8 @@ export async function processIntegrationEventJob(
     return {
       integration_event_id: data.integration_event_id,
       workspace_id: data.workspace_id,
-      intake_plan_kind: null
+      intake_plan_kind: null,
+      post_creation_effects: []
     };
   }
 
@@ -123,11 +131,19 @@ export async function processIntegrationEventJob(
     integration_event_id: event.id,
     now: event.received_at
   });
-  await applyIntakePlan(context, plan);
+  const applied = await applyIntakePlan(context, plan);
+  const post_creation_effects =
+    applied.kind === "NEW_OPPORTUNITY"
+      ? planOpportunityPostCreationEffects({
+          feature_flags: await readWorkspaceFeatureFlags(context),
+          created_opportunity_id: applied.opportunity_id
+        })
+      : [];
 
   return {
     integration_event_id: data.integration_event_id,
     workspace_id: data.workspace_id,
-    intake_plan_kind: plan.kind
+    intake_plan_kind: plan.kind,
+    post_creation_effects
   };
 }

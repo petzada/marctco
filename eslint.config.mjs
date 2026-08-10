@@ -68,6 +68,32 @@ export default tseslint.config(
     }
   },
   {
+    files: ["apps/web/**/*.ts", "apps/web/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          "patterns": [
+            {
+              "group": [
+                "@prisma/client",
+                "@marctco/db/src/*",
+                "**/packages/db/src/client*",
+                "**/packages/db/src/internal/*"
+              ],
+              "message": "Prisma Client is internal to packages/db; import a named database operation instead."
+            },
+            {
+              "group": ["@marctco/domain/feature-flags"],
+              "message":
+                "The feature catalog is server-only roadmap data. Web code receives a resolved workspace boolean from a named @marctco/db operation."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     // ADR-0006 regra 11: apps/web and apps/worker are each a single Node
     // process serving requests/jobs for every tenant. A mutable value at
     // module scope (resolved workspace, role, flag) leaks tenant A's

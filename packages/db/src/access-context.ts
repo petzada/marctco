@@ -1,4 +1,5 @@
 import { WorkspaceRole as PrismaWorkspaceRole } from "@prisma/client";
+import type { ResolvedFeatureFlags } from "@marctco/domain/feature-flags";
 
 /**
  * The four access profiles the workspace knows about, and none more
@@ -41,6 +42,8 @@ export interface UserContext {
   readonly workspace_id: string;
   readonly user_id: string;
   readonly role: WorkspaceRole;
+  /** Reserved for the server-resolved Phase 4 capability snapshot. */
+  readonly feature_flags?: ResolvedFeatureFlags;
 }
 
 /**
@@ -54,6 +57,8 @@ export interface JobContext {
   readonly kind: "job";
   readonly workspace_id: string;
   readonly integration_event_id: string;
+  /** The worker shares this slot; resolved values are never process-global. */
+  readonly feature_flags?: ResolvedFeatureFlags;
 }
 
 /**

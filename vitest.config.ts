@@ -16,6 +16,9 @@ function appRoleDatabaseUrl(database_url: string): string {
 export default defineConfig({
   resolve: {
     alias: {
+      "@marctco/domain/feature-flags": fileURLToPath(
+        new URL("./packages/domain/src/feature-flags.ts", import.meta.url)
+      ),
       "@marctco/domain": fileURLToPath(new URL("./packages/domain/src/index.ts", import.meta.url)),
       "@marctco/db": fileURLToPath(new URL("./packages/db/src/index.ts", import.meta.url))
     }
@@ -44,7 +47,7 @@ export default defineConfig({
             "packages/db/src/provision-workspace.test.ts",
             "packages/db/src/runtime-database-url.test.ts",
             "packages/db/src/workspace-context.test.ts",
-            "packages/db/tests/{boot-check,intake,intake-review-resolution,person-candidates,rls}.test.ts"
+            "packages/db/tests/{boot-check,feature-flags,intake,intake-review-resolution,person-candidates,rls}.test.ts"
           ],
           fileParallelism: false
         }

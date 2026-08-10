@@ -150,8 +150,21 @@ model Workspace {
   opportunities               Opportunity[]
   intake_reviews              IntakeReview[]
   opportunity_timeline_events OpportunityTimelineEvent[]
+  feature_flags               WorkspaceFlag[]
 
   @@map("workspaces")
+}
+
+/// A row is a commercial/technical release for one paid-per-use capability.
+/// No row means OFF; the catalog itself stays in packages/domain (ADR-0004).
+model WorkspaceFlag {
+  workspace_id String    @db.Uuid
+  key          String
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@id([workspace_id, key])
+  @@map("workspace_flags")
 }
 
 model WorkspaceMember {

@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./feature-flags": {
+      "types": "./src/feature-flags.ts",
+      "default": "./dist/feature-flags.js"
     }
   },
   "scripts": {
