@@ -36,6 +36,16 @@ const integration_connection_b = randomUUID();
 const person_a = randomUUID();
 const person_b = randomUUID();
 const merged_person_a = randomUUID();
+const integration_event_a = randomUUID();
+const integration_event_b = randomUUID();
+const opportunity_a = randomUUID();
+const opportunity_b = randomUUID();
+// Workspace A's card lives on a pipeline of its own, because the pipeline
+// operations below delete `pipeline_a` and a pipeline holding cards is not
+// deletable — `opportunities.pipeline_id` is RESTRICT, so a funnel cannot be
+// dropped out from under a lead somebody is working.
+const carded_pipeline_a = randomUUID();
+const carded_stage_a = randomUUID();
 const active_token_a = "mtco_rls_active_token_a";
 const active_token_b = "mtco_rls_active_token_b";
 const token_hash_a = createHash("sha256").update(active_token_a, "utf8").digest("hex");
@@ -47,6 +57,11 @@ let user_context_a: UserContext;
 const provisioned_workspace_ids: string[] = [];
 const isolation_cases = [
   {
+    table_name: "intake_reviews",
+    read_sql: "SELECT workspace_id AS tenant_id FROM intake_reviews ORDER BY workspace_id",
+    write_sql: `INSERT INTO intake_reviews (id, workspace_id, opportunity_id, type, candidate_person_ids) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'IDENTITY_CONFLICT', ARRAY['${person_b}']::uuid[])`
+  },
+  {
     table_name: "integration_connections",
     read_sql:
       "SELECT workspace_id AS tenant_id FROM integration_connections ORDER BY workspace_id",
@@ -57,6 +72,16 @@ const isolation_cases = [
     read_sql:
       "SELECT workspace_id AS tenant_id FROM integration_events ORDER BY workspace_id",
     write_sql: `INSERT INTO integration_events (id, workspace_id, integration_connection_id, raw, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${integration_connection_b}', '{"nome":"Cross-workspace"}'::jsonb, CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "lead_submissions",
+    read_sql: "SELECT workspace_id AS tenant_id FROM lead_submissions ORDER BY workspace_id",
+    write_sql: `INSERT INTO lead_submissions (id, workspace_id, source, external_lead_id, last_integration_event_id, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'META_LEAD_ADS', 'cross-workspace', '${integration_event_b}', CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "opportunities",
+    read_sql: "SELECT workspace_id AS tenant_id FROM opportunities ORDER BY workspace_id",
+    write_sql: `INSERT INTO opportunities (id, workspace_id, person_id, pipeline_id, stage_id, area, arrived_at, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', '${pipeline_b}', '${stage_b_entry}', 'COMMERCIAL', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   },
   {
     table_name: "person_emails",
@@ -183,11 +208,13 @@ beforeAll(async () => {
     await transaction.integrationEvent.createMany({
       data: [
         {
+          id: integration_event_a,
           workspace_id: workspace_a,
           integration_connection_id: integration_connection_a,
           raw: { nome: "Lead A" }
         },
         {
+          id: integration_event_b,
           workspace_id: workspace_b,
           integration_connection_id: integration_connection_b,
           raw: { nome: "Lead B" }
@@ -219,6 +246,79 @@ beforeAll(async () => {
       data: [
         { workspace_id: workspace_a, person_id: person_a, email: "pessoa.a@exemplo.com" },
         { workspace_id: workspace_b, person_id: person_b, email: "pessoa.b@exemplo.com" }
+      ]
+    });
+    await transaction.pipeline.create({
+      data: {
+        id: carded_pipeline_a,
+        workspace_id: workspace_a,
+        name: "Com cards",
+        type: "COMMERCIAL",
+        is_default: false,
+        stages: {
+          create: [
+            { id: carded_stage_a, label: "Entrada", position: 1, role: "ENTRY" },
+            { label: "Conclusão", position: 2, role: "CLOSING" }
+          ]
+        }
+      }
+    });
+    // One card, one submission and one pendency per workspace, so the isolation
+    // cases below have something of their own to read on each side.
+    await transaction.opportunity.createMany({
+      data: [
+        {
+          id: opportunity_a,
+          workspace_id: workspace_a,
+          person_id: person_a,
+          pipeline_id: carded_pipeline_a,
+          stage_id: carded_stage_a,
+          area: "COMMERCIAL",
+          arrived_at: new Date()
+        },
+        {
+          id: opportunity_b,
+          workspace_id: workspace_b,
+          person_id: person_b,
+          pipeline_id: pipeline_b,
+          stage_id: stage_b_entry,
+          area: "COMMERCIAL",
+          arrived_at: new Date()
+        }
+      ]
+    });
+    await transaction.leadSubmission.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          source: "META_LEAD_ADS",
+          external_lead_id: "rls-a",
+          last_integration_event_id: integration_event_a,
+          opportunity_id: opportunity_a
+        },
+        {
+          workspace_id: workspace_b,
+          source: "META_LEAD_ADS",
+          external_lead_id: "rls-b",
+          last_integration_event_id: integration_event_b,
+          opportunity_id: opportunity_b
+        }
+      ]
+    });
+    await transaction.intakeReview.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "IDENTITY_CONFLICT",
+          candidate_person_ids: [person_a]
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: opportunity_b,
+          type: "IDENTITY_CONFLICT",
+          candidate_person_ids: [person_b]
+        }
       ]
     });
   });
@@ -260,8 +360,11 @@ describe("Seam 3: RLS and schema invariants", () => {
     `;
 
     expect(rows.map((row) => row.table_name)).toEqual([
+      "intake_reviews",
       "integration_connections",
       "integration_events",
+      "lead_submissions",
+      "opportunities",
       "person_emails",
       "person_phones",
       "persons",
@@ -1025,7 +1128,11 @@ describe("Seam 3: RLS and schema invariants", () => {
           }
         }
       }
+      // `opportunities.merged_into_opportunity_id` arrived with ticket 09 and
+      // this scan needed no edit to pick it up — which was the point of
+      // discovering the tombstones instead of listing them.
       expect([...merge_pointers].sort()).toEqual([
+        ["opportunities", "merged_into_opportunity_id"],
         ["persons", "merged_into_person_id"],
         [target_table, "merged_into_probe_target_id"]
       ]);

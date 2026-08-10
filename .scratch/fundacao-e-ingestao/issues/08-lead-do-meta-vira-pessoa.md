@@ -32,14 +32,14 @@ Isso é o que os próprios critérios dizem: todo bullet de prova aqui é **Seam
 - [x] E-mail gravado em minúsculas
 - [x] `PersonPhone` e `PersonEmail` preservam múltiplos valores normalizados por Pessoa
 - [x] CPF válido é forte, mas opcional; telefone só associa quando não há contradição; e-mail isolado é fraco
-- [ ] Quando chaves apontam para Pessoas diferentes, cria **Pessoa nova** com os contatos do envio e registra `IntakeReview(type: IDENTITY_CONFLICT)` com as candidatas — **nunca** segura o envio
-      — **decidido aqui, gravado no 09.** `decidePersonIdentity` devolve `NEW_PERSON_WITH_IDENTITY_CONFLICT` com `candidate_person_ids`, e o Seam 1 prova a regra. A linha de `IntakeReview` pendura numa Oportunidade ([ADR-0005](../../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md)), que só existe a partir do ticket 09 — **quem fecha: 09**
+- [x] Quando chaves apontam para Pessoas diferentes, cria **Pessoa nova** com os contatos do envio e registra `IntakeReview(type: IDENTITY_CONFLICT)` com as candidatas — **nunca** segura o envio
+      — **decidido aqui, gravado no 09: fechado.** `decidePersonIdentity` devolve `NEW_PERSON_WITH_IDENTITY_CONFLICT` com `candidate_person_ids`, e o Seam 1 prova a regra. A linha de `IntakeReview` nasceu no ticket 09, com o `CHECK` que exige as candidatas, e o Seam 2 prova ponta a ponta que o envio em conflito vira Pessoa nova **com** card e marcador
 - [x] Nenhum vínculo com cadastro existente é criado sob conflito, e nenhuma chave vence por prioridade fixa
 - [x] `Person.merged_into_person_id` permite mesclagem posterior não destrutiva, preservando histórico e identificadores — coluna, FK composta intra-tenant e `CHECK` contra auto-referência; o invariante "nenhum registro ativo aponta para um registro mesclado" é varrido pelo Seam 3
 - [x] Submissão com telefone novo e CPF conhecido reconhece a mesma Pessoa — não cria segunda
 - [x] Casamento apenas por e-mail não funde cadastros automaticamente
-- [ ] Nenhum contato anterior é sobrescrito ao receber um novo
-      — **impossibilitado aqui, exercido no 09.** `UNIQUE(person_id, phone_e164)` e `UNIQUE(person_id, email)` existem e o Seam 3 prova que a segunda gravação do mesmo par é recusada em vez de substituir; não há caminho de `UPDATE` de valor de contato no schema. A escrita `INSERT … ON CONFLICT DO NOTHING` que fecha o critério é de `applyIntakePlan` — **quem fecha: 09**
+- [x] Nenhum contato anterior é sobrescrito ao receber um novo
+      — **impossibilitado aqui, exercido no 09: fechado.** `UNIQUE(person_id, phone_e164)` e `UNIQUE(person_id, email)` existem e o Seam 3 prova que a segunda gravação do mesmo par é recusada em vez de substituir; não há caminho de `UPDATE` de valor de contato no schema. A escrita `INSERT … ON CONFLICT DO NOTHING` de `applyIntakePlan` fechou o critério, e o teste do ticket 09 reenvia um telefone que a Pessoa já tinha e verifica que a linha anterior é a mesma. Nome e CPF entram por `COALESCE`: preenchem o que estava vazio, nunca substituem
 - [x] Sem nenhuma das três chaves, **não** cria Pessoa — único caso em que a ingestão não produz Oportunidade (ver Comments: o critério foi lido pelo ADR-0007, que é mais estrito)
 - [x] **Seam 1**: casos de borda de telefone brasileiro, CPF inválido, caixa de e-mail e conflito de chaves, sem banco e sem container
 - [x] **Seam 1 cobre também o `PersonLookupPlan`**: qual conjunto de chaves cada envio produz. Sem isso, um worker que busque só por telefone reconhece menos gente do que este ticket promete e **todo teste puro continua verde**, porque é o teste que escolhe as candidatas que passa

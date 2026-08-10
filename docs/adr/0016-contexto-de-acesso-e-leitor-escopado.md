@@ -34,13 +34,17 @@ O que as duas têm em comum é o `workspace_id`, que é o que alimenta o `SET LO
 | `listLeads(ctx, cursor, filters)` | `UserContext` | `assignLead(ctx, id)` | `UserContext` |
 | `countLeadsByMarker(ctx)` | `UserContext` | `resolveIntakeReview(ctx, id, resolution)` | `UserContext` |
 | `getLead(ctx, id)` | `UserContext` | `applyIntakePlan(ctx, plan)` | ambos |
-| `listIntegrationEvents(ctx, cursor)` | `UserContext` | | |
+| `listIntegrationEvents(ctx, cursor)` | `UserContext` | `recordLeadSubmission(ctx, input)` | ambos |
 | `findPersonCandidates(ctx, plan)` | ambos | | |
+| `resolveIntakeDestination(ctx, target)` | ambos | | |
+| `findOpenOpportunitiesOfPerson(ctx, id)` | ambos | | |
 | `getQuarantinedEvent(ctx, id)` | `UserContext` | | |
 
 Cada uma abre a transação, faz o `SET LOCAL`, aplica o escopo do papel quando ele existe, e usa o cursor keyset e o índice parcial que lhe corresponde.
 
-Duas aceitam as duas variantes, e as duas são do caminho de ingestão ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)): `findPersonCandidates`, que executa o `PersonLookupPlan`, e `applyIntakePlan`. É a consequência direta de a ingestão ter dois chamadores — o job e o "completar e liberar" do gestor.
+**Cinco aceitam as duas variantes, e as cinco são do caminho de ingestão** ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)): `findPersonCandidates`, `recordLeadSubmission`, `resolveIntakeDestination`, `findOpenOpportunitiesOfPerson` e `applyIntakePlan`. É a consequência direta de a ingestão ter dois chamadores — o job e o "completar e liberar" do gestor.
+
+> **Emendado pelo ticket 09.** Esta tabela dizia **duas**, escrita antes de o ADR-0017 quebrar a ingestão em três fases puras. Cada fase precisa de uma leitura executada sob o tenant, e o caminho compartilhado é literalmente o mesmo para os dois chamadores — então toda operação dele aceita as duas variantes, ou o "mesmo caminho" que a issue 14 exige não existe. O número não é o que a regra protege: o que ela protege é **por que** uma operação aceita `JobContext`, e a resposta continua sendo uma só. Nada fora do caminho de ingestão ganhou a segunda variante, e `listLeads(jobCtx)` continua não compilando.
 
 **3. As quatro consultas sem tenant são a exceção, e ela já é fechada.** `resolve_workspace_by_token_hash`, `claim_pending_events`, `provision_workspace` e `resolve_user_workspaces` acontecem **antes** de existir workspace para pôr num contexto — são justamente as que produzem ou validam o `workspace_id` com que o contexto é construído ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9). Elas não recebem `AccessContext` e não podem receber. A lista é fechada em quatro, o Seam 3 reprova qualquer `SECURITY DEFINER` fora dela, e nenhuma devolve payload. Sem esta cláusula escrita, a regra 2 pareceria ter um furo — e uma quinta função entraria por ele. O owner técnico e os retornos mínimos são do ADR-0019.
 
@@ -66,7 +70,7 @@ Vale também para o [ADR-0006 regra 11](./0006-rls-duas-camadas-guc-worker.md): 
 
 ## Consequences
 
-Cada leitura nova exige uma função nova em `packages/db` — não dá para "só escrever um `findMany` na tela". É o pedágio que torna o escopo verificável, e nesta fatia a lista tem nove operações: seis leituras e três escritas.
+Cada leitura nova exige uma função nova em `packages/db` — não dá para "só escrever um `findMany` na tela". É o pedágio que torna o escopo verificável, e nesta fatia a lista tem doze operações: oito leituras e quatro escritas.
 
 Em troca, três coisas deixam de depender de alguém lembrar: o escopo do `ATTENDANT`, o cursor keyset e o índice parcial de cada contador. Quando o `SUPERVISOR` ganhar escopo real na Fase 2, ele entra numa função e vale em toda tela que já existe — que é a razão pela qual o ADR-0015 quis o lugar único antes da matriz.
 

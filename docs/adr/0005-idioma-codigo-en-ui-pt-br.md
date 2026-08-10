@@ -33,12 +33,16 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | **Lead** (rótulo de UI) | — | Não tem model. É `Opportunity` com `area = COMMERCIAL` |
 | EnvioLead | `LeadSubmission` | A submissão de formulário, não a oportunidade |
 | Transmissão mais recente do envio | `LeadSubmission.last_integration_event_id` | Substitui `LeadSubmission.raw`: o payload é guardado **uma vez**, no evento ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
+| Contagem de transmissões do envio | `LeadSubmission.transmission_count` | Incrementada pela retransmissão, que não move mais nada no funil |
+| Oportunidade do envio | `LeadSubmission.opportunity_id` | Nula enquanto o envio não produziu card: quarentena, ou plano ainda não aplicado |
 | Payload bruto recebido | `IntegrationEvent.raw` | Cópia única. Anulável, e **nulo só pode significar expirado**: o payload é gravado no recebimento, antes do 200 ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
 | Atendente | `WorkspaceMember.role = ATTENDANT` | Enxerga apenas oportunidade atribuída a si ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
 | Supervisor | `WorkspaceMember.role = SUPERVISOR` | Escopo do time/filial, computado por tag. Até a Fase 2, escopo efetivo de `MANAGER` |
 | Gestão | `WorkspaceMember.role = MANAGER` | Operação inteira do workspace |
 | Direção | `WorkspaceMember.role = OWNER` | Operação **e** conta: membros, papéis, segredo de integração. É o papel criado no provisionamento |
 | Plano de ingestão | `IntakePlan` | União discriminada `Quarantine \| Retransmission \| NewOpportunity`; decidido puro, aplicado por `applyIntakePlan` ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)) |
+| Plano de ingestão aplicado | `AppliedIntakePlan` | O que `applyIntakePlan` gravou — a variante e os ids que nasceram. Nunca sai do processo: o retorno do job leva só a variante ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
+| Limite do id da origem | `MAX_EXTERNAL_LEAD_ID_LENGTH` | Largura de `LeadSubmission.external_lead_id`. Acima dela o id declarado é lido como ausente e o conector cai no `IntegrationEvent.id` — a constraint que existe para não perder lead não pode ser o que recusa um |
 | Contrato canônico de entrada | `InboundLead` | O contrato `v1` já interpretado, com `source` e `external_lead_id` resolvidos. Zod é a fonte única e o tipo é inferido ([ADR-0008](./0008-fronteira-conector-dominio.md)). **Nunca** `LeadPayload` como tipo de domínio |
 | Lead normalizado | `NormalizedLead` | Saída de `normalize()`. Value object, não entidade. Telefone em `phones[]` E.164, e-mail em `emails[]` minúsculo, `cpf` só dígitos, `installment_amount` decimal com `installment_amount_raw` ao lado |
 | Origem do lead | `LeadSource` | `META_LEAD_ADS \| GOOGLE_LEAD_FORM \| LANDING_PAGE`. Metade da `SubmissionKey`. **Nunca** confundir com `IntegrationProvider` (por qual conexão entrou) nem com `platform` (`fb`/`ig`) |
@@ -50,6 +54,11 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Contatos da Pessoa | `PersonContacts` | O conjunto **completo** que a submissão traz — nunca um delta. A não-sobrescrita é da constraint `UNIQUE(person_id, phone_e164)`, não da decisão |
 | Chave idempotente do envio | `SubmissionKey` | `source` + `external_lead_id`; o que a constraint `UNIQUE(workspace_id, source, external_lead_id)` arbitra ([ADR-0007](./0007-ingestao-idempotencia.md)) |
 | Revisão de ingestão | `IntakeReview` | Pendência **marcada na Oportunidade já criada**, nunca bloqueio; `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE` |
+| Candidatas da revisão de identidade | `IntakeReview.candidate_person_ids` | As Pessoas para quem as chaves apontaram; vazio em `POSSIBLE_DUPLICATE`, e o `CHECK` recusa a combinação errada |
+| Oportunidade ligada pela revisão | `IntakeReview.related_opportunity_id` | A outra Oportunidade em aberto da mesma Pessoa; nula em `IDENTITY_CONFLICT` |
+| Marcador dentro do plano | `IntakeReviewPlan` | A variante da pendência no `IntakePlan`, antes de virar linha |
+| Destino da ingestão | `IntakeDestination` | `pipeline_id` + `entry_stage_id`, resolvido **antes** de `decideIntake`. Não tem campo para tipo de financiamento, e é assim que a classificação não escolhe funil |
+| Resultado do insert do envio | `SubmissionInsert` | `INSERTED \| DUPLICATE`; o que o `ON CONFLICT DO NOTHING RETURNING id` respondeu. É **entrada** de `decideIntake`, não saída ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)) |
 | Marcador | `IntakeReview` + `Opportunity.missing_phone` | Não é um model: é o conjunto de pendências de um lead. Na UI, **um ícone só** os reúne ([ADR-0007](./0007-ingestao-idempotencia.md)) |
 | Marcadores de um lead | `markersFor(opportunity, reviews)` | Função pura de `packages/domain`; quem responde "o que este lead tem". Os contadores por tipo **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
 | Possível duplicado | `IntakeReview.type = POSSIBLE_DUPLICATE` | Gatilho: mesma Pessoa + Oportunidade **em aberto** não mesclada. Financiamento é discriminador na tela, nunca gatilho |

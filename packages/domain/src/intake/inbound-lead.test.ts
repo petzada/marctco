@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildInboundLead, readLeadPayload } from "./inbound-lead.js";
+import {
+  buildInboundLead,
+  MAX_EXTERNAL_LEAD_ID_LENGTH,
+  readLeadPayload
+} from "./inbound-lead.js";
 
 const identity = { source: "META_LEAD_ADS", external_lead_id: "lead-1" } as const;
 
@@ -85,6 +89,20 @@ describe("readLeadPayload", () => {
   it("coerces an id sent as a number, because ids travel as strings", () => {
     expect(readLeadPayload({ external_lead_id: 6789 }).declared_external_lead_id).toBe("6789");
     expect(readLeadPayload({ campaign_id: 42 }).fields.attribution.campaign_id).toBe("42");
+  });
+
+  it("stops believing an id that would not fit the constraint meant to protect the lead", () => {
+    // Over the column's width the unique index would refuse the insert, and the
+    // constraint that exists so no lead is counted twice would be the thing
+    // losing one. It degrades to absent, and the connector falls back to the
+    // event id — the same path an origin with no id at all takes.
+    const at_the_limit = "a".repeat(MAX_EXTERNAL_LEAD_ID_LENGTH);
+    expect(readLeadPayload({ external_lead_id: at_the_limit }).declared_external_lead_id).toBe(
+      at_the_limit
+    );
+    expect(
+      readLeadPayload({ external_lead_id: `${at_the_limit}a` }).declared_external_lead_id
+    ).toBeNull();
   });
 
   it("reads a source declared in a different case or spacing", () => {

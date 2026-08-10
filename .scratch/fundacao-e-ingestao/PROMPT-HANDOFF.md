@@ -14,6 +14,55 @@ Despacha cada ticket a Composer 2.5 via Task (`composer-2.5-fast`,
 Formato de resumo fixo; self-review; confrontar critérios/ADRs; só então
 atualizar Status/registro.
 
+# Atualização de 2026-08-10 — ticket 09 concluído, o tracer bullet fechou
+
+## O ticket
+
+- **09 Pessoa vira Oportunidade: done** (23/23 critérios). Fecharam junto os **dois
+  critérios que o 08 tinha carregado**, então o 08 está 18/18. Migration
+  `20260808000100_lead_submissions_and_opportunities` aplicada localmente;
+  `pnpm test` **353 passando** (1 pulado), typecheck/lint/drift verdes. Resumo
+  completo em `registro.md`.
+- **Branch:** `ticket/09-pessoa-vira-oportunidade`. **Ainda não mesclada** — falta
+  abrir o PR e ver o CI verde. A migration nova sobe pelo job de release.
+- **Próximo despacho: a wave 10 · 11 · 13 · 16** (em paralelo se houver worktrees;
+  no working tree compartilhado, um por vez). Ordem restante:
+  `(10 · 11 · 13 · 16) → 12 · 14 → 15`.
+- **Mão humana pendente (inalterada):** marcar um usuário apto em `app_metadata`
+  no Supabase para nascer o primeiro workspace, e então o lead de teste ponta a
+  ponta em produção. As duas `REDIS_URL` já estão setadas.
+
+## Descobertas do 09 para os próximos
+
+- **O caminho compartilhado existe e é literal:** `recordLeadSubmission(ctx, input)`
+  → `decideIntake` → `applyIntakePlan(ctx, plan)`. O ticket 14 ("completar e
+  liberar") chama as **mesmas** funções com `now` = instante da liberação;
+  `recordLeadSubmission` recebe `integration_event_id` por argumento exatamente
+  para o chamador que carrega `UserContext`.
+- **Toda janela entre dois commits precisa de uma condição que a feche.** As três
+  fases do ADR-0017 põem o insert numa transação e o plano noutra; entre elas o
+  envio existe sem card, e dois workers escreveriam dois cards. Quem fecha é
+  `UPDATE … WHERE opportunity_id IS NULL` em `applyIntakePlan`. Quem escrever
+  fase nova nesse caminho tem de procurar a próxima janela.
+- **`resolveIntakeDestination(ctx, target_pipeline_id)` não tem argumento para
+  financiamento** — a regra virou assinatura.
+- **Ticket 10** herda quarentena já funcionando (evento `QUARANTINED`, envio
+  apontando para a transmissão mais recente, sem Pessoa e sem card); falta a tela
+  e a liberação. A contagem de transmissões de envio re-quarentenado não
+  incrementa — decisão de quem tem a tela.
+- **Ticket 11** herda `merged_into_opportunity_id` (a varredura de lápide do Seam 3
+  o pegou sem edição nenhuma) e a variante `Retransmission` com `opportunity_id`.
+  Falta a linha do tempo (não há model de timeline na fatia) e as três resoluções.
+  `IntakeReview.resolution` **não** foi criada de propósito: é dele.
+- **`opportunities.pipeline_id` é `RESTRICT`** — funil com cards não é apagável.
+  Se o 12 quiser permitir, é regra nova.
+- **ADR-0016 emendado:** cinco operações aceitam as duas variantes de contexto,
+  não duas, e as cinco são do caminho de ingestão. `spec.md` tem a nota de
+  supersessão.
+- **A barreira do Prisma não foi afrouxada:** o Seam 2 lê cards por leitores
+  nomeados em `packages/db/tests/seam-inspection.ts`, com o client cru dentro do
+  pacote. Faça o mesmo em vez de mexer em `scripts/check-prisma-imports.mjs`.
+
 # Atualização de 2026-08-07 — ticket 08 concluído E DEPLOY RESTABELECIDO
 
 ## Leia isto antes de qualquer coisa
