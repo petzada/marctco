@@ -42,7 +42,7 @@ export interface ConnectedLead {
    * makes everywhere (ADR-0007 §Mecanismo 1).
    */
   readonly synthesized_external_lead_id: boolean;
-  /** False when the origin was inferred from the connection rather than declared. */
+  /** False when the effective origin came from the connection rather than the payload. */
   readonly declared_source: boolean;
 }
 
@@ -64,7 +64,10 @@ export function connectLeadSource(input: LeadSourceConnectorInput): ConnectedLea
   }
 
   const reading = readLeadPayload(input.raw);
-  const source = reading.declared_source ?? PROVIDER_DEFAULT_SOURCE[input.provider];
+  const sourceFromConnection = input.provider === "LANDING_PAGE";
+  const source = sourceFromConnection
+    ? PROVIDER_DEFAULT_SOURCE.LANDING_PAGE
+    : (reading.declared_source ?? PROVIDER_DEFAULT_SOURCE.PLUGA);
 
   // The id the CRM minted when it received the request: no clock inside it,
   // unique per request, and identical on every reprocessing of the same event.
@@ -76,6 +79,6 @@ export function connectLeadSource(input: LeadSourceConnectorInput): ConnectedLea
   return {
     inbound: buildInboundLead(reading, { source, external_lead_id }),
     synthesized_external_lead_id: reading.declared_external_lead_id === null,
-    declared_source: reading.declared_source !== null
+    declared_source: !sourceFromConnection && reading.declared_source !== null
   };
 }

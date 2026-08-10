@@ -7,6 +7,7 @@ const resolveIntakeDestination = vi.fn();
 const recordLeadSubmission = vi.fn();
 const findOpenOpportunitiesOfPerson = vi.fn();
 const applyIntakePlan = vi.fn();
+const readWorkspaceFeatureFlags = vi.fn();
 const createJobContext = vi.fn((input: unknown) => input);
 
 vi.mock("@marctco/db", () => ({
@@ -16,6 +17,7 @@ vi.mock("@marctco/db", () => ({
   recordLeadSubmission,
   findOpenOpportunitiesOfPerson,
   applyIntakePlan,
+  readWorkspaceFeatureFlags,
   createJobContext
 }));
 
@@ -58,6 +60,11 @@ describe("processIntegrationEventJob", () => {
     applyIntakePlan
       .mockReset()
       .mockResolvedValue({ kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() });
+    readWorkspaceFeatureFlags.mockReset().mockResolvedValue({
+      auto_primeiro_contato: false,
+      score_cabimento_llm: false,
+      resumo_handoff_llm: false
+    });
     createJobContext.mockClear();
   });
 
@@ -139,6 +146,43 @@ describe("processIntegrationEventJob", () => {
       arrived_at: RECEIVED_AT,
       missing_phone: false
     });
+  });
+
+  it("keeps the post-creation hook inert while auto first contact is disabled", async () => {
+    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
+
+    expect(readWorkspaceFeatureFlags).toHaveBeenCalledWith(
+      expect.objectContaining({ workspace_id })
+    );
+    expect(processed.post_creation_effects).toEqual([]);
+  });
+
+  it("emits one server-side effect only after a new Opportunity was actually created", async () => {
+    readWorkspaceFeatureFlags.mockResolvedValue({
+      auto_primeiro_contato: true,
+      score_cabimento_llm: false,
+      resumo_handoff_llm: false
+    });
+
+    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
+
+    expect(processed.post_creation_effects).toEqual([
+      { kind: "AUTO_FIRST_CONTACT", opportunity_id }
+    ]);
+  });
+
+  it("does not emit an effect when a concurrent worker reused the existing Opportunity", async () => {
+    readWorkspaceFeatureFlags.mockResolvedValue({
+      auto_primeiro_contato: true,
+      score_cabimento_llm: false,
+      resumo_handoff_llm: false
+    });
+    applyIntakePlan.mockResolvedValue({ kind: "RETRANSMISSION", opportunity_id });
+
+    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
+
+    expect(processed.post_creation_effects).toEqual([]);
+    expect(readWorkspaceFeatureFlags).not.toHaveBeenCalled();
   });
 
   it("routes by the connection's target pipeline when it declares one", async () => {
@@ -254,6 +298,7 @@ describe("processIntegrationEventJob", () => {
     expect(Object.keys(processed).sort()).toEqual([
       "intake_plan_kind",
       "integration_event_id",
+      "post_creation_effects",
       "workspace_id"
     ]);
     const serialized = JSON.stringify(processed);

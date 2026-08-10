@@ -183,17 +183,24 @@ describe("decideIntake: the unambiguous lead", () => {
 });
 
 describe("decideIntake: arrived_at is an argument, and the clock is never read inside", () => {
-  it("stamps the instant the caller passed", () => {
-    const plan = expectPlan(decide(), "NEW_OPPORTUNITY");
-    expect(plan.arrived_at).toEqual(RECEIVED_AT);
-  });
-
-  it("takes the release instant for a lead completed out of quarantine", () => {
+  it("shows direct receipt and quarantine release side by side as the same argument", () => {
+    const direct = expectPlan(decide({ now: RECEIVED_AT }), "NEW_OPPORTUNITY");
     // The very same function with a different `now`. The divergent arrived_at
     // of ADR-0007 §Quarentena stops being an exception hidden inside a second
     // path and becomes one argument with another value (ADR-0017).
-    const plan = expectPlan(decide({ now: RELEASED_AT }), "NEW_OPPORTUNITY");
-    expect(plan.arrived_at).toEqual(RELEASED_AT);
+    const released = expectPlan(
+      decide({
+        submission: {
+          kind: "DUPLICATE",
+          lead_submission_id: SUBMISSION_ID,
+          opportunity_id: null
+        },
+        now: RELEASED_AT
+      }),
+      "NEW_OPPORTUNITY"
+    );
+
+    expect([direct.arrived_at, released.arrived_at]).toEqual([RECEIVED_AT, RELEASED_AT]);
   });
 
   it("is deterministic: the same input decided twice gives the same instant", () => {
@@ -296,6 +303,25 @@ describe("decideIntake: no contact at all", () => {
     });
 
     expect(plan.kind).toBe("QUARANTINE");
+  });
+
+  it("cannot turn an empty release into a Pessoa or an Opportunity", () => {
+    const plan = expectPlan(
+      decide({
+        normalized: normalized({ name: "Ainda sem contato" }),
+        submission: {
+          kind: "DUPLICATE",
+          lead_submission_id: SUBMISSION_ID,
+          opportunity_id: null
+        },
+        person: { kind: "NO_CONTACT" },
+        now: RELEASED_AT
+      }),
+      "QUARANTINE"
+    );
+
+    expect(plan).not.toHaveProperty("person");
+    expect(plan).not.toHaveProperty("arrived_at");
   });
 });
 

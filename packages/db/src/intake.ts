@@ -254,12 +254,35 @@ export async function applyIntakePlan(
         // Points at the new transmission, counts it, and stops. There is no
         // field here for stage, responsible, status or arrived_at — which is
         // exactly why a resend cannot rewind the funnel.
-        await transaction.$executeRaw`
+        const updated = await transaction.$executeRaw`
           UPDATE lead_submissions
           SET last_integration_event_id = ${plan.integration_event_id}::uuid,
               transmission_count = transmission_count + 1,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ${plan.lead_submission_id}::uuid
+            AND opportunity_id = ${plan.opportunity_id}::uuid
+        `;
+        if (updated === 0) {
+          throw new Error("The retransmitted submission is not visible in this workspace");
+        }
+        // The event's `received_at`, rather than worker wall-clock time, is the
+        // fact the timeline records. A delayed queue must not make an old
+        // resend look recent.
+        await transaction.$executeRaw`
+          INSERT INTO opportunity_timeline_events (
+            workspace_id, opportunity_id, type, lead_submission_id,
+            integration_event_id, occurred_at
+          )
+          SELECT
+            ${context.workspace_id}::uuid,
+            ${plan.opportunity_id}::uuid,
+            'RETRANSMISSION_RECEIVED',
+            ${plan.lead_submission_id}::uuid,
+            event.id,
+            event.received_at
+          FROM integration_events AS event
+          WHERE event.id = ${plan.integration_event_id}::uuid
+          ON CONFLICT (workspace_id, type, integration_event_id) DO NOTHING
         `;
         await settleEvent(transaction, plan.integration_event_id, "PROCESSED");
         return { kind: "RETRANSMISSION", opportunity_id: plan.opportunity_id } as const;
@@ -421,6 +444,29 @@ async function writeReview(
   const related_opportunity_id =
     review.type === "POSSIBLE_DUPLICATE" ? review.related_opportunity_id : null;
 
+  if (review.type === "POSSIBLE_DUPLICATE") {
+    const inserted = await transaction.$executeRaw`
+      INSERT INTO intake_reviews (
+        workspace_id, opportunity_id, type, candidate_person_ids, related_opportunity_id
+      )
+      SELECT
+        ${workspace_id}::uuid,
+        ${opportunity_id}::uuid,
+        'POSSIBLE_DUPLICATE',
+        '{}'::uuid[],
+        related.id
+      FROM opportunities AS related
+      WHERE related.id = ${related_opportunity_id}::uuid
+        AND related.workspace_id = ${workspace_id}::uuid
+        AND related.status = 'OPEN'
+        AND related.merged_into_opportunity_id IS NULL
+    `;
+    if (inserted === 0) {
+      throw new Error("The related Opportunity stopped being active; the intake will be retried");
+    }
+    return;
+  }
+
   await transaction.$executeRaw`
     INSERT INTO intake_reviews (
       workspace_id, opportunity_id, type, candidate_person_ids, related_opportunity_id
@@ -428,9 +474,9 @@ async function writeReview(
     VALUES (
       ${workspace_id}::uuid,
       ${opportunity_id}::uuid,
-      ${review.type}::intake_review_type,
+      'IDENTITY_CONFLICT',
       ${candidate_person_ids}::uuid[],
-      ${related_opportunity_id}::uuid
+      NULL
     )
   `;
 }

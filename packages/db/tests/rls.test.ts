@@ -40,6 +40,8 @@ const integration_event_a = randomUUID();
 const integration_event_b = randomUUID();
 const opportunity_a = randomUUID();
 const opportunity_b = randomUUID();
+const lead_submission_a = randomUUID();
+const lead_submission_b = randomUUID();
 // Workspace A's card lives on a pipeline of its own, because the pipeline
 // operations below delete `pipeline_a` and a pipeline holding cards is not
 // deletable — `opportunities.pipeline_id` is RESTRICT, so a funnel cannot be
@@ -84,6 +86,12 @@ const isolation_cases = [
     write_sql: `INSERT INTO opportunities (id, workspace_id, person_id, pipeline_id, stage_id, area, arrived_at, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', '${pipeline_b}', '${stage_b_entry}', 'COMMERCIAL', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   },
   {
+    table_name: "opportunity_timeline_events",
+    read_sql:
+      "SELECT workspace_id AS tenant_id FROM opportunity_timeline_events ORDER BY workspace_id",
+    write_sql: `INSERT INTO opportunity_timeline_events (id, workspace_id, opportunity_id, type, lead_submission_id, integration_event_id, occurred_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'RETRANSMISSION_RECEIVED', '${lead_submission_b}', '${integration_event_b}', CURRENT_TIMESTAMP)`
+  },
+  {
     table_name: "person_emails",
     read_sql: "SELECT workspace_id AS tenant_id FROM person_emails ORDER BY workspace_id",
     write_sql: `INSERT INTO person_emails (id, workspace_id, person_id, email) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', 'cross@workspace.com')`
@@ -107,6 +115,11 @@ const isolation_cases = [
     table_name: "stages",
     read_sql: "SELECT workspace_id AS tenant_id FROM stages ORDER BY workspace_id",
     write_sql: `INSERT INTO stages (id, workspace_id, pipeline_id, label, position, role, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${pipeline_b}', 'Cross-workspace', 3, 'NORMAL', CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "workspace_flags",
+    read_sql: "SELECT workspace_id AS tenant_id FROM workspace_flags ORDER BY workspace_id",
+    write_sql: `INSERT INTO workspace_flags (workspace_id, key) VALUES ('${workspace_b}', 'score_cabimento_llm')`
   },
   {
     table_name: "workspace_members",
@@ -290,6 +303,7 @@ beforeAll(async () => {
     await transaction.leadSubmission.createMany({
       data: [
         {
+          id: lead_submission_a,
           workspace_id: workspace_a,
           source: "META_LEAD_ADS",
           external_lead_id: "rls-a",
@@ -297,6 +311,7 @@ beforeAll(async () => {
           opportunity_id: opportunity_a
         },
         {
+          id: lead_submission_b,
           workspace_id: workspace_b,
           source: "META_LEAD_ADS",
           external_lead_id: "rls-b",
@@ -319,6 +334,32 @@ beforeAll(async () => {
           type: "IDENTITY_CONFLICT",
           candidate_person_ids: [person_b]
         }
+      ]
+    });
+    await transaction.opportunityTimelineEvent.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "RETRANSMISSION_RECEIVED",
+          lead_submission_id: lead_submission_a,
+          integration_event_id: integration_event_a,
+          occurred_at: new Date()
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: opportunity_b,
+          type: "RETRANSMISSION_RECEIVED",
+          lead_submission_id: lead_submission_b,
+          integration_event_id: integration_event_b,
+          occurred_at: new Date()
+        }
+      ]
+    });
+    await transaction.workspaceFlag.createMany({
+      data: [
+        { workspace_id: workspace_a, key: "auto_primeiro_contato" },
+        { workspace_id: workspace_b, key: "auto_primeiro_contato" }
       ]
     });
   });
@@ -365,11 +406,13 @@ describe("Seam 3: RLS and schema invariants", () => {
       "integration_events",
       "lead_submissions",
       "opportunities",
+      "opportunity_timeline_events",
       "person_emails",
       "person_phones",
       "persons",
       "pipelines",
       "stages",
+      "workspace_flags",
       "workspace_members",
       "workspaces"
     ]);
@@ -400,7 +443,7 @@ describe("Seam 3: RLS and schema invariants", () => {
           await transaction.$executeRawUnsafe(`SET LOCAL app.workspace_id = '${workspace_a}'`);
           await transaction.$executeRawUnsafe(write_sql);
         })
-      ).rejects.toThrow(/row-level security policy/i);
+      ).rejects.toThrow(/permission denied|row-level security policy/i);
     }
   );
 
@@ -473,6 +516,16 @@ describe("Seam 3: RLS and schema invariants", () => {
       ORDER BY tables.tablename
     `;
     expect(rows.every((row) => row.indexed)).toBe(true);
+  });
+
+  it("indexes only unresolved Opportunity reviews for marker lookups", async () => {
+    const rows = await client.$queryRaw<Array<{ predicate: string | null }>>`
+      SELECT pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      WHERE index.indexrelid =
+        'public.intake_reviews_workspace_id_opportunity_id_idx'::regclass
+    `;
+    expect(rows).toEqual([{ predicate: "(resolution IS NULL)" }]);
   });
 
   it("keeps the private schema unreachable to the worker role", async () => {

@@ -115,23 +115,56 @@ enum IntakeReviewType {
   @@map("intake_review_type")
 }
 
+/// Audit-safe outcomes of a possible-duplicate review. Identity-conflict
+/// resolutions are a separate decision and cannot be stored in this enum.
+enum PossibleDuplicateResolution {
+  NEW_FINANCING
+  SAME_FINANCING
+  INVALID_OR_SPAM
+
+  @@map("possible_duplicate_resolution")
+}
+
+/// The two ingestion facts this slice must expose on an Opportunity timeline.
+/// Later channel/activity phases add their own event kinds deliberately.
+enum OpportunityTimelineEventType {
+  RETRANSMISSION_RECEIVED
+  SUBMISSION_REENTERED
+
+  @@map("opportunity_timeline_event_type")
+}
+
 model Workspace {
-  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug                    String                  @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                    String
-  timezone                String                  @default("America/Sao_Paulo")
-  created_at              DateTime                @default(now()) @db.Timestamptz(6)
-  updated_at              DateTime                @updatedAt @db.Timestamptz(6)
-  members                 WorkspaceMember[]
-  pipelines               Pipeline[]
-  integration_connections IntegrationConnection[]
-  integration_events      IntegrationEvent[]
-  persons                 Person[]
-  lead_submissions        LeadSubmission[]
-  opportunities           Opportunity[]
-  intake_reviews          IntakeReview[]
+  id                          String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                        String                     @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                        String
+  timezone                    String                     @default("America/Sao_Paulo")
+  created_at                  DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime                   @updatedAt @db.Timestamptz(6)
+  members                     WorkspaceMember[]
+  pipelines                   Pipeline[]
+  integration_connections     IntegrationConnection[]
+  integration_events          IntegrationEvent[]
+  persons                     Person[]
+  lead_submissions            LeadSubmission[]
+  opportunities               Opportunity[]
+  intake_reviews              IntakeReview[]
+  opportunity_timeline_events OpportunityTimelineEvent[]
+  feature_flags               WorkspaceFlag[]
 
   @@map("workspaces")
+}
+
+/// A row is a commercial/technical release for one paid-per-use capability.
+/// No row means OFF; the catalog itself stays in packages/domain (ADR-0004).
+model WorkspaceFlag {
+  workspace_id String    @db.Uuid
+  key          String
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  workspace    Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@id([workspace_id, key])
+  @@map("workspace_flags")
 }
 
 model WorkspaceMember {
@@ -186,21 +219,22 @@ model IntegrationConnection {
 }
 
 model IntegrationEvent {
-  id                        String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id              String                         @db.Uuid
-  integration_connection_id String                         @db.Uuid
+  id                          String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id                String                         @db.Uuid
+  integration_connection_id   String                         @db.Uuid
   /// The single copy of the payload. Nullable, and null can only ever mean
   /// expired: it is written on receipt, before the 200 (ADR-0014).
-  raw                       Json?                          @db.JsonB
-  status                    IntegrationEventStatus         @default(RECEIVED)
-  dispatch_status           IntegrationEventDispatchStatus @default(PENDING)
-  received_at               DateTime                       @default(now()) @db.Timestamptz(6)
-  dispatched_at             DateTime?                      @db.Timestamptz(6)
-  processed_at              DateTime?                      @db.Timestamptz(6)
-  updated_at                DateTime                       @updatedAt @db.Timestamptz(6)
-  workspace                 Workspace                      @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  integration_connection    IntegrationConnection          @relation(fields: [workspace_id, integration_connection_id], references: [workspace_id, id], onDelete: Restrict)
-  lead_submissions          LeadSubmission[]
+  raw                         Json?                          @db.JsonB
+  status                      IntegrationEventStatus         @default(RECEIVED)
+  dispatch_status             IntegrationEventDispatchStatus @default(PENDING)
+  received_at                 DateTime                       @default(now()) @db.Timestamptz(6)
+  dispatched_at               DateTime?                      @db.Timestamptz(6)
+  processed_at                DateTime?                      @db.Timestamptz(6)
+  updated_at                  DateTime                       @updatedAt @db.Timestamptz(6)
+  workspace                   Workspace                      @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  integration_connection      IntegrationConnection          @relation(fields: [workspace_id, integration_connection_id], references: [workspace_id, id], onDelete: Restrict)
+  lead_submissions            LeadSubmission[]
+  opportunity_timeline_events OpportunityTimelineEvent[]
 
   @@unique([workspace_id, id])
   @@index([workspace_id])
@@ -217,13 +251,13 @@ model IntegrationEvent {
 /// different Pessoas create a new one rather than fusing, so two rows may carry
 /// the same CPF while a human has not resolved the conflict yet (ADR-0007).
 model Person {
-  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id String  @db.Uuid
-  name         String?
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id          String        @db.Uuid
+  name                  String?
   /// Digits only, check digits verified before it is written. `text` and not
   /// `char(11)`: blank padding would make a lookup key that no longer equals
   /// itself once it leaves the database.
-  cpf          String?
+  cpf                   String?
   /// The tombstone a non-destructive merge leaves behind. It does exactly two
   /// things — take the row out of active views and preserve the trail — and
   /// never a third: it never redirects a read (ADR-0007).
@@ -310,30 +344,32 @@ model Stage {
 /// `IntegrationEvent`, and the submission points at the most recent
 /// transmission instead of repeating the content (ADR-0014).
 model LeadSubmission {
-  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id String     @db.Uuid
-  source       LeadSource
+  id                        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id              String                     @db.Uuid
+  source                    LeadSource
   /// `NOT NULL` always: in Postgres `NULL` does not collide with `NULL`, so
   /// without a value the constraint would deduplicate nothing. When the origin
   /// supplies none, the connector uses the `IntegrationEvent.id`.
-  external_lead_id String @db.VarChar(255)
+  external_lead_id          String                     @db.VarChar(255)
   /// Truth about the origin. Not the Opportunity's `arrived_at`, which is the
   /// release instant for a lead that went through quarantine.
-  received_at               DateTime         @default(now()) @db.Timestamptz(6)
-  last_integration_event_id String           @db.Uuid
+  received_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  last_integration_event_id String                     @db.Uuid
   /// How many times this submission has arrived. A resend increments it and
   /// touches nothing else in the funnel.
-  transmission_count        Int              @default(1)
+  transmission_count        Int                        @default(1)
   /// Null while the submission produced no card — quarantine, or a plan that
   /// has not been applied yet.
-  opportunity_id            String?          @db.Uuid
-  created_at                DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at                DateTime         @updatedAt @db.Timestamptz(6)
-  workspace                 Workspace        @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  last_integration_event    IntegrationEvent @relation(fields: [workspace_id, last_integration_event_id], references: [workspace_id, id], onDelete: Restrict)
-  opportunity               Opportunity?     @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  opportunity_id            String?                    @db.Uuid
+  created_at                DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime                   @updatedAt @db.Timestamptz(6)
+  workspace                 Workspace                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  last_integration_event    IntegrationEvent           @relation(fields: [workspace_id, last_integration_event_id], references: [workspace_id, id], onDelete: Restrict)
+  opportunity               Opportunity?               @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  timeline_events           OpportunityTimelineEvent[]
 
   @@unique([workspace_id, source, external_lead_id])
+  @@unique([workspace_id, id])
   @@index([workspace_id])
   @@index([workspace_id, opportunity_id])
   @@index([workspace_id, last_integration_event_id])
@@ -343,45 +379,46 @@ model LeadSubmission {
 /// The business tied to a Person, in a stage of a pipeline. On the commercial
 /// UI it is called Lead — never `Deal`, never a `Lead` model (ADR-0005).
 model Opportunity {
-  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id String            @db.Uuid
-  person_id    String            @db.Uuid
-  pipeline_id  String            @db.Uuid
-  stage_id     String            @db.Uuid
-  area         OpportunityArea
-  status       OpportunityStatus @default(OPEN)
+  id                         String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id               String                     @db.Uuid
+  person_id                  String                     @db.Uuid
+  pipeline_id                String                     @db.Uuid
+  stage_id                   String                     @db.Uuid
+  area                       OpportunityArea
+  status                     OpportunityStatus          @default(OPEN)
   /// When the Opportunity comes to exist and the attendance clock may start.
   /// Written from the day ingestion exists, though the SLA screen is Fase 3:
   /// this instant is not reconstructible later (ADR-0007 §Mecanismo 2).
-  arrived_at DateTime @db.Timestamptz(6)
+  arrived_at                 DateTime                   @db.Timestamptz(6)
   /// Born null — assignment is Fase 2.
-  assigned_user_id String? @db.Uuid
+  assigned_user_id           String?                    @db.Uuid
   /// Means one thing only: no WhatsApp and no phone call. Not a generic
   /// "something is missing" label (ADR-0007 §Quarentena).
-  missing_phone Boolean @default(false)
+  missing_phone              Boolean                    @default(false)
   /// Classification of the credit contract that motivated the contact. Never
   /// selects a pipeline, never identifies a Pessoa.
-  financing_type        FinancingType?
-  financial_institution String?
+  financing_type             FinancingType?
+  financial_institution      String?
   /// Unconstrained `numeric`: the normalized decimal is stored exactly as the
   /// domain produced it, and a mis-mapped field carrying an absurd number can
   /// never overflow a column and cost the lead the whole write.
-  installment_amount Decimal? @db.Decimal
+  installment_amount         Decimal?                   @db.Decimal
   /// The tombstone of a `SAME_FINANCING` resolution (ticket 11). It takes the
   /// row out of active views and preserves the trail, and never redirects a
   /// read.
-  merged_into_opportunity_id String?          @db.Uuid
-  created_at                 DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at                 DateTime         @updatedAt @db.Timestamptz(6)
-  workspace                  Workspace        @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  person                     Person           @relation(fields: [workspace_id, person_id], references: [workspace_id, id], onDelete: Cascade)
-  pipeline                   Pipeline         @relation(fields: [workspace_id, pipeline_id], references: [workspace_id, id], onDelete: Restrict)
-  stage                      Stage            @relation(fields: [workspace_id, stage_id], references: [workspace_id, id], onDelete: Restrict)
-  merged_into                Opportunity?     @relation("OpportunityMerge", fields: [workspace_id, merged_into_opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
-  absorbed                   Opportunity[]    @relation("OpportunityMerge")
+  merged_into_opportunity_id String?                    @db.Uuid
+  created_at                 DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime                   @updatedAt @db.Timestamptz(6)
+  workspace                  Workspace                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  person                     Person                     @relation(fields: [workspace_id, person_id], references: [workspace_id, id], onDelete: Cascade)
+  pipeline                   Pipeline                   @relation(fields: [workspace_id, pipeline_id], references: [workspace_id, id], onDelete: Restrict)
+  stage                      Stage                      @relation(fields: [workspace_id, stage_id], references: [workspace_id, id], onDelete: Restrict)
+  merged_into                Opportunity?               @relation("OpportunityMerge", fields: [workspace_id, merged_into_opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  absorbed                   Opportunity[]              @relation("OpportunityMerge")
   submissions                LeadSubmission[]
-  reviews                    IntakeReview[]   @relation("IntakeReviewOpportunity")
-  related_reviews            IntakeReview[]   @relation("IntakeReviewRelatedOpportunity")
+  reviews                    IntakeReview[]             @relation("IntakeReviewOpportunity")
+  related_reviews            IntakeReview[]             @relation("IntakeReviewRelatedOpportunity")
+  timeline_events            OpportunityTimelineEvent[]
 
   @@unique([workspace_id, id])
   @@index([workspace_id])
@@ -394,22 +431,51 @@ model Opportunity {
 /// A pendency hung on an Opportunity that already exists and can already be
 /// attended. It signals, it never blocks, and it is always resolvable.
 model IntakeReview {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id   String           @db.Uuid
-  opportunity_id String           @db.Uuid
-  type           IntakeReviewType
+  id                     String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id           String                       @db.Uuid
+  opportunity_id         String                       @db.Uuid
+  type                   IntakeReviewType
   /// The Pessoas the submission's keys pointed at, for `IDENTITY_CONFLICT`.
   /// Empty for the other type — the database refuses the mismatch.
-  candidate_person_ids String[] @default([]) @db.Uuid
+  candidate_person_ids   String[]                     @default([]) @db.Uuid
   /// The other open Opportunity of the same Pessoa, for `POSSIBLE_DUPLICATE`.
-  related_opportunity_id String?     @db.Uuid
-  created_at             DateTime    @default(now()) @db.Timestamptz(6)
-  workspace              Workspace   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  opportunity            Opportunity @relation("IntakeReviewOpportunity", fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: Cascade)
-  related_opportunity Opportunity? @relation("IntakeReviewRelatedOpportunity", fields: [workspace_id, related_opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  related_opportunity_id String?                      @db.Uuid
+  /// Null while pending. The audit columns below are all-null or all-present;
+  /// the database refuses a half-resolved review.
+  resolution             PossibleDuplicateResolution?
+  resolved_by_user_id    String?                      @db.Uuid
+  resolved_at            DateTime?                    @db.Timestamptz(6)
+  resolution_reason      String?
+  created_at             DateTime                     @default(now()) @db.Timestamptz(6)
+  workspace              Workspace                    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  opportunity            Opportunity                  @relation("IntakeReviewOpportunity", fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: Cascade)
+  related_opportunity    Opportunity?                 @relation("IntakeReviewRelatedOpportunity", fields: [workspace_id, related_opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([workspace_id])
-  @@index([workspace_id, opportunity_id])
   @@index([workspace_id, type])
   @@map("intake_reviews")
+}
+
+/// The minimum durable timeline needed by ingestion. A resend and a
+/// submission absorbed as re-entry are facts, not mutable Opportunity fields.
+model OpportunityTimelineEvent {
+  id                   String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id         String                       @db.Uuid
+  opportunity_id       String                       @db.Uuid
+  type                 OpportunityTimelineEventType
+  lead_submission_id   String                       @db.Uuid
+  integration_event_id String                       @db.Uuid
+  occurred_at          DateTime                     @db.Timestamptz(6)
+  created_at           DateTime                     @default(now()) @db.Timestamptz(6)
+  workspace            Workspace                    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  opportunity          Opportunity                  @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  lead_submission      LeadSubmission               @relation(fields: [workspace_id, lead_submission_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  integration_event    IntegrationEvent             @relation(fields: [workspace_id, integration_event_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([workspace_id, type, integration_event_id])
+  @@index([workspace_id])
+  @@index([workspace_id, opportunity_id, occurred_at(sort: Desc), id(sort: Desc)])
+  @@index([workspace_id, lead_submission_id])
+  @@index([workspace_id, integration_event_id])
+  @@map("opportunity_timeline_events")
 }

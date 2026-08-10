@@ -34,6 +34,11 @@ export {
 } from "./provision-workspace.js";
 export { findPersonCandidates, type PersonCandidate } from "./person.js";
 export {
+  FeatureDisabledError,
+  assertWorkspaceFeatureEnabled,
+  readWorkspaceFeatureFlags
+} from "./feature-flags.js";
+export {
   applyIntakePlan,
   findOpenOpportunitiesOfPerson,
   recordLeadSubmission,
@@ -41,6 +46,11 @@ export {
   type AppliedIntakePlan,
   type RecordLeadSubmissionInput
 } from "./intake.js";
+export {
+  resolveIntakeReview,
+  type ResolveIntakeReviewInput,
+  type ResolvedIntakeReview
+} from "./intake-review.js";
 export {
   claimPendingIntegrationEvents,
   listIntegrationEvents,

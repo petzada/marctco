@@ -15,6 +15,7 @@
  * regression `@ts-expect-error` below is watching for.
  */
 import { createJobContext, type UserContext } from "../src/access-context.js";
+import { resolveIntakeReview } from "../src/intake-review.js";
 
 function representativeUserOnlyOperation(context: UserContext): void {
   // A real operation would open a scoped transaction here. The type shape
@@ -36,6 +37,14 @@ representativeUserOnlyOperation(userContext);
 // accept only UserContext. Losing this error means listLeads(jobCtx) would
 // start compiling, which is the regression ADR-0016 exists to prevent.
 representativeUserOnlyOperation(jobContext);
+
+// @ts-expect-error - resolving a human review is never a worker operation.
+void resolveIntakeReview(jobContext, {
+  review_id: "44444444-4444-4444-8444-444444444444",
+  resolution: "NEW_FINANCING",
+  reason: "Contratos distintos",
+  resolved_at: new Date()
+});
 
 // @ts-expect-error - AccessContext has "two constructors and no literal"
 // (ADR-0016): the branded field that makes UserContext/JobContext nominal

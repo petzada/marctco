@@ -18,6 +18,7 @@ describe("createUserContextFromResolvedMembership", () => {
       expect(context.workspace_id).toBe(workspace_id);
       expect(context.user_id).toBe(user_id);
       expect(context.role).toBe(role);
+      expect("feature_flags" in context).toBe(false);
       expect(isUserContext(context)).toBe(true);
       expect(isJobContext(context)).toBe(false);
     }
@@ -70,6 +71,7 @@ describe("createJobContext", () => {
     expect(context.integration_event_id).toBe(integration_event_id);
     expect("role" in context).toBe(false);
     expect("user_id" in context).toBe(false);
+    expect("feature_flags" in context).toBe(false);
     expect(isJobContext(context)).toBe(true);
     expect(isUserContext(context)).toBe(false);
   });
