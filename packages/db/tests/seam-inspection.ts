@@ -75,6 +75,7 @@ export async function inspectCards(workspace_id: string): Promise<InspectedCard[
     where: { workspace_id },
     include: {
       reviews: { orderBy: { type: "asc" } },
+      related_reviews: { orderBy: { type: "asc" } },
       person: { include: { phones: true, emails: true } }
     },
     orderBy: [{ arrived_at: "asc" }, { created_at: "asc" }]
@@ -91,7 +92,7 @@ export async function inspectCards(workspace_id: string): Promise<InspectedCard[
     assigned_user_id: row.assigned_user_id,
     missing_phone: row.missing_phone,
     merged_into_opportunity_id: row.merged_into_opportunity_id,
-    reviews: row.reviews.map((review) => ({
+    reviews: [...row.reviews, ...row.related_reviews].map((review) => ({
       type: review.type,
       candidate_person_ids: review.candidate_person_ids,
       related_opportunity_id: review.related_opportunity_id
@@ -125,6 +126,32 @@ export async function inspectSubmissions(
       ...(external_lead_id === undefined ? {} : { external_lead_id })
     },
     orderBy: { received_at: "asc" }
+  });
+}
+
+export interface InspectedTimelineEvent {
+  readonly type: "RETRANSMISSION_RECEIVED" | "SUBMISSION_REENTERED";
+  readonly opportunity_id: string;
+  readonly lead_submission_id: string;
+  readonly integration_event_id: string;
+  readonly occurred_at: Date;
+}
+
+/** Immutable ingestion facts attached to an Opportunity, oldest first. */
+export async function inspectTimeline(
+  workspace_id: string,
+  opportunity_id: string
+): Promise<InspectedTimelineEvent[]> {
+  return inspector().opportunityTimelineEvent.findMany({
+    where: { workspace_id, opportunity_id },
+    select: {
+      type: true,
+      opportunity_id: true,
+      lead_submission_id: true,
+      integration_event_id: true,
+      occurred_at: true
+    },
+    orderBy: [{ occurred_at: "asc" }, { id: "asc" }]
   });
 }
 

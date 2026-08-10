@@ -79,6 +79,13 @@ export {
   type MarkerReview
 } from "./markers.js";
 export {
+  POSSIBLE_DUPLICATE_RESOLUTIONS,
+  planPossibleDuplicateResolution,
+  type PlanPossibleDuplicateResolutionInput,
+  type PossibleDuplicateResolution,
+  type PossibleDuplicateResolutionPlan
+} from "./intake/intake-review-resolution.js";
+export {
   PIPELINE_TYPES,
   STAGE_ROLES,
   assertPipelineDefinition,

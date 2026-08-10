@@ -625,6 +625,20 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
       transmission_count: 2,
       opportunity_id: applied.opportunity_id
     });
+    await expect(
+      seeder.opportunityTimelineEvent.findMany({
+        where: { integration_event_id: resent.event_id }
+      })
+    ).resolves.toMatchObject([
+      {
+        workspace_id: workspace,
+        opportunity_id: applied.opportunity_id,
+        type: "RETRANSMISSION_RECEIVED",
+        lead_submission_id: first.lead_submission_id,
+        integration_event_id: resent.event_id,
+        occurred_at: RECEIVED_AT
+      }
+    ]);
   });
 
   it("marks the event quarantined and creates no Pessoa and no card", async () => {

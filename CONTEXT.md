@@ -130,6 +130,10 @@ _Avoid_: Roteiro espalhado pelo worker, plano com campos opcionais que alguém p
 Payload bruto recebido de uma origem, persistido transacionalmente como outbox antes da resposta HTTP e reprocessável. Um dispatcher independente o entrega ao BullMQ quando o Redis estiver disponível. É a **única** cópia do payload; o EnvioLead aponta para a transmissão mais recente em vez de repetir o conteúdo.
 _Avoid_: Confundir com EnvioLead (que já é lead interpretado), publicar no Redis antes do commit, descartar o bruto antes de processar, guardar o mesmo payload em dois lugares
 
+**Evento da linha do tempo da Oportunidade**:
+Fato imutável que aconteceu com uma Oportunidade e precisa continuar visível depois de reprocessamento ou mesclagem. Nesta fatia há somente reenvio recebido e EnvioLead absorvido como reentrada; atividade, mensagem e documento entram nas fases que os possuem. Quando uma Oportunidade é mesclada, seus eventos são transferidos para a canônica — nenhuma leitura segue a lápide.
+_Avoid_: Reconstituir evento a partir do estado atual do card, gravar texto de UI no domínio, anexar evento novo à Oportunidade absorvida, transformar a linha do tempo mínima em model genérico das fases futuras
+
 **Expiração do payload**:
 Passados 90 dias, o conteúdo bruto do Evento de integração é apagado e a linha permanece: some o dado pessoal, fica o fato de que aquele lead chegou, de onde, quando e no que deu. Evento em quarentena não expira enquanto estiver em quarentena, porque é justamente o payload que o gestor precisa ler para completar.
 _Avoid_: Apagar a linha do evento, expirar payload de quarentena, guardar payload sem prazo, confundir bruto expirado com bruto que nunca existiu

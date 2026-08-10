@@ -42,6 +42,11 @@ export {
   type RecordLeadSubmissionInput
 } from "./intake.js";
 export {
+  resolveIntakeReview,
+  type ResolveIntakeReviewInput,
+  type ResolvedIntakeReview
+} from "./intake-review.js";
+export {
   claimPendingIntegrationEvents,
   listIntegrationEvents,
   markIntegrationEventDispatched,

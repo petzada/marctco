@@ -40,6 +40,8 @@ const integration_event_a = randomUUID();
 const integration_event_b = randomUUID();
 const opportunity_a = randomUUID();
 const opportunity_b = randomUUID();
+const lead_submission_a = randomUUID();
+const lead_submission_b = randomUUID();
 // Workspace A's card lives on a pipeline of its own, because the pipeline
 // operations below delete `pipeline_a` and a pipeline holding cards is not
 // deletable — `opportunities.pipeline_id` is RESTRICT, so a funnel cannot be
@@ -82,6 +84,12 @@ const isolation_cases = [
     table_name: "opportunities",
     read_sql: "SELECT workspace_id AS tenant_id FROM opportunities ORDER BY workspace_id",
     write_sql: `INSERT INTO opportunities (id, workspace_id, person_id, pipeline_id, stage_id, area, arrived_at, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', '${pipeline_b}', '${stage_b_entry}', 'COMMERCIAL', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "opportunity_timeline_events",
+    read_sql:
+      "SELECT workspace_id AS tenant_id FROM opportunity_timeline_events ORDER BY workspace_id",
+    write_sql: `INSERT INTO opportunity_timeline_events (id, workspace_id, opportunity_id, type, lead_submission_id, integration_event_id, occurred_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'RETRANSMISSION_RECEIVED', '${lead_submission_b}', '${integration_event_b}', CURRENT_TIMESTAMP)`
   },
   {
     table_name: "person_emails",
@@ -290,6 +298,7 @@ beforeAll(async () => {
     await transaction.leadSubmission.createMany({
       data: [
         {
+          id: lead_submission_a,
           workspace_id: workspace_a,
           source: "META_LEAD_ADS",
           external_lead_id: "rls-a",
@@ -297,6 +306,7 @@ beforeAll(async () => {
           opportunity_id: opportunity_a
         },
         {
+          id: lead_submission_b,
           workspace_id: workspace_b,
           source: "META_LEAD_ADS",
           external_lead_id: "rls-b",
@@ -318,6 +328,26 @@ beforeAll(async () => {
           opportunity_id: opportunity_b,
           type: "IDENTITY_CONFLICT",
           candidate_person_ids: [person_b]
+        }
+      ]
+    });
+    await transaction.opportunityTimelineEvent.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "RETRANSMISSION_RECEIVED",
+          lead_submission_id: lead_submission_a,
+          integration_event_id: integration_event_a,
+          occurred_at: new Date()
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: opportunity_b,
+          type: "RETRANSMISSION_RECEIVED",
+          lead_submission_id: lead_submission_b,
+          integration_event_id: integration_event_b,
+          occurred_at: new Date()
         }
       ]
     });
@@ -365,6 +395,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       "integration_events",
       "lead_submissions",
       "opportunities",
+      "opportunity_timeline_events",
       "person_emails",
       "person_phones",
       "persons",

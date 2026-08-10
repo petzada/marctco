@@ -21,7 +21,8 @@ import {
   closeSeamInspection,
   inspectCards,
   inspectDefaultEntryStage,
-  inspectSubmissions
+  inspectSubmissions,
+  inspectTimeline
 } from "../packages/db/tests/seam-inspection";
 
 // Everything here runs through the same named operations the application uses,
@@ -479,6 +480,7 @@ describe("Seam 2: the tracer bullet closes — a submission becomes a Pessoa and
     if (!before) {
       throw new Error("expected the raced card");
     }
+    const timeline_before = await inspectTimeline(carrier.workspace_id, before.id);
 
     await deliver({ external_lead_id: "tracer-race", name: "Corrida", phone: "11955554444" });
 
@@ -487,6 +489,14 @@ describe("Seam 2: the tracer bullet closes — a submission becomes a Pessoa and
     const cards = await inspectCards(carrier.workspace_id);
     expect(cards.find((card) => card.id === before.id)).toEqual(before);
     expect(cards).toHaveLength(5);
+    const timeline = await inspectTimeline(carrier.workspace_id, before.id);
+    expect(timeline).toHaveLength(timeline_before.length + 1);
+    expect(timeline.at(-1)).toMatchObject({
+      type: "RETRANSMISSION_RECEIVED",
+      opportunity_id: before.id,
+      lead_submission_id: submission?.id,
+      integration_event_id: submission?.last_integration_event_id
+    });
   });
 
   it("keeps every card and submission inside the workspace that received it", async () => {

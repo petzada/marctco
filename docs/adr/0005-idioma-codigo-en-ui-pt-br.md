@@ -64,8 +64,12 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Possível duplicado | `IntakeReview.type = POSSIBLE_DUPLICATE` | Gatilho: mesma Pessoa + Oportunidade **em aberto** não mesclada. Financiamento é discriminador na tela, nunca gatilho |
 | Mesclagem | — | Não tem model. É a operação que **reaponta** as FKs para a canônica e deixa a lápide na absorvida; o ponteiro nunca redireciona leitura |
 | Resolução da revisão | `IntakeReview.resolution` | Tipada pelo `type`; para `POSSIBLE_DUPLICATE`: `NEW_FINANCING \| SAME_FINANCING \| INVALID_OR_SPAM`; nulo enquanto pendente |
+| Autor da resolução | `IntakeReview.resolved_by_user_id` | Usuário do `UserContext`; job nunca resolve revisão |
+| Instante da resolução | `IntakeReview.resolved_at` | Argumento da operação, preservado com a decisão |
+| Motivo da resolução | `IntakeReview.resolution_reason` | Texto obrigatório nas três resoluções; nunca substitui a enumeração da decisão |
 | Oportunidade mesclada | `Opportunity.merged_into_opportunity_id` | Resultado de `SAME_FINANCING`; sai das vistas ativas sem exclusão física |
 | Pessoa mesclada | `Person.merged_into_person_id` | Resultado da resolução de `IDENTITY_CONFLICT`; preserva histórico e identificadores |
+| Evento da linha do tempo da Oportunidade | `OpportunityTimelineEvent` | Fato imutável; nesta fatia somente `RETRANSMISSION_RECEIVED \| SUBMISSION_REENTERED` |
 | Handoff | `Handoff` | — |
 | Score de cabimento | `EligibilityScore` | "Cabimento" = admissibilidade da revisional |
 | Feature flag | `FeatureFlag` / `WorkspaceFlag` | Tabela `workspace_flags` |
