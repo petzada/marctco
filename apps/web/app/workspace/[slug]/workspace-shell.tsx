@@ -46,6 +46,11 @@ export function WorkspaceShell({
     ...(canManageIntegrations
       ? [
           {
+            href: `/workspace/${slug}/integrations/pluga`,
+            label: "Pluga",
+            shortLabel: "PL"
+          },
+          {
             href: `/workspace/${slug}/integrations/landing-page`,
             icon: <GearSixIcon aria-hidden="true" size={20} weight="regular" />,
             label: "Configurações"

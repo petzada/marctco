@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type {
+  IntegrationConnectionStatus as PrismaIntegrationConnectionStatus,
   IntegrationProvider as PrismaIntegrationProvider,
   PrismaClient
 } from "@prisma/client";
@@ -12,6 +13,8 @@ const sharedPrisma = createPrismaClient();
 
 /** Re-export the generated enum so token callers cannot drift from the schema. */
 export type IntegrationProvider = PrismaIntegrationProvider;
+/** Re-exported for the same reason: enable/disable never invents its own values. */
+export type IntegrationConnectionStatus = PrismaIntegrationConnectionStatus;
 
 export interface GeneratedIntegrationToken {
   /** Return this secret to the caller once; never persist or log it. */
