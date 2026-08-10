@@ -73,6 +73,12 @@ export {
   type SubmissionKey
 } from "./intake/intake-plan.js";
 export {
+  markersFor,
+  type Marker,
+  type MarkerOpportunity,
+  type MarkerReview
+} from "./markers.js";
+export {
   PIPELINE_TYPES,
   STAGE_ROLES,
   assertPipelineDefinition,

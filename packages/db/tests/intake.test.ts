@@ -1,14 +1,28 @@
 import { randomUUID } from "node:crypto";
-import type { IntakePlan, LeadSource, PersonContacts, SubmissionInsert } from "@marctco/domain";
+import {
+  buildInboundLead,
+  decideIntake,
+  normalize,
+  readLeadPayload,
+  type IntakePlan,
+  type LeadSource,
+  type PersonContacts,
+  type SubmissionInsert
+} from "@marctco/domain";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createJobContext, type JobContext } from "../src/access-context.js";
+import {
+  createJobContext,
+  createUserContextFromResolvedMembership,
+  type JobContext
+} from "../src/access-context.js";
 import {
   applyIntakePlan,
   findOpenOpportunitiesOfPerson,
   recordLeadSubmission,
   resolveIntakeDestination
 } from "../src/intake.js";
+import { listIntegrationEvents } from "../src/integration-event.js";
 
 const database_url = process.env.DATABASE_URL;
 if (!database_url) {
@@ -40,6 +54,7 @@ const connection_id = randomUUID();
 const neighbour_connection = randomUUID();
 const known_person = randomUUID();
 const neighbour_person = randomUUID();
+const manager_user = randomUUID();
 
 const RECEIVED_AT = new Date("2026-08-08T12:00:00.000Z");
 const RELEASED_AT = new Date("2026-08-11T09:30:00.000Z");
@@ -52,6 +67,11 @@ const contacts: PersonContacts = {
 };
 
 let context: JobContext;
+const manager_context = createUserContextFromResolvedMembership({
+  workspace_id: workspace,
+  user_id: manager_user,
+  role: "MANAGER"
+});
 
 /** A fresh event to hang a submission on: each transmission carries its own. */
 async function seedEvent(workspace_id = workspace): Promise<string> {
@@ -631,6 +651,84 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
     await expect(
       seeder.integrationEvent.findUniqueOrThrow({ where: { id: submitted.event_id } })
     ).resolves.toMatchObject({ status: "QUARANTINED" });
+  });
+
+  it("keeps the quarantined payload visible through the integration-event reader", async () => {
+    const submitted = await submit(`visible-quarantine-${randomUUID()}`);
+    await applyIntakePlan(
+      submitted.job,
+      {
+        kind: "QUARANTINE",
+        lead_submission_id: submitted.lead_submission_id,
+        integration_event_id: submitted.event_id
+      },
+      app
+    );
+
+    const events = await listIntegrationEvents(manager_context, { limit: 500 }, app);
+    expect(events.find((event) => event.id === submitted.event_id)).toMatchObject({
+      status: "QUARANTINED",
+      raw: { name: "Maria" },
+      processed_at: null
+    });
+  });
+
+  it("reuses the intake operations and starts arrived_at at the release instant", async () => {
+    const external_lead_id = `released-${randomUUID()}`;
+    const submitted = await submit(external_lead_id);
+    await applyIntakePlan(
+      submitted.job,
+      {
+        kind: "QUARANTINE",
+        lead_submission_id: submitted.lead_submission_id,
+        integration_event_id: submitted.event_id
+      },
+      app
+    );
+
+    const release_submission = await recordLeadSubmission(
+      manager_context,
+      {
+        key: { source: "META_LEAD_ADS", external_lead_id },
+        integration_event_id: submitted.event_id,
+        received_at: RECEIVED_AT
+      },
+      app
+    );
+    expect(release_submission).toEqual({
+      kind: "DUPLICATE",
+      lead_submission_id: submitted.lead_submission_id,
+      opportunity_id: null
+    });
+
+    const normalized = normalize(
+      buildInboundLead(readLeadPayload({ name: "Maria", phone: "11987654321" }), {
+        source: "META_LEAD_ADS",
+        external_lead_id
+      })
+    );
+    const release_plan = decideIntake({
+      normalized,
+      submission: release_submission,
+      person: { kind: "NEW_PERSON", contacts },
+      destination: { pipeline_id: default_pipeline, entry_stage_id: default_entry_stage },
+      open_opportunity_ids: [],
+      integration_event_id: submitted.event_id,
+      now: RELEASED_AT
+    });
+    const applied = await applyIntakePlan(manager_context, release_plan, app);
+    expect(applied.kind).toBe("NEW_OPPORTUNITY");
+    if (applied.kind !== "NEW_OPPORTUNITY") {
+      throw new Error("expected quarantine release to create an Opportunity");
+    }
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: applied.opportunity_id } })
+    ).resolves.toMatchObject({ arrived_at: RELEASED_AT });
+    const released_event = await seeder.integrationEvent.findUniqueOrThrow({
+      where: { id: submitted.event_id }
+    });
+    expect(released_event.status).toBe("PROCESSED");
+    expect(released_event.processed_at).toBeInstanceOf(Date);
   });
 
   it("points a re-quarantined submission at the transmission the manager will read", async () => {
