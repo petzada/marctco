@@ -1,5 +1,12 @@
-/** The domain warnings that one UI entry point presents for a commercial lead. */
-export type Marker = "MISSING_PHONE" | "IDENTITY_CONFLICT" | "POSSIBLE_DUPLICATE";
+/**
+ * The domain warnings that one UI entry point presents for a commercial
+ * lead, in the fixed order `markersFor` emits them. `MARKERS` is the closed
+ * list a filter or a counter iterates over — never re-typed as a literal
+ * array at the call site, which is how a marker added here and forgotten
+ * there stays invisible to every screen but this module.
+ */
+export const MARKERS = ["MISSING_PHONE", "IDENTITY_CONFLICT", "POSSIBLE_DUPLICATE"] as const;
+export type Marker = (typeof MARKERS)[number];
 
 export interface MarkerOpportunity {
   /** Means one thing only: there is no phone call or WhatsApp path. */
