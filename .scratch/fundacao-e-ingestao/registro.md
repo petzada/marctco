@@ -375,3 +375,43 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - **Descobertas que afetam tickets seguintes:** na Fase 4, o consumidor pode receber o mesmo `AccessContext` enriquecido pelo slot `feature_flags`, sem alterar as assinaturas das operações existentes. O ponto para executar WhatsApp é a lista `post_creation_effects` imediatamente após `applyIntakePlan`; ela já distingue criação real de retransmissão concorrente. Uma futura operação comercial para liberar flag precisa rodar com papel técnico próprio ou migrator escopado — app e worker não escrevem a tabela.
 - **Documentos emendados:** issue 16 (Status, 12 critérios e evidências) e este registro. ADRs/CONTEXT já continham os termos e a decisão, sem conflito ou nome novo a emendar.
 - **Precisa de mão humana:** Nada.
+
+## Ticket 10 — Quarentena e marcador de lead sem telefone — CONCLUÍDO
+
+- **O que foi construído:** `markersFor` virou a fonte única e ordenada dos marcadores. Os seams provam a quarentena visível com payload preservado e a liberação pelo caminho literal `recordLeadSubmission` → `decideIntake` → `applyIntakePlan`, reutilizando o evento e usando o instante da liberação em `arrived_at`.
+- **Arquivos-chave criados/alterados:** `packages/domain/src/markers.ts` e teste; testes de plano e de persistência; issue 10.
+- **Critérios de aceite:** 13 de 13.
+- **Testes:** 25/25 no Seam 1, 26/26 no DB focado; na branch isolada, typecheck/lint verdes e suíte completa com 358 passando, 1 pulado. Após integração, testes puros combinados e typecheck global verdes.
+- **Self-review:** nenhum achado de Standards ou Spec.
+- **Branch / commit integrado:** `ticket/10-quarentena-e-marcador-sem-telefone` (`4132ef8`) → wave (`03a3f59`).
+- **Descobertas que afetam tickets seguintes:** `listIntegrationEvents` já entrega a quarentena ao ticket 14; `markersFor` está disponível ao ticket 12; liberação vazia continua `QUARANTINE` e a UI do ticket 14 impede a ação.
+- **Precisa de mão humana:** Nada.
+
+## Ticket 11 — Retransmissão inerte e revisão de possível duplicado — CONCLUÍDO
+
+- **O que foi construído:** timeline mínima de ingestão; retransmissão inerte; resoluções `NEW_FINANCING`, `SAME_FINANCING` e `INVALID_OR_SPAM`; transferência transacional de FKs; lápides; merge de Pessoas com reavaliação de duplicidade; RLS e índices.
+- **Arquivos-chave criados/alterados:** migration `20260810001100_duplicate_review_resolution`; `packages/db/src/intake-review.ts`; `person-merge.ts`; decisão pura e testes de domínio, DB, Seam 2 e Seam 3; `CONTEXT.md` e ADR-0005.
+- **Critérios de aceite:** 24 de 25. O discriminador financeiro na tela pertence ao ticket 12, que depende deste ticket; não é implementado antecipadamente aqui.
+- **Testes:** migration em banco vazio, drift, migration safety, lint, build e typecheck verdes; suíte isolada com 362 passando e 1 teste condicional pulado. Após integração com o ticket 10, ambos os módulos puros e o typecheck global passaram.
+- **Self-review:** nenhum defeito de Standards ou Spec dentro do escopo; a pendência visual foi mantida explícita.
+- **Branch / commit integrado:** `ticket/11-retransmissao-e-revisao-duplicado` (`c3f9cd0`) → wave (`5153006`).
+- **Descobertas que afetam tickets seguintes:** o ticket 12 deve mostrar discriminadores financeiros e consultar revisões dos dois lados; a resolução futura de conflito de identidade pode reutilizar `mergePersons`.
+- **Precisa de mão humana:** Nada.
+
+## Ticket 13 — Google Lead Form e webhook de landing page — PARCIAL
+
+- **O que foi construído:** endpoint servidor-servidor de landing page compartilhando a fronteira HTTP durável da Pluga; CORS recusado; guia autenticado em PT-BR com contrato `v1`, segurança e receitas para WordPress, builders, Node e serverless; provas de idempotência e simetria dos conectores.
+- **Arquivos-chave criados/alterados:** `apps/web/lib/integration-lead-endpoint.ts`; rota `/v1/integrations/webhooks/leads`; guia `/workspace/[slug]/integrations/landing-page`; receitas; testes de rota e conector; issue 13 e ações manuais.
+- **Critérios de aceite:** 12 de 15. O modelo Google e sua validação dependem de conta real Pluga; a origem no card/tabela pertence à superfície do ticket 12.
+- **Testes:** 21/21 focados; typecheck, lint, build e suíte isolada com 359 passando e 1 pulado. Após integração, 15 testes de rota/conector e typecheck global verdes.
+- **Self-review:** nenhum achado; critérios não comprovados permaneceram desmarcados.
+- **Branch / commit integrado:** `ticket/13-google-e-landing-page` (`3e18372`) → wave (`4275279`).
+- **Descobertas que afetam tickets seguintes:** conexões `LANDING_PAGE` inferem a origem; Pluga continua Meta por padrão, então Google deve declarar `GOOGLE_LEAD_FORM`; o endpoint não depende do Redis e resolve tenant somente pelo token.
+- **Precisa de mão humana:** conectar uma conta Google real à Pluga, observar campos/IDs, criar o modelo sem presunções e repetir o identificador para comprovar uma única Oportunidade.
+
+## Consolidação da wave 10 · 11 · 13 · 16 — 2026-08-10
+
+- Worktrees isolados e implementadores paralelos; integração na ordem 10 → 11 → 13 → 16.
+- Conflitos aditivos resolvidos preservando os exports de marcadores/resoluções, as relações `OpportunityTimelineEvent`/`WorkspaceFlag`, as fixtures RLS e ambos os projetos de teste.
+- Commits da wave: `03a3f59`, `5153006`, `4275279`, `842ac65` sobre o fixed point `887a8e9`.
+- A wave de código está consolidada. A pendência externa do Google permanece em `acoes-manuais-pendentes.md`; os critérios visuais explicitamente atribuídos ao ticket 12 continuam desmarcados nos tickets 11 e 13.
