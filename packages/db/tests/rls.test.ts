@@ -519,13 +519,51 @@ describe("Seam 3: RLS and schema invariants", () => {
   });
 
   it("indexes only unresolved Opportunity reviews for marker lookups", async () => {
+    // Ticket 12: identity-conflict reviews gained their own resolution
+    // column, so "unresolved" now means neither resolution kind is set.
     const rows = await client.$queryRaw<Array<{ predicate: string | null }>>`
       SELECT pg_get_expr(index.indpred, index.indrelid) AS predicate
       FROM pg_index AS index
       WHERE index.indexrelid =
         'public.intake_reviews_workspace_id_opportunity_id_idx'::regclass
     `;
-    expect(rows).toEqual([{ predicate: "(resolution IS NULL)" }]);
+    expect(rows).toEqual([
+      { predicate: "((resolution IS NULL) AND (identity_conflict_resolution IS NULL))" }
+    ]);
+  });
+
+  it("has one partial index per marker, serving both the row filter and the counter", async () => {
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname IN (
+        'opportunities_workspace_id_arrived_at_id_active_idx',
+        'opportunities_missing_phone_active_idx',
+        'intake_reviews_identity_conflict_pending_idx',
+        'intake_reviews_possible_duplicate_pending_idx'
+      )
+      ORDER BY class.relname
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "intake_reviews_identity_conflict_pending_idx",
+        predicate:
+          "((type = 'IDENTITY_CONFLICT'::intake_review_type) AND (resolution IS NULL) AND (identity_conflict_resolution IS NULL))"
+      },
+      {
+        index_name: "intake_reviews_possible_duplicate_pending_idx",
+        predicate: "((type = 'POSSIBLE_DUPLICATE'::intake_review_type) AND (resolution IS NULL))"
+      },
+      {
+        index_name: "opportunities_missing_phone_active_idx",
+        predicate: "((missing_phone = true) AND (merged_into_opportunity_id IS NULL))"
+      },
+      {
+        index_name: "opportunities_workspace_id_arrived_at_id_active_idx",
+        predicate: "(merged_into_opportunity_id IS NULL)"
+      }
+    ]);
   });
 
   it("keeps the private schema unreachable to the worker role", async () => {
