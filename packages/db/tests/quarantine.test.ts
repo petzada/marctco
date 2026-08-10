@@ -87,7 +87,7 @@ interface QuarantinedFixture {
  * `QUARANTINED` event and `lead_submissions` row, the same starting state
  * `getQuarantinedEvent` and the release form see in production.
  */
-async function seedQuarantinedLead(raw: Record<string, unknown>): Promise<QuarantinedFixture> {
+async function seedQuarantinedLead(raw: Record<string, string>): Promise<QuarantinedFixture> {
   const external_lead_id = `quarantine-${randomUUID()}`;
   const event_id = randomUUID();
   await seeder.integrationEvent.create({

@@ -23,6 +23,7 @@ import { EmptyState } from "../../../../../components/ui/empty-state";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge";
 import { isPayloadExpired } from "../../../../../lib/integration-payload-expiry";
 import { canManageIntegrationSecret, canOpenPlugaScreen } from "../../../../../lib/pluga-access";
+import { formatQuarantineWait } from "../../../../../lib/quarantine-wait-time";
 import {
   metaHttpRequestTemplate,
   PLUGA_LEADS_ENDPOINT_PATH,
@@ -83,6 +84,7 @@ export default async function PlugaIntegrationPage({
     listQuarantinedEvents(access.workspace.context, { limit: 20 })
   ]);
 
+  const releasedId = firstParam(query.released);
   const reprocessedId = firstParam(query.reprocessed);
   const reprocessError = firstParam(query.reprocess_error);
 
@@ -98,6 +100,11 @@ export default async function PlugaIntegrationPage({
           </p>
         </header>
 
+        {releasedId ? (
+          <FlashNotice tone="success">
+            Lead liberado da quarentena — o card já está no funil.
+          </FlashNotice>
+        ) : null}
         {reprocessedId ? (
           <FlashNotice tone="success">Evento reenviado para a fila de processamento.</FlashNotice>
         ) : null}
@@ -178,6 +185,7 @@ export default async function PlugaIntegrationPage({
               <thead>
                 <tr>
                   <DataTableHeaderCell>Recebido em</DataTableHeaderCell>
+                  <DataTableHeaderCell>Espera</DataTableHeaderCell>
                   <DataTableHeaderCell>Origem</DataTableHeaderCell>
                   <DataTableHeaderCell>Identificador</DataTableHeaderCell>
                   <DataTableHeaderCell>Ação</DataTableHeaderCell>
@@ -287,6 +295,7 @@ function QuarantineRow({
   return (
     <DataTableRow>
       <DataTableCell>{DATE_TIME.format(lead.received_at)}</DataTableCell>
+      <DataTableCell>{formatQuarantineWait(lead.received_at)}</DataTableCell>
       <DataTableCell>{lead.source}</DataTableCell>
       <DataTableCell>
         <span className="font-mono text-mono text-ink-muted">{lead.external_lead_id}</span>
