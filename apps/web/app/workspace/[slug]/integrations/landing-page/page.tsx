@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   canonicalLandingPagePayload,
@@ -32,16 +31,9 @@ export default async function LandingPageIntegrationGuide({
   }
 
   return (
-    <main className="min-h-[100dvh] bg-canvas-sunken px-md py-xl md:px-lg md:py-xxl">
+    <main className="min-h-[100dvh] bg-canvas px-md py-xl md:px-lg md:py-xxl">
       <div className="mx-auto w-full max-w-content">
-        <Link
-          className="text-label text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus"
-          href={"/workspace/" + slug}
-        >
-          Voltar ao workspace
-        </Link>
-
-        <header className="mt-lg max-w-prose">
+        <header className="max-w-prose">
           <p className="text-eyebrow text-primary">Integração</p>
           <h1 className="mt-xs text-headline text-ink md:text-display-md">Landing page</h1>
           <p className="mt-sm text-body text-ink-secondary">
@@ -50,14 +42,17 @@ export default async function LandingPageIntegrationGuide({
           </p>
         </header>
 
-        <section className="mt-xl rounded-lg border border-warning bg-warning-surface p-lg">
-          <h2 className="text-title text-warning-ink">O token nunca vai no navegador</h2>
-          <p className="mt-sm max-w-prose text-body text-warning-ink">
+        <section className="mt-xl rounded-lg border border-hairline bg-canvas p-lg">
+          <p className="inline-flex rounded-pill bg-warning-surface px-sm py-xs text-caption text-warning-ink">
+            Aviso de segurança
+          </p>
+          <h2 className="mt-sm text-title text-ink">O token nunca vai no navegador</h2>
+          <p className="mt-sm max-w-prose text-body text-ink-secondary">
             Qualquer pessoa consegue ler o JavaScript de uma página. Se o token estiver ali,
             terceiros podem enviar leads para sua operação. Guarde-o no WordPress, no backend
             ou nos segredos da função serverless.
           </p>
-          <p className="mt-sm max-w-prose text-body-sm text-warning-ink">
+          <p className="mt-sm max-w-prose text-body-sm text-ink-secondary">
             Esta API não habilita CORS. Um formulário no navegador deve chamar o backend da
             própria landing page, e esse backend chama o CRM.
           </p>
@@ -204,7 +199,9 @@ function Recipe({
 }: Readonly<{ title: string; code: string; source?: string; open?: boolean }>) {
   return (
     <details className="mt-md rounded-lg border border-hairline bg-surface-inset p-md" open={open}>
-      <summary className="cursor-pointer text-body-strong text-ink">{title}</summary>
+      <summary className="-mx-xs flex min-h-11 cursor-pointer items-center rounded-md px-xs text-body-strong text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus">
+        {title}
+      </summary>
       <CodeBlock code={code} />
       {source ? (
         <a

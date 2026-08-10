@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { resolveWorkspaceAccess } from "../../../lib/workspace-access";
+import { workspaceRoleLabel } from "../../../lib/workspace-role";
+import { WorkspaceShell } from "./workspace-shell";
 
 export default async function WorkspaceLayout({
   children,
@@ -14,5 +16,16 @@ export default async function WorkspaceLayout({
     notFound();
   }
 
-  return children;
+  return (
+    <WorkspaceShell
+      canManageIntegrations={
+        access.workspace.role === "MANAGER" || access.workspace.role === "OWNER"
+      }
+      roleLabel={workspaceRoleLabel(access.workspace.role)}
+      slug={slug}
+      workspaceName={access.workspace.name}
+    >
+      {children}
+    </WorkspaceShell>
+  );
 }

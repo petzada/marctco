@@ -117,6 +117,20 @@ describe("connectLeadSource", () => {
     expect(connected.declared_source).toBe(true);
   });
 
+  it.each(["GOOGLE_LEAD_FORM", "META_LEAD_ADS"] as const)(
+    "keeps landing-page provenance when its payload declares %s",
+    (declaredSource) => {
+      const connected = connectLeadSource({
+        raw: { source: declaredSource },
+        integration_event_id,
+        provider: "LANDING_PAGE"
+      });
+
+      expect(connected.inbound.source).toBe("LANDING_PAGE");
+      expect(connected.declared_source).toBe(false);
+    }
+  );
+
   it.each([
     {
       provider: "PLUGA" as const,

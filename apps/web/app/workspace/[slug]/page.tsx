@@ -13,7 +13,7 @@ export default async function WorkspacePage({
   }
 
   return (
-    <main className="min-h-[100dvh] bg-canvas-sunken px-md py-lg md:px-lg md:py-xl">
+    <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
       {/*
        * `max-w-content` is DESIGN.md's 1280px content lock. It was written as
        * `max-w-7xl`, which the container-scale reset in globals.css now
@@ -33,11 +33,6 @@ export default async function WorkspacePage({
             Integrar landing page
           </Link>
         ) : null}
-        <form action="/auth/logout" className="mt-md" method="post">
-          <button className={secondaryActionClassName} type="submit">
-            Sair
-          </button>
-        </form>
       </section>
     </main>
   );
