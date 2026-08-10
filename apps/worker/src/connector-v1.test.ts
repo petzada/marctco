@@ -63,6 +63,27 @@ describe("connectLeadSource", () => {
     );
   });
 
+  it("keeps two separate POSTs without an origin id as separate submissions", () => {
+    const samePayload = { phone: "11987654321" };
+    const first_event_id = randomUUID();
+    const second_event_id = randomUUID();
+
+    const first = connectLeadSource({
+      raw: samePayload,
+      integration_event_id: first_event_id,
+      provider: "LANDING_PAGE"
+    });
+    const second = connectLeadSource({
+      raw: samePayload,
+      integration_event_id: second_event_id,
+      provider: "LANDING_PAGE"
+    });
+
+    expect(first.inbound.external_lead_id).toBe(first_event_id);
+    expect(second.inbound.external_lead_id).toBe(second_event_id);
+    expect(first.inbound.external_lead_id).not.toBe(second.inbound.external_lead_id);
+  });
+
   it("prefers the id the origin gave over the one it would synthesize", () => {
     const connected = connectLeadSource({
       raw: { external_lead_id: "6789", phone: "11987654321" },
@@ -94,6 +115,24 @@ describe("connectLeadSource", () => {
 
     expect(connected.inbound.source).toBe("GOOGLE_LEAD_FORM");
     expect(connected.declared_source).toBe(true);
+  });
+
+  it.each([
+    {
+      provider: "PLUGA" as const,
+      raw: { source: "GOOGLE_LEAD_FORM", phone: "(11) 98765-4321" },
+      source: "GOOGLE_LEAD_FORM"
+    },
+    {
+      provider: "LANDING_PAGE" as const,
+      raw: { phone: "(11) 98765-4321" },
+      source: "LANDING_PAGE"
+    }
+  ])("sends $source through the same unnormalized v1 boundary", ({ provider, raw, source }) => {
+    const connected = connectLeadSource({ raw, integration_event_id, provider });
+
+    expect(connected.inbound.source).toBe(source);
+    expect(connected.inbound.phones).toEqual(["(11) 98765-4321"]);
   });
 
   it("interprets a payload that carries nothing usable rather than throwing", () => {

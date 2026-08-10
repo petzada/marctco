@@ -166,3 +166,12 @@ nos **dois** serviços e não só no `web`. Ver a seção bloqueante lá em cima
 
 - Papéis `marctco_*` com senhas locais via `pnpm db:roles:local` após `migrate deploy`.
 - Variáveis `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` no `.env` local quando for exercitar login de ponta a ponta (não versionar `.env`).
+
+## Ticket 13 — modelo Google Lead Form (adiável)
+
+- [ ] Conectar uma conta Google real à Pluga e selecionar o gatilho de Google Lead Form.
+- [ ] Enviar um lead de teste real e registrar os campos exatos entregues pela Pluga, começando por nome, telefone, e-mail e identificador do lead; não presumir nomes nem IDs a partir da documentação pública truncada.
+- [ ] Montar o modelo do contrato `v1` apenas com os campos observados e declarar `GOOGLE_LEAD_FORM` como origem, pois conexões Pluga sem origem explícita usam Meta como padrão.
+- [ ] Repetir o envio com o mesmo identificador estável e confirmar que nasce uma única Oportunidade.
+
+Impacto: o endpoint de landing page, as receitas e o caminho compartilhado de ingestão estão prontos; somente o modelo Google permanece indisponível até o teste em conta real.

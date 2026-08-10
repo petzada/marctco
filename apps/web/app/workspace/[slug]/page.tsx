@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { resolveWorkspaceAccess } from "../../../lib/workspace-access";
 import { workspaceRoleLabel } from "../../../lib/workspace-role";
 import { secondaryActionClassName } from "../../entry-shell";
@@ -24,7 +25,15 @@ export default async function WorkspacePage({
         <p className="mt-sm text-body text-ink-secondary">
           A operação do workspace será exibida aqui.
         </p>
-        <form action="/auth/logout" className="mt-xl" method="post">
+        {access.workspace.role === "MANAGER" || access.workspace.role === "OWNER" ? (
+          <Link
+            className={secondaryActionClassName + " mt-xl"}
+            href={"/workspace/" + slug + "/integrations/landing-page"}
+          >
+            Integrar landing page
+          </Link>
+        ) : null}
+        <form action="/auth/logout" className="mt-md" method="post">
           <button className={secondaryActionClassName} type="submit">
             Sair
           </button>
