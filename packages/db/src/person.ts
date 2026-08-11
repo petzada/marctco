@@ -25,10 +25,10 @@ const MAX_CANDIDATES = 50;
 export type { PersonCandidate };
 
 /**
- * Executes a `PersonLookupPlan`. One of the two operations in `packages/db`
- * that accept **either** context variant, because ingestion has two callers:
- * the worker's job and the "completar e liberar" handler in `apps/web`
- * (ADR-0016, ADR-0017).
+ * Executes a `PersonLookupPlan`. One of the named ingestion operations in
+ * `packages/db` that accept **either** context variant, because ingestion has
+ * two callers: the worker's job and the "completar e liberar" handler in
+ * `apps/web` (ADR-0016, ADR-0017).
  *
  * The domain decided *what* to search for and how strong each key is; this
  * decides nothing. It reports, per Pessoa, which kinds of key matched — and the

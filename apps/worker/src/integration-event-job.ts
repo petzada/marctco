@@ -69,8 +69,9 @@ function assertJobData(data: unknown): asserts data is IntegrationEventJobData {
  *
  * `now` is `received_at`, the instant the lead actually arrived — never this
  * process's clock, which would date every lead by however long the queue was
- * down. The release handler in `apps/web` calls the same `decideIntake` with
- * the instant of the release instead (ADR-0007 §Mecanismo 2).
+ * down. The release handler in `apps/web` calls the same
+ * `decideAndApplyIntake` with the instant of the release instead (ADR-0007
+ * §Mecanismo 2).
  */
 export async function processIntegrationEventJob(
   data: unknown

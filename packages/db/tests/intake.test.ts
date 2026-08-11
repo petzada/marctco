@@ -160,6 +160,22 @@ async function applyNewOpportunity(
   return { opportunity_id: applied.opportunity_id, person_id: applied.person_id };
 }
 
+async function waitForAdvisoryWaiters(blocking_pid: number, expected: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const [row] = await seeder.$queryRaw<Array<{ waiting: number }>>`
+      SELECT COUNT(*)::integer AS waiting
+      FROM pg_stat_activity
+      WHERE ${blocking_pid}::integer = ANY(pg_blocking_pids(pid))
+    `;
+    if ((row?.waiting ?? 0) >= expected) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`expected ${expected} transactions waiting for an advisory lock`);
+}
+
 beforeAll(async () => {
   await seeder.$transaction(async (transaction) => {
     await transaction.workspace.createMany({
@@ -274,7 +290,9 @@ describe("resolveIntakeDestination", () => {
       where: { workspace_id: neighbour_workspace }
     });
 
-    await expect(resolveIntakeDestination(context, neighbour_pipeline.id, app)).rejects.toThrow(
+    // The privileged client bypasses RLS, so only the explicit workspace
+    // predicate can keep the neighbour's destination invisible.
+    await expect(resolveIntakeDestination(context, neighbour_pipeline.id, seeder)).rejects.toThrow(
       /pipeline/i
     );
   });
@@ -335,6 +353,29 @@ describe("recordLeadSubmission: the constraint arbitrates, never a SELECT", () =
 
     expect([mine.outcome.kind, theirs.outcome.kind]).toEqual(["INSERTED", "INSERTED"]);
     expect(mine.lead_submission_id).not.toBe(theirs.lead_submission_id);
+  });
+
+  it("reads the duplicate row from the explicit workspace even with a privileged client", async () => {
+    const key = `privileged-cross-${randomUUID()}`;
+    await submit(key, { workspace_id: neighbour_workspace });
+    const mine = await submit(key);
+    const retransmission_event_id = await seedEvent();
+
+    const duplicate = await recordLeadSubmission(
+      createJobContext({ workspace_id: workspace, integration_event_id: retransmission_event_id }),
+      {
+        key: { source: "META_LEAD_ADS", external_lead_id: key },
+        integration_event_id: retransmission_event_id,
+        received_at: RELEASED_AT
+      },
+      seeder
+    );
+
+    expect(duplicate).toEqual({
+      kind: "DUPLICATE",
+      lead_submission_id: mine.lead_submission_id,
+      opportunity_id: null
+    });
   });
 
   it("produces one submission when two transmissions race", async () => {
@@ -737,6 +778,97 @@ describe("transactional intake and applyIntakePlan: NEW_OPPORTUNITY", () => {
     ).toEqual(new Set(opportunities.map((opportunity) => opportunity.id)));
   });
 
+  it("refreshes identity after waiting on a Pessoa whose CPF was filled concurrently", async () => {
+    const suffix = Math.floor(10_000_000 + Math.random() * 89_999_998);
+    const phone_a = `+55119${suffix}`;
+    const phone_b = `+55119${suffix + 1}`;
+    const person = await seeder.person.create({
+      data: {
+        workspace_id: workspace,
+        name: "Pessoa aguardada",
+        phones: { create: [{ phone_e164: phone_a }, { phone_e164: phone_b }] }
+      }
+    });
+    const first = await submit(`fresh-identity-first-${randomUUID()}`, {
+      source: "LANDING_PAGE"
+    });
+    const second = await submit(`fresh-identity-second-${randomUUID()}`, {
+      source: "LANDING_PAGE"
+    });
+    const normalizedFor = (phone: string, cpf: string) =>
+      normalize(
+        buildInboundLead(readLeadPayload({ phone, cpf }), {
+          source: "LANDING_PAGE",
+          external_lead_id: `ignored-${phone}`
+        })
+      );
+
+    let release_person_lock: () => void = () => undefined;
+    let announce_person_lock: (pid: number) => void = () => undefined;
+    const person_lock_acquired = new Promise<number>((resolve) => {
+      announce_person_lock = resolve;
+    });
+    const keep_person_lock = new Promise<void>((resolve) => {
+      release_person_lock = resolve;
+    });
+    const resource = `intake:person:${workspace}:${person.id}`;
+    const blocker = seeder.$transaction(async (transaction) => {
+      await transaction.$queryRaw<Array<{ acquired: number }>>`
+        SELECT 1 AS acquired
+        FROM pg_advisory_xact_lock(hashtextextended(${resource}, 0))
+      `;
+      const [backend] = await transaction.$queryRaw<Array<{ pid: number }>>`
+        SELECT pg_backend_pid() AS pid
+      `;
+      if (!backend) {
+        throw new Error("the blocker transaction has no backend pid");
+      }
+      announce_person_lock(backend.pid);
+      await keep_person_lock;
+    });
+    const blocking_pid = await person_lock_acquired;
+
+    const processing = Promise.all(
+      [
+        { submitted: first, normalized: normalizedFor(phone_a, "529.982.247-25") },
+        { submitted: second, normalized: normalizedFor(phone_b, "111.444.777-35") }
+      ].map(({ submitted, normalized }) =>
+        decideAndApplyIntake(
+          submitted.job,
+          {
+            normalized,
+            submission: submitted.outcome,
+            destination: { pipeline_id: default_pipeline, entry_stage_id: default_entry_stage },
+            integration_event_id: submitted.event_id,
+            now: RECEIVED_AT
+          },
+          app
+        )
+      )
+    );
+
+    try {
+      await waitForAdvisoryWaiters(blocking_pid, 2);
+    } finally {
+      release_person_lock();
+    }
+    await blocker;
+    await processing;
+
+    const reviews = await seeder.intakeReview.findMany({
+      where: {
+        workspace_id: workspace,
+        type: "IDENTITY_CONFLICT",
+        candidate_person_ids: { has: person.id }
+      }
+    });
+    expect(reviews).toHaveLength(1);
+    const submissions = await seeder.leadSubmission.findMany({
+      where: { id: { in: [first.lead_submission_id, second.lead_submission_id] } }
+    });
+    expect(submissions.every((submission) => submission.opportunity_id !== null)).toBe(true);
+  });
+
   it("never creates a legal Opportunity — ingestion has no way to ask for one", async () => {
     const applied = await applyNewOpportunity(await submit(`commercial-${randomUUID()}`));
     const areas = await seeder.opportunity.findMany({
@@ -746,6 +878,27 @@ describe("transactional intake and applyIntakePlan: NEW_OPPORTUNITY", () => {
 
     expect(areas.every((row) => row.area === "COMMERCIAL")).toBe(true);
     expect(applied.opportunity_id).toBeTruthy();
+  });
+
+  it("never serializes personal data from an unknown plan into an error", async () => {
+    const submitted = await submit(`unknown-plan-${randomUUID()}`);
+    const secret = "cpf-52998224725";
+    const unknown_plan = {
+      kind: "FUTURE_VARIANT",
+      lead_submission_id: submitted.lead_submission_id,
+      integration_event_id: submitted.event_id,
+      contacts: { cpf: secret }
+    } as unknown as IntakePlan;
+
+    let thrown: unknown;
+    try {
+      await applyIntakePlan(submitted.job, unknown_plan, app);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toContain("FUTURE_VARIANT");
+    expect((thrown as Error).message).not.toContain(secret);
   });
 });
 
@@ -1019,6 +1172,27 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
         seeder
       )
     ).rejects.toThrow(/not visible/i);
+  });
+
+  it("does not settle a neighbour's quarantine through a privileged client", async () => {
+    const foreign = await submit(`foreign-privileged-${randomUUID()}`, {
+      workspace_id: neighbour_workspace
+    });
+
+    await expect(
+      applyIntakePlan(
+        context,
+        {
+          kind: "QUARANTINE",
+          lead_submission_id: foreign.lead_submission_id,
+          integration_event_id: foreign.event_id
+        },
+        seeder
+      )
+    ).rejects.toThrow(/not visible/i);
+    await expect(
+      seeder.integrationEvent.findUniqueOrThrow({ where: { id: foreign.event_id } })
+    ).resolves.toMatchObject({ status: "RECEIVED" });
   });
 });
 

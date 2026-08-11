@@ -124,7 +124,9 @@ export async function resolveIntakeDestination(
         ON stage.workspace_id = pipeline.workspace_id
        AND stage.pipeline_id = pipeline.id
        AND stage.role = 'ENTRY'
-      WHERE ${chosen}
+      WHERE pipeline.workspace_id = ${context.workspace_id}::uuid
+        AND stage.workspace_id = ${context.workspace_id}::uuid
+        AND ${chosen}
     `
   );
 
@@ -189,7 +191,8 @@ export async function recordLeadSubmission(
     >`
       SELECT id, opportunity_id
       FROM lead_submissions
-      WHERE source = ${key.source}::lead_source
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND source = ${key.source}::lead_source
         AND external_lead_id = ${key.external_lead_id}
     `;
     // An empty read here means the conflicting row belongs to a transaction
@@ -275,7 +278,7 @@ export async function decideAndApplyIntake(
     const lookup_plan = planPersonLookup(input.normalized);
     await lockIdentityKeys(transaction, context.workspace_id, lookup_plan);
 
-    const candidates = await findPersonCandidatesInTransaction(
+    const candidates_before_lock = await findPersonCandidatesInTransaction(
       transaction,
       context.workspace_id,
       lookup_plan
@@ -283,7 +286,16 @@ export async function decideAndApplyIntake(
     await lockCandidatePersons(
       transaction,
       context.workspace_id,
-      candidates.map((candidate) => candidate.person_id)
+      candidates_before_lock.map((candidate) => candidate.person_id)
+    );
+
+    // A competing transaction may have completed this Pessoa while this one
+    // waited for its lock. Decide from a fresh READ COMMITTED statement, not
+    // from the candidate snapshot taken before the wait.
+    const candidates = await findPersonCandidatesInTransaction(
+      transaction,
+      context.workspace_id,
+      lookup_plan
     );
 
     const person = decidePersonIdentity({ normalized: input.normalized, candidates });
@@ -382,8 +394,14 @@ async function applyIntakePlanInTransaction(
           SET last_integration_event_id = ${plan.integration_event_id}::uuid,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ${plan.lead_submission_id}::uuid
+            AND workspace_id = ${context.workspace_id}::uuid
         `;
-        await settleEvent(transaction, plan.integration_event_id, "QUARANTINED");
+        await settleEvent(
+          transaction,
+          context.workspace_id,
+          plan.integration_event_id,
+          "QUARANTINED"
+        );
         return { kind: "QUARANTINE" } as const;
       }
       case "RETRANSMISSION": {
@@ -422,7 +440,12 @@ async function applyIntakePlanInTransaction(
             AND event.workspace_id = ${context.workspace_id}::uuid
           ON CONFLICT (workspace_id, type, integration_event_id) DO NOTHING
         `;
-        await settleEvent(transaction, plan.integration_event_id, "PROCESSED");
+        await settleEvent(
+          transaction,
+          context.workspace_id,
+          plan.integration_event_id,
+          "PROCESSED"
+        );
         return { kind: "RETRANSMISSION", opportunity_id: plan.opportunity_id } as const;
       }
       case "NEW_OPPORTUNITY": {
@@ -452,6 +475,7 @@ async function applyIntakePlanInTransaction(
               last_integration_event_id = ${plan.integration_event_id}::uuid,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ${plan.lead_submission_id}::uuid
+            AND workspace_id = ${context.workspace_id}::uuid
             AND opportunity_id IS NULL
         `;
         if (claimed === 0) {
@@ -459,7 +483,12 @@ async function applyIntakePlanInTransaction(
             "The submission already produced an Opportunity; the job will be retried"
           );
         }
-        await settleEvent(transaction, plan.integration_event_id, "PROCESSED");
+        await settleEvent(
+          transaction,
+          context.workspace_id,
+          plan.integration_event_id,
+          "PROCESSED"
+        );
         return { kind: "NEW_OPPORTUNITY", opportunity_id, person_id } as const;
       }
       default: {
@@ -467,7 +496,23 @@ async function applyIntakePlanInTransaction(
         // to the plan without a branch here, at runtime, in the one place that
         // must never guess.
         const unhandled: never = plan;
-        throw new Error(`Unhandled intake plan: ${JSON.stringify(unhandled)}`);
+        const unexpected = unhandled as unknown as {
+          readonly kind?: unknown;
+          readonly lead_submission_id?: unknown;
+          readonly integration_event_id?: unknown;
+        };
+        const kind = typeof unexpected.kind === "string" ? unexpected.kind : "UNKNOWN";
+        const lead_submission_id =
+          typeof unexpected.lead_submission_id === "string"
+            ? unexpected.lead_submission_id
+            : "unknown";
+        const integration_event_id =
+          typeof unexpected.integration_event_id === "string"
+            ? unexpected.integration_event_id
+            : "unknown";
+        throw new Error(
+          `Unhandled intake plan kind ${kind} for submission ${lead_submission_id} and event ${integration_event_id}`
+        );
       }
     }
 }
@@ -501,6 +546,7 @@ async function writePerson(
           cpf = COALESCE(cpf, ${contacts.cpf}),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${person_id}::uuid
+        AND workspace_id = ${workspace_id}::uuid
     `;
   } else {
     const created = await transaction.$queryRaw<IdRow[]>`
@@ -626,6 +672,7 @@ async function writeReview(
  */
 async function settleEvent(
   transaction: ScopedTransactionClient,
+  workspace_id: string,
   integration_event_id: string,
   status: "PROCESSED" | "QUARANTINED"
 ): Promise<void> {
@@ -644,6 +691,7 @@ async function settleEvent(
         processed_at = ${processed_at},
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ${integration_event_id}::uuid
+      AND workspace_id = ${workspace_id}::uuid
   `;
   if (updated === 0) {
     throw new Error("The integration event is not visible in the workspace its job claims");
