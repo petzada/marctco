@@ -2,6 +2,7 @@
 
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { HouseIcon } from "@phosphor-icons/react/House";
+import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { SignOutIcon } from "@phosphor-icons/react/SignOut";
 import { UsersIcon } from "@phosphor-icons/react/Users";
 import Link from "next/link";
@@ -45,6 +46,11 @@ export function WorkspaceShell({
     },
     ...(canManageIntegrations
       ? [
+          {
+            href: `/workspace/${slug}/integrations/pluga`,
+            icon: <PlugsConnectedIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Pluga"
+          },
           {
             href: `/workspace/${slug}/integrations/landing-page`,
             icon: <GearSixIcon aria-hidden="true" size={20} weight="regular" />,

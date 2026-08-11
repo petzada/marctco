@@ -80,6 +80,7 @@ export {
   hashIntegrationToken,
   resolveWorkspaceByIntegrationToken,
   type GeneratedIntegrationToken,
+  type IntegrationConnectionStatus,
   type IntegrationProvider,
   type ResolvedIntegrationWorkspace
 } from "./integration-connection.js";
@@ -115,4 +116,31 @@ export {
   type UpdateLeadDetailsInput,
   type UpdateLeadDetailsResult
 } from "./leads.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 14 — Tela Integrações > Pluga. Appended at the end on purpose: a
+// parallel ticket is editing this file too, and reordering the exports above
+// would turn an additive change into a merge conflict neither branch caused.
+// ---------------------------------------------------------------------------
+export {
+  getIntegrationConnectionSummary,
+  rotateIntegrationConnectionSecret,
+  setIntegrationConnectionStatus,
+  type IntegrationConnectionSummary
+} from "./integration-connection-operations.js";
+export {
+  getLastSuccessfulSyncAt,
+  integrationEventPayloadExpiresAt,
+  requeueIntegrationEventForReprocessing,
+  IntegrationEventPayloadExpiredError,
+  PAYLOAD_RETENTION_DAYS
+} from "./integration-event.js";
+export {
+  getQuarantinedEvent,
+  listQuarantinedEvents,
+  type ListQuarantinedEventsOptions,
+  type QuarantinedEvent,
+  type QuarantinedEventCursor,
+  type QuarantinedEventSummary
+} from "./quarantine.js";
 

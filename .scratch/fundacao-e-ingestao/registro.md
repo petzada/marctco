@@ -457,6 +457,7 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - **Branch de hardening:** `fix/wave-review-ia-configuracoes`, sem push direto
   para `main`; entrega pelo fluxo `pnpm ship`.
 
+<<<<<<< HEAD
 ## Ticket 12 — Tela de Leads — CONCLUÍDO
 
 - **O que foi construído:** `/workspace/:slug/leads` — tabela paginada por
@@ -490,3 +491,57 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - **Precisa de mão humana:** uma passada visual na tela em navegador, nos
   breakpoints do `DESIGN.md` — é o único critério cuja prova não é automatizável
   aqui.
+
+## Ticket 14 — Tela Integrações > Pluga — QUASE CONCLUÍDO (needs-info)
+
+- **O que foi construído:** a tela `/workspace/:slug/integrations/pluga` completa — URL do webhook copiável, geração/rotação/ativação/desativação do segredo (Direção), contrato `v1` e modelo copiável de HTTP Request para Meta, aviso do plano pago, explicação não técnica do formato e da retenção de 90 dias, histórico com "reprocessar", última sincronização e a fila de quarentena com "completar e liberar". A liberação da quarentena roda literalmente a mesma sequência do job do worker — `getQuarantinedEvent` → `buildReleaseInboundLead` (sem conector) → `normalize` → `recordLeadSubmission` → `findPersonCandidates`/`decidePersonIdentity` → `resolveIntakeDestination` + `findOpenOpportunitiesOfPerson` → `decideIntake` (com `now` = instante da liberação) → `applyIntakePlan` —, reutiliza o mesmo `IntegrationEvent` e nunca enfileira um segundo. Nasceu também o primeiro conjunto de `components/ui/` (button, card, data-table, empty-state, field, modal, status-badge), cada um transcrito do `DESIGN.md`.
+- **Arquivos-chave criados/alterados:** `packages/db/src/quarantine.ts` (novo); `integration-connection-operations.ts`, `integration-connection.ts`, `integration-event.ts`, `index.ts` (estendidos, bloco novo ao final); `packages/db/tests/quarantine.test.ts` e `integration-connection-operations.test.ts` (novos); `apps/web/app/workspace/[slug]/integrations/pluga/**` (tela, painel do segredo, bloco copiável, detalhe/formulário de liberação, quatro route handlers); `apps/web/components/ui/*.tsx`; `apps/web/lib/{pluga-access,mask-integration-secret,integration-payload-expiry,quarantine-release-eligibility,build-release-inbound-lead,release-quarantined-lead,quarantine-wait-time,pluga-templates}.ts` (+ testes); `apps/web/app/workspace/[slug]/workspace-shell.tsx` (item de navegação "Pluga", antes de "Landing page"); `vitest.config.ts` (dois arquivos novos no projeto `db`); issue 14.
+- **Critérios de aceite:** 26 de 28 marcados. Desmarcados: o modelo Google (depende de conta Pluga real conectada a um formulário Google — nenhuma existe neste ambiente) e a coluna "erro" do histórico (`integration_events` não tem coluna de mensagem de erro, e nada nesta fatia grava `status = FAILED`; é dívida do dead-letter do ticket 15, não deste).
+- **Testes:** `pnpm test:unit` 251/251 (18 arquivos novos, incluindo `release-quarantined-lead.test.ts`, que mocka só `@marctco/db` e prova a sequência de chamadas e os argumentos exatos contra as funções reais de `@marctco/domain`, e o `route.test.ts` do handler de liberação). `pnpm test:db` 171/171 (19 novos): `quarantine.test.ts` prova contra Postgres real que a liberação reutiliza o mesmo evento (contagem não muda), cria Pessoa + Oportunidade com `arrived_at` no instante da liberação, e que uma liberação sem contato permanece `QUARANTINE`; `integration-connection-operations.test.ts` prova rotação/ativação/desativação/última-sincronização/recusa por payload expirado. `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm check:migrations`, `pnpm db:drift`: verdes. Nenhuma migration foi necessária.
+- **Self-review:** `/code-review` em dois eixos. Standards não encontrou violação dura; apontou duas constantes duplicadas por decisão deliberada (`PAYLOAD_RETENTION_DAYS`/`integrationEventPayloadExpiresAt` e o prefixo `mtco_`, ambas em `apps/web/lib/` para não puxar `@marctco/db` — e o `createPrismaClient()` que ele constrói no escopo do módulo — para dentro de um teste de lib pura) e uma bifurcação real de caminho: o worker chama `readWorkspaceFeatureFlags` + `planOpportunityPostCreationEffects` depois de `applyIntakePlan`, e a liberação não chama — porque não pode: `@marctco/domain/feature-flags` é banido de `apps/web` pelo próprio `eslint.config.mjs` ("Web code receives a resolved workspace boolean from a named @marctco/db operation"). Registrado abaixo como descoberta para quem ligar `auto_primeiro_contato` de verdade. Spec encontrou um achado real — o redirect de sucesso da liberação (`?released=`) não tinha leitor na tela — **corrigido** antes deste registro; os outros dois apontamentos (o botão "Reprocessar" escondido para evento em quarentena, e o `components/ui/` nascer neste ticket em vez do 12) são decisões deliberadas, explicadas abaixo.
+- **Branch / PR:** `ticket/14-tela-integracoes-pluga`, commit `3b341e1` (+ o fix do `?released=` no mesmo commit antes deste registro). Sem push e sem PR — integração é manual pelo orquestrador.
+- **Decisões que tomei sozinho:**
+  - O segredo (URL + mascarado + gerar/rotacionar/ativar/desativar) é seção exclusiva da Direção — inclusive a leitura do resumo (`getIntegrationConnectionSummary`), não só as ações. O ADR-0015 escreve "o segredo da integração é só da Direção; o histórico e o reprocessamento são da Gestão", e li isso como toda a seção, não só os botões.
+  - "Reprocessar" fica oculto na UI para evento `QUARANTINED` (esse card usa "completar e liberar"), embora `requeueIntegrationEventForReprocessing` continue aceitando reprocessar um evento em quarentena — a operação de banco é de propósito mais geral que a política que esta tela aplica sobre ela.
+  - `listQuarantinedEvents` ordena do mais antigo para o mais novo (oposto de `listIntegrationEvents`, que é mais novo primeiro): numa fila que se resolve, o lead que espera há mais tempo deve aparecer primeiro.
+  - Acrescentei uma coluna "Espera" (`apps/web/lib/quarantine-wait-time.ts`) na fila de quarentena — não pedida literalmente, mas é a prova mais barata de que "o tempo em quarentena continua medível pela diferença entre liberação e recebimento" é visível, não só verdadeiro no banco.
+  - O painel do segredo usa `Modal` + botão `danger` só para desativar a integração (ação que para a ingestão) e `Modal` + botão `primary` para confirmar a rotação (consequente, mas não "destrutiva" no sentido do `DESIGN.md`).
+  - `readLeadPayload`/`buildInboundLead` (de `@marctco/domain`) são usados na liberação e na coluna "Mapeamento" do histórico — não são o conector (`apps/worker/src/connector-v1.ts`, nunca importado aqui), são o leitor genérico do contrato `v1` que o próprio conector também usa por baixo.
+- **Descobertas que afetam tickets seguintes:**
+  - Quando `auto_primeiro_contato` (ou qualquer outro `post_creation_effect`) ganhar consumidor real, a liberação da quarentena também precisa dispará-lo — hoje ela não faz, porque `apps/web` não pode importar `@marctco/domain/feature-flags`. A saída provável é uma operação nomeada em `packages/db` que envolva `readWorkspaceFeatureFlags` + `planOpportunityPostCreationEffects` e devolva só o resultado resolvido, do mesmo jeito que `resolveIntakeDestination` envolve lógica de domínio para o release handler não precisar tocar no pacote errado.
+  - `getQuarantinedEvent`/`listQuarantinedEvents` juntam em `lead_submissions.last_integration_event_id = event.id`: se uma submissão for requarentenada mais de uma vez, só o evento mais recente aparece como quarentena ativa; um evento de quarentena mais antigo da mesma submissão nunca mais aparece na fila (fica com `status = QUARANTINED` para sempre, sem card e sem lugar na UI). Não é regressão desta fatia — é um comportamento pré-existente de `applyIntakePlan` (ticket 09/10) que este ticket só passou a expor numa tela; registrar aqui para quem for ao dead-letter do ticket 15.
+  - `packages/db/src/index.ts` recebeu um bloco novo ao final (comentário explícito de que é aditivo, para o merge com o ticket 12 não colidir).
+  - `apps/web/components/ui/` nasceu neste ticket com sete primitivos (button, card, data-table, empty-state, field, modal, status-badge) no contrato exato que o prompt descreveu; o ticket 12 deve criar só os que faltarem, nos mesmos nomes/formas, sem duplicar os sete existentes.
+- **Documentos emendados:** issue 14 (`Status`, 28 critérios e evidência), este registro. Nenhum ADR — nenhuma regra nova foi decidida, só aplicada. `DESIGN.md` não foi tocado (pertence ao ticket 12 nesta rodada); as duas substituições de valor sem token (14px→`px-md`, 2px→`py-xxs`) ficaram documentadas em comentário no código, não no `DESIGN.md`.
+- **Precisa de mão humana:** 1. Conectar uma conta Pluga real a um Google Lead Form, disparar um lead de teste, e só então escrever o modelo Google — sem isso o critério correspondente não fecha, por desenho (ADR-0008 recusa presumir campos não confirmados). 2. Nenhuma outra ação humana: sem migration, sem variável de ambiente nova, sem serviço externo novo.
+
+## Ticket 14 — integração pós-rebase — 2026-08-11
+
+- Rebase sobre `2fc64d3` com conflito só no `registro.md` (aditivo, resolvido
+  preservando as duas seções do hardening e a deste ticket).
+- O item "Pluga" do rail nasceu com `shortLabel` e quebrou o typecheck depois
+  do rebase — o rail compacto da PR #28 passou a exigir `icon` por item. O
+  rebase auto-mesclou sem conflito e só o compilador pegou; corrigido com
+  `PlugsConnectedIcon` no commit `235d9ac`.
+- Gates depois do rebase: `test:unit` 248/248, `test:db` 178/178,
+  `test:seam2` 19/19, `test:a7` 5/5, typecheck, lint, build,
+  `check:migrations` e `db:drift` verdes.
+- O `test:a7` só fecha localmente com `PGBOUNCER_DATABASE_URL` apontando para o
+  banco `marctco`: o container do pgbouncer serve um banco fixo, e as worktrees
+  usam bancos próprios. Em CI as duas URLs são o mesmo banco e o gate roda
+  íntegro.
+- A contagem de critérios do registro original dizia "26 de 28"; a contagem real
+  dos checkboxes é **27 marcados e 2 abertos**. Os dois abertos continuam os
+  mesmos (modelo Google e coluna de erro do histórico).
+- **Os sete primitivos de `components/ui/` nasceram duas vezes.** Os tickets 12
+  e 14 correram em paralelo e cada um transcreveu o `DESIGN.md` por conta
+  própria, com implementações diferentes dos mesmos sete nomes. No rebase, o
+  ticket 12 já estava no `main` (PR #29), então a versão dele ficou como fonte
+  única e a deste ticket foi descartada — não por ser pior, mas porque duas
+  transcrições do mesmo componente é exatamente o que o `DESIGN.md` existe para
+  impedir. O único ajuste que o compilador cobrou foi o nome do tipo:
+  `StatusTone` (14) → `StatusBadgeTone` (12).
+- **Lição para a próxima wave:** dois tickets que tocam a mesma camada de
+  primitivos não devem correr em paralelo sem que um deles seja declarado dono
+  da camada. O comentário "bloco aditivo ao final" resolveu `packages/db/src/
+  index.ts` sem colisão; nada equivalente protegia `components/ui/`.

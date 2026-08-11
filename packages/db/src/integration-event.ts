@@ -282,3 +282,117 @@ export async function listIntegrationEvents(
 // screen and the funnel disagree — a card with an event still reading
 // RECEIVED, or the reverse. The named surface of ADR-0016 is deliberate, so
 // the operation is gone rather than left exported with no caller.
+
+/**
+ * How long `IntegrationEvent.raw` survives after receipt (ADR-0014). Not a
+ * column: the expiry date is always `received_at + PAYLOAD_RETENTION_DAYS`,
+ * and `raw` being null has exactly one cause because it is written on
+ * receipt, before the 200 — there is no path onto which an event exists
+ * without it. The Integrações screen derives "when the content left" from
+ * this constant instead of storing a date that could disagree with reality.
+ */
+export const PAYLOAD_RETENTION_DAYS = 90;
+
+/** `received_at + PAYLOAD_RETENTION_DAYS`, the one place that formula lives. */
+export function integrationEventPayloadExpiresAt(received_at: Date): Date {
+  return new Date(received_at.getTime() + PAYLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Thrown by `requeueIntegrationEventForReprocessing` when `raw` already
+ * expired. A dedicated type instead of a string match lets the route handler
+ * show *when* the content left without re-deriving the date itself.
+ */
+export class IntegrationEventPayloadExpiredError extends Error {
+  readonly integration_event_id: string;
+  readonly received_at: Date;
+  readonly expired_at: Date;
+
+  constructor(integration_event_id: string, received_at: Date) {
+    const expired_at = integrationEventPayloadExpiresAt(received_at);
+    super(
+      `The payload for integration event ${integration_event_id} expired on ` +
+        `${expired_at.toISOString()} (ADR-0014); it cannot be reprocessed.`
+    );
+    this.name = "IntegrationEventPayloadExpiredError";
+    this.integration_event_id = integration_event_id;
+    this.received_at = received_at;
+    this.expired_at = expired_at;
+  }
+}
+
+/**
+ * The most recent instant a lead actually made it into the funnel — Gestão's
+ * "is this thing still working" question, answered without walking the whole
+ * history page the screen already renders.
+ */
+export async function getLastSuccessfulSyncAt(
+  context: UserContext,
+  prisma: PrismaClient = sharedPrisma
+): Promise<Date | null> {
+  if (context.role !== "OWNER" && context.role !== "MANAGER") {
+    throw new Error("Only MANAGER or OWNER can read the last successful sync");
+  }
+
+  const rows = await withAccessContext(prisma, context, async (transaction) =>
+    transaction.$queryRaw<Array<{ processed_at: Date }>>`
+      SELECT processed_at
+      FROM integration_events
+      WHERE status = 'PROCESSED'
+      ORDER BY processed_at DESC
+      LIMIT 1
+    `
+  );
+  return rows[0]?.processed_at ?? null;
+}
+
+/**
+ * Puts an event back in front of the same dispatcher, "sem caminho paralelo"
+ * (ADR-0007): it only ever resets `dispatch_status` to `PENDING`, the exact
+ * column `private.claim_pending_events` already scans. There is no second
+ * queue and no direct call into the worker from here.
+ *
+ * Refuses — with the instant the content left — when `raw` already expired
+ * instead of requeuing a job the worker could never interpret (ADR-0014).
+ * That is the **only** refusal: an event that is `PROCESSED` or `QUARANTINED`
+ * is still safe to requeue, because the worker's own idempotency (a
+ * `PROCESSED` event returns immediately, `recordLeadSubmission`'s constraint
+ * arbitrates the rest) is what makes "reprocessar" safe to offer without this
+ * operation having to first guess what state is sensible to retry from.
+ */
+export async function requeueIntegrationEventForReprocessing(
+  context: UserContext,
+  integration_event_id: string,
+  prisma: PrismaClient = sharedPrisma
+): Promise<void> {
+  if (context.role !== "OWNER" && context.role !== "MANAGER") {
+    throw new Error("Only MANAGER or OWNER can reprocess an integration event");
+  }
+  assertUuid(integration_event_id, "integration_event_id");
+
+  await withAccessContext(prisma, context, async (transaction) => {
+    const rows = await transaction.$queryRaw<Array<{ raw: unknown; received_at: Date }>>`
+      SELECT raw, received_at
+      FROM integration_events
+      WHERE id = ${integration_event_id}::uuid
+    `;
+    const event = rows[0];
+    if (!event) {
+      throw new Error(EVENT_NOT_VISIBLE);
+    }
+    if (event.raw === null) {
+      throw new IntegrationEventPayloadExpiredError(integration_event_id, event.received_at);
+    }
+
+    const updated = await transaction.$executeRaw`
+      UPDATE integration_events
+      SET dispatch_status = 'PENDING',
+          dispatched_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${integration_event_id}::uuid
+    `;
+    if (updated === 0) {
+      throw new Error(EVENT_NOT_VISIBLE);
+    }
+  });
+}
