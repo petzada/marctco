@@ -415,3 +415,19 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - Conflitos aditivos resolvidos preservando os exports de marcadores/resoluções, as relações `OpportunityTimelineEvent`/`WorkspaceFlag`, as fixtures RLS e ambos os projetos de teste.
 - Commits da wave: `03a3f59`, `5153006`, `4275279`, `842ac65` sobre o fixed point `887a8e9`.
 - A wave de código está consolidada. A pendência externa do Google permanece em `acoes-manuais-pendentes.md`; os critérios visuais explicitamente atribuídos ao ticket 12 continuam desmarcados nos tickets 11 e 13.
+
+## Correção de concorrência do mecanismo 2 — 2026-08-11
+
+- **Achado corrigido:** dois envios distintos da mesma Pessoa podiam ler
+  candidatas/cards antes de qualquer commit e criar duas Pessoas ou duas
+  Oportunidades sem `POSSIBLE_DUPLICATE`.
+- **Arbitragem:** `decideAndApplyIntake` trava, em ordem canônica, todas as
+  chaves de identidade com `workspace_id` explícito e depois as Pessoas
+  candidatas; lookup, decisões puras e `applyIntakePlan` passam a compartilhar
+  a transação. A condição `LeadSubmission.opportunity_id IS NULL` continua
+  intacta e dona da concorrência do mesmo envio.
+- **Prova:** teste DB concorrente com dois `external_lead_id` distintos e o
+  mesmo telefone exige uma Pessoa, duas Oportunidades, ambas as submissões
+  ligadas e uma revisão `POSSIBLE_DUPLICATE` conectando os cards.
+- **Sem migration:** a correção usa advisory locks transacionais e consultas já
+  servidas pelos índices existentes.

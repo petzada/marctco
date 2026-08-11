@@ -49,6 +49,13 @@ A idempotência tem um dono só: a constraint mais o worker. Nunca um pré-check
 
 ### O envio duplicado **sem card** não é retransmissão, e a condição é quem arbitra
 
+> **Supersessão de 2026-08-11:** a condição abaixo continua sendo a arbitragem
+> do mesmo envio, mas não fecha a corrida entre **envios distintos** da mesma
+> Pessoa. Esse segundo caso é coordenado por `decideAndApplyIntake`, conforme a
+> emenda do ADR-0017: locks canônicos escopados pelo workspace, lookup e decisão
+> refeitos na transação, duas Oportunidades legítimas e
+> `POSSIBLE_DUPLICATE` entre elas.
+
 O ADR-0017 manda o chamador inserir **entre** a primeira fase e a terceira, o que põe o insert numa transação e a aplicação do plano noutra. Entre os dois commits o envio existe com `opportunity_id` nulo — e nesse instante "duplicata" e "já está no funil" deixam de ser o mesmo fato.
 
 `decideIntake` trata `DUPLICATE` com `opportunity_id` nulo como envio novo, porque ir inerte ali engoliria o lead para sempre: a variante `Retransmission` protege um card, e ali não há card nenhum. Isso sozinho abriria a porta oposta — dois workers na mesma chave tomariam ambos esse caminho e escreveriam dois cards. Quem fecha é a condição na escrita: `applyIntakePlan` grava `opportunity_id` com `WHERE … AND opportunity_id IS NULL`, e a transação que não afeta linha nenhuma desfaz tudo o que fez e falha alto ([ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md) — condição arbitra escrita concorrente). O perdedor não deixa Pessoa órfã, e a retentativa lê o card e vai inerte. Há teste dos dois lados no Seam 2 (`packages/db/tests/intake.test.ts`).

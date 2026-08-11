@@ -4,13 +4,22 @@ import type {
   IntakeDestination,
   IntakePlan,
   IntakeReviewPlan,
+  NormalizedLead,
+  PersonLookupPlan,
   SubmissionInsert,
   SubmissionKey
+} from "@marctco/domain";
+import {
+  decideIntake,
+  decidePersonIdentity,
+  planPersonLookup,
+  reusedPersonId
 } from "@marctco/domain";
 import type { AccessContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { assertUuid } from "./internal/uuid.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
+import { findPersonCandidatesInTransaction } from "./person.js";
 
 const sharedPrisma = createPrismaClient();
 
@@ -19,8 +28,9 @@ const sharedPrisma = createPrismaClient();
  * context variant, because ingestion has two callers: the worker's job and the
  * "completar e liberar" handler in `apps/web` (ADR-0016, ADR-0017).
  *
- * None of them decides anything. The domain already decided; what is left is
- * to carry a plan into one transaction.
+ * Business decisions remain pure domain calls. This module either applies an
+ * already-decided plan or coordinates those calls with the scoped reads whose
+ * snapshot they depend on.
  */
 
 /** What `applyIntakePlan` wrote, so a caller can look at it without a second read. */
@@ -32,6 +42,20 @@ export type AppliedIntakePlan =
       readonly opportunity_id: string;
       readonly person_id: string;
     };
+
+export interface DecideAndApplyIntakeInput {
+  readonly normalized: NormalizedLead;
+  readonly submission: SubmissionInsert;
+  readonly destination: IntakeDestination;
+  readonly integration_event_id: string;
+  readonly now: Date;
+}
+
+/** PII-free result: safe for the worker to reduce to its BullMQ return value. */
+export interface DecidedAndAppliedIntake {
+  readonly intake_plan_kind: IntakePlan["kind"];
+  readonly applied: AppliedIntakePlan;
+}
 
 interface IdRow {
   readonly id: string;
@@ -206,17 +230,119 @@ export async function findOpenOpportunitiesOfPerson(
   }
   assertUuid(person_id, "person_id");
 
-  const rows = await withAccessContext(prisma, context, async (transaction) =>
-    transaction.$queryRaw<IdRow[]>`
+  return withAccessContext(prisma, context, (transaction) =>
+    findOpenOpportunitiesOfPersonInTransaction(transaction, context.workspace_id, person_id)
+  );
+}
+
+async function findOpenOpportunitiesOfPersonInTransaction(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  person_id: string
+): Promise<string[]> {
+  const rows = await transaction.$queryRaw<IdRow[]>`
       SELECT id
       FROM opportunities
-      WHERE person_id = ${person_id}::uuid
+      WHERE workspace_id = ${workspace_id}::uuid
+        AND person_id = ${person_id}::uuid
         AND status = 'OPEN'
         AND merged_into_opportunity_id IS NULL
       ORDER BY arrived_at, id
-    `
-  );
+    `;
   return rows.map((row) => row.id);
+}
+
+/**
+ * Coordinates the pure intake sequence inside the transaction whose snapshot
+ * makes it true. Identity keys are application resources, so transaction-level
+ * advisory locks serialize only submissions that share one; existing Pessoas
+ * get a second, workspace-scoped lock so two different known keys cannot race
+ * the open-card read. Every lock set is acquired in canonical order.
+ *
+ * The domain still owns every decision: `planPersonLookup` describes the
+ * search, `decidePersonIdentity` and `decideIntake` produce inert data, and the
+ * executor below only applies that plan. The coordinator merely keeps those
+ * reads and the write under the same arbitration boundary (ADR-0007, ADR-0017).
+ */
+export async function decideAndApplyIntake(
+  context: AccessContext,
+  input: DecideAndApplyIntakeInput,
+  prisma: PrismaClient = sharedPrisma
+): Promise<DecidedAndAppliedIntake> {
+  assertUuid(input.integration_event_id, "integration_event_id");
+
+  return withAccessContext(prisma, context, async (transaction) => {
+    const lookup_plan = planPersonLookup(input.normalized);
+    await lockIdentityKeys(transaction, context.workspace_id, lookup_plan);
+
+    const candidates = await findPersonCandidatesInTransaction(
+      transaction,
+      context.workspace_id,
+      lookup_plan
+    );
+    await lockCandidatePersons(
+      transaction,
+      context.workspace_id,
+      candidates.map((candidate) => candidate.person_id)
+    );
+
+    const person = decidePersonIdentity({ normalized: input.normalized, candidates });
+    const reused_person_id = reusedPersonId(person);
+    const open_opportunity_ids =
+      reused_person_id === null
+        ? []
+        : await findOpenOpportunitiesOfPersonInTransaction(
+            transaction,
+            context.workspace_id,
+            reused_person_id
+          );
+    const plan = decideIntake({
+      normalized: input.normalized,
+      submission: input.submission,
+      person,
+      destination: input.destination,
+      open_opportunity_ids,
+      integration_event_id: input.integration_event_id,
+      now: input.now
+    });
+    const applied = await applyIntakePlanInTransaction(transaction, context, plan);
+
+    return { intake_plan_kind: plan.kind, applied };
+  });
+}
+
+async function lockIdentityKeys(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  plan: PersonLookupPlan
+): Promise<void> {
+  const resources = plan.keys.map(
+    (key) => `intake:identity:${workspace_id}:${key.kind}:${key.value}`
+  );
+  await lockResources(transaction, resources);
+}
+
+async function lockCandidatePersons(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  person_ids: readonly string[]
+): Promise<void> {
+  await lockResources(
+    transaction,
+    person_ids.map((person_id) => `intake:person:${workspace_id}:${person_id}`)
+  );
+}
+
+async function lockResources(
+  transaction: ScopedTransactionClient,
+  resources: readonly string[]
+): Promise<void> {
+  const ordered = [...new Set(resources)].sort();
+  for (const resource of ordered) {
+    await transaction.$queryRaw<Array<{ pg_advisory_xact_lock: null }>>`
+      SELECT pg_advisory_xact_lock(hashtextextended(${resource}, 0))
+    `;
+  }
 }
 
 /**
@@ -235,7 +361,16 @@ export async function applyIntakePlan(
   plan: IntakePlan,
   prisma: PrismaClient = sharedPrisma
 ): Promise<AppliedIntakePlan> {
-  return withAccessContext(prisma, context, async (transaction) => {
+  return withAccessContext(prisma, context, (transaction) =>
+    applyIntakePlanInTransaction(transaction, context, plan)
+  );
+}
+
+async function applyIntakePlanInTransaction(
+  transaction: ScopedTransactionClient,
+  context: AccessContext,
+  plan: IntakePlan
+): Promise<AppliedIntakePlan> {
     switch (plan.kind) {
       case "QUARANTINE": {
         // Still points the submission at the transmission being processed: a
@@ -334,7 +469,6 @@ export async function applyIntakePlan(
         throw new Error(`Unhandled intake plan: ${JSON.stringify(unhandled)}`);
       }
     }
-  });
 }
 
 /**

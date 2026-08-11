@@ -18,6 +18,7 @@ import {
 } from "../src/access-context.js";
 import {
   applyIntakePlan,
+  decideAndApplyIntake,
   findOpenOpportunitiesOfPerson,
   recordLeadSubmission,
   resolveIntakeDestination
@@ -353,7 +354,7 @@ describe("recordLeadSubmission: the constraint arbitrates, never a SELECT", () =
   });
 });
 
-describe("applyIntakePlan: NEW_OPPORTUNITY", () => {
+describe("transactional intake and applyIntakePlan: NEW_OPPORTUNITY", () => {
   it("creates the Pessoa, her contacts and an OPEN commercial card in the ENTRY stage", async () => {
     const submitted = await submit(`new-${randomUUID()}`);
     const applied = await applyNewOpportunity(submitted);
@@ -604,6 +605,73 @@ describe("applyIntakePlan: NEW_OPPORTUNITY", () => {
     await expect(seeder.person.count({ where: { workspace_id: workspace } })).resolves.toBe(
       persons_before + 1
     );
+  });
+
+  it("keeps identity and possible-duplicate review consistent when distinct submissions race", async () => {
+    const phone = `+55119${Math.floor(10_000_000 + Math.random() * 89_999_999)}`;
+    const normalized = normalize(
+      buildInboundLead(
+        readLeadPayload({
+          name: "Pessoa concorrente",
+          phone
+        }),
+        { source: "LANDING_PAGE", external_lead_id: "ignored-by-this-test" }
+      )
+    );
+    const first = await submit(`distinct-first-${randomUUID()}`, { source: "LANDING_PAGE" });
+    const second = await submit(`distinct-second-${randomUUID()}`, { source: "LANDING_PAGE" });
+
+    await Promise.all(
+      [first, second].map((submitted) =>
+        decideAndApplyIntake(
+          submitted.job,
+          {
+            normalized,
+            submission: submitted.outcome,
+            destination: { pipeline_id: default_pipeline, entry_stage_id: default_entry_stage },
+            integration_event_id: submitted.event_id,
+            now: RECEIVED_AT
+          },
+          app
+        )
+      )
+    );
+
+    const submissions = await seeder.leadSubmission.findMany({
+      where: { id: { in: [first.lead_submission_id, second.lead_submission_id] } },
+      orderBy: { id: "asc" }
+    });
+    expect(submissions).toHaveLength(2);
+    expect(submissions.every((submission) => submission.opportunity_id !== null)).toBe(true);
+    expect(new Set(submissions.map((submission) => submission.opportunity_id)).size).toBe(2);
+
+    const matching_phone = await seeder.personPhone.findMany({
+      where: { workspace_id: workspace, phone_e164: phone },
+      select: { person_id: true }
+    });
+    expect(matching_phone).toHaveLength(1);
+    const person_id = matching_phone[0]?.person_id;
+    if (!person_id) {
+      throw new Error("the shared phone did not resolve to a Pessoa");
+    }
+
+    const opportunities = await seeder.opportunity.findMany({
+      where: { workspace_id: workspace, person_id },
+      orderBy: { id: "asc" }
+    });
+    expect(opportunities).toHaveLength(2);
+
+    const reviews = await seeder.intakeReview.findMany({
+      where: {
+        workspace_id: workspace,
+        type: "POSSIBLE_DUPLICATE",
+        opportunity_id: { in: opportunities.map((opportunity) => opportunity.id) }
+      }
+    });
+    expect(reviews).toHaveLength(1);
+    expect(
+      new Set([reviews[0]?.opportunity_id, reviews[0]?.related_opportunity_id])
+    ).toEqual(new Set(opportunities.map((opportunity) => opportunity.id)));
   });
 
   it("never creates a legal Opportunity — ingestion has no way to ask for one", async () => {

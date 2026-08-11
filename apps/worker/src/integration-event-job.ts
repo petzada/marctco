@@ -1,20 +1,14 @@
 import {
-  applyIntakePlan,
   createJobContext,
-  findOpenOpportunitiesOfPerson,
-  findPersonCandidates,
+  decideAndApplyIntake,
   readWorkspaceFeatureFlags,
   readIntegrationEventForProcessing,
   recordLeadSubmission,
   resolveIntakeDestination
 } from "@marctco/db";
 import {
-  decideIntake,
-  decidePersonIdentity,
   normalize,
-  planPersonLookup,
   planSubmission,
-  reusedPersonId,
   type IntakePlan,
   type IntegrationEventJobData
 } from "@marctco/domain";
@@ -67,10 +61,11 @@ function assertJobData(data: unknown): asserts data is IntegrationEventJobData {
  *
  * The worker sequences nothing it decides. The connector turns the payload into
  * an `InboundLead`; the domain normalizes it, names the idempotency key and
- * says which keys to look up; `packages/db` executes those reads and the insert
- * under the tenant; the domain arbitrates the results into an `IntakePlan`; and
- * `applyIntakePlan` writes it in one transaction. Every rule lives in a pure
- * function, and this function only carries values between them (ADR-0017).
+ * says what makes the submission idempotent; `packages/db` records it under
+ * the tenant, then coordinates `planPersonLookup → decideIntake →
+ * applyIntakePlan` under deterministic transaction locks. Every rule remains
+ * in a pure function, and this function only carries values between the named
+ * operations (ADR-0017).
  *
  * `now` is `received_at`, the instant the lead actually arrived — never this
  * process's clock, which would date every lead by however long the queue was
@@ -114,24 +109,15 @@ export async function processIntegrationEventJob(
     received_at: event.received_at
   });
 
-  const candidates = await findPersonCandidates(context, planPersonLookup(normalized));
-  const person = decidePersonIdentity({ normalized, candidates });
-
-  const [destination, open_opportunity_ids] = await Promise.all([
-    resolveIntakeDestination(context, event.target_pipeline_id),
-    findOpenOpportunitiesOfPerson(context, reusedPersonId(person))
-  ]);
-
-  const plan = decideIntake({
+  const destination = await resolveIntakeDestination(context, event.target_pipeline_id);
+  const decided_and_applied = await decideAndApplyIntake(context, {
     normalized,
     submission,
-    person,
     destination,
-    open_opportunity_ids,
     integration_event_id: event.id,
     now: event.received_at
   });
-  const applied = await applyIntakePlan(context, plan);
+  const { applied } = decided_and_applied;
   const post_creation_effects =
     applied.kind === "NEW_OPPORTUNITY"
       ? planOpportunityPostCreationEffects({
@@ -143,7 +129,7 @@ export async function processIntegrationEventJob(
   return {
     integration_event_id: data.integration_event_id,
     workspace_id: data.workspace_id,
-    intake_plan_kind: plan.kind,
+    intake_plan_kind: decided_and_applied.intake_plan_kind,
     post_creation_effects
   };
 }

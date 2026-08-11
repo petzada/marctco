@@ -4,6 +4,20 @@ A ingestão passa a ser um **módulo** em `packages/domain` com três funções 
 
 **Status:** accepted · 2026-08-05
 
+> **Emendado em 2026-08-11 — o snapshot da decisão é transacional.** Dois
+> envios genuinamente distintos podem carregar as mesmas chaves de identidade e
+> ser processados ao mesmo tempo. Executar lookup, `decideIntake` e
+> `applyIntakePlan` em transações separadas permitia que ambos observassem
+> "nenhuma Pessoa/nenhum card" e criassem duas Pessoas ou dois cards sem
+> `POSSIBLE_DUPLICATE`. `packages/db` expõe `decideAndApplyIntake`, que adquire
+> locks transacionais em ordem canônica por `workspace + cada chave de
+> identidade` e depois por `workspace + Pessoa candidata`; sob esses locks,
+> executa `planPersonLookup → decidePersonIdentity → decideIntake →
+> applyIntakePlan` numa transação. As decisões continuam nas funções puras e o
+> executor continua sem regra. `recordLeadSubmission` permanece antes dessa
+> fronteira e continua sendo arbitrado exclusivamente pela constraint do
+> mecanismo 1.
+
 ## O problema
 
 O [ADR-0011](./0011-monorepo-pnpm-e-dominio-puro.md) travou que o domínio recebe dado e devolve decisão, e o [ADR-0008](./0008-fronteira-conector-dominio.md) travou onde fica o conector. Nenhum dos dois disse **quem sequencia** — e a sequência acabou, por omissão, dentro do job do worker. Três defeitos saem daí.
@@ -52,7 +66,7 @@ Cada variante é um caso do ADR-0007, e a exaustividade é do compilador:
 
 **A variante `Retransmission` não tem campo de etapa, responsável, situação nem `arrived_at`.** É a parte mais valiosa desta decisão: "retransmissão não rebobina o funil" deixa de ser disciplina e vira ausência de campo no tipo. Não há como escrever o bug — não há onde escrevê-lo.
 
-`applyIntakePlan(ctx, plan)` em `packages/db` executa o plano numa transação, sob o contexto de acesso do [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md): um `switch` exaustivo, nenhuma regra de negócio, nenhuma decisão.
+`applyIntakePlan(ctx, plan)` em `packages/db` executa o plano numa transação, sob o contexto de acesso do [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md): um `switch` exaustivo, nenhuma regra de negócio, nenhuma decisão. No caminho público de ingestão ele roda dentro de `decideAndApplyIntake`, depois que a mesma transação serializou as chaves, refez as leituras e chamou as decisões puras. A operação permanece exportada como seam de persistência e para testes de aplicação de planos; chamadores de ingestão não montam mais o snapshot fora da transação.
 
 ### Os dois chamadores
 
