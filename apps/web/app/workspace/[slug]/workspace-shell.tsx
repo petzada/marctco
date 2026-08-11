@@ -34,8 +34,8 @@ export function WorkspaceShell({
       ? [
           {
             href: `/workspace/${slug}/integrations/landing-page`,
-            label: "Landing page",
-            shortLabel: "LP"
+            label: "Configurações",
+            shortLabel: "C"
           }
         ]
       : [])
