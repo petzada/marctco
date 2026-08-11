@@ -11,4 +11,9 @@ export async function register(): Promise<void> {
     const { startIngestionDispatcher } = await import("./lib/ingestion-queue");
     startIngestionDispatcher();
   }
+
+  // Retention is not queue work: it touches only PostgreSQL, so it starts even
+  // where the queue is absent (ADR-0014).
+  const { startPayloadExpirySweep } = await import("./lib/payload-expiry-sweep");
+  startPayloadExpirySweep();
 }

@@ -12,9 +12,13 @@ vi.mock("@marctco/db", () => ({
   createJobContext
 }));
 
-const { dispatchIntervalMs, dispatchPendingIntegrationEvents } = await import(
-  "./ingestion-dispatcher"
-);
+const {
+  dispatchIntervalMs,
+  dispatchPassFailed,
+  dispatchPendingIntegrationEvents,
+  nextDispatchDelayMs,
+  MAX_DISPATCH_BACKOFF_MS
+} = await import("./ingestion-dispatcher");
 
 const workspace_id = randomUUID();
 const first_event_id = randomUUID();
@@ -73,6 +77,21 @@ describe("dispatchPendingIntegrationEvents", () => {
     expect(dispatchIntervalMs("5000")).toBe(5_000);
     expect(() => dispatchIntervalMs("10")).toThrow(/at least 250/);
     expect(() => dispatchIntervalMs("nem numero")).toThrow(/at least 250/);
+  });
+
+  it("backs off exponentially while the queue is unreachable, up to the cap", () => {
+    expect(nextDispatchDelayMs(0, 2_000)).toBe(2_000);
+    expect(nextDispatchDelayMs(1, 2_000)).toBe(4_000);
+    expect(nextDispatchDelayMs(4, 2_000)).toBe(32_000);
+    expect(nextDispatchDelayMs(50, 2_000)).toBe(MAX_DISPATCH_BACKOFF_MS);
+  });
+
+  it("only counts a pass as failed when it had work and moved none of it", () => {
+    // An idle outbox is the healthy case, and a partial pass is a recovery in
+    // progress: neither is a reason to slow down.
+    expect(dispatchPassFailed({ claimed: 0, dispatched: 0 })).toBe(false);
+    expect(dispatchPassFailed({ claimed: 3, dispatched: 1 })).toBe(false);
+    expect(dispatchPassFailed({ claimed: 3, dispatched: 0 })).toBe(true);
   });
 
   it("keeps dispatching the rest of the batch after one failure", async () => {

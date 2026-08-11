@@ -3,6 +3,7 @@ import { assertSafeDatabaseRole } from "@marctco/db";
 import { INTEGRATION_EVENT_QUEUE } from "@marctco/domain";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
+import { recordDeadLetter } from "./dead-letter.js";
 import { processIntegrationEventJob } from "./integration-event-job.js";
 import { createSafeLogger } from "./logger.js";
 
@@ -35,7 +36,29 @@ function startIntegrationEventWorker(): Worker | undefined {
     // A job that claims the wrong tenant reads zero rows and lands here. It is
     // meant to be loud: BullMQ retries it and, once exhausted, it stays visible
     // for reprocessing rather than disappearing.
-    logger.error({ event: "integration_event_job", result: "failed", job_id: job?.id, error });
+    logger.error({
+      event: "integration_event_job",
+      result: "failed",
+      job_id: job?.id,
+      attempts_made: job?.attemptsMade,
+      error
+    });
+    void recordDeadLetter(job, error)
+      .then((result) => {
+        if (result === "dead_lettered" || result === "already_settled") {
+          logger.warn({ event: "integration_event_job", result, job_id: job?.id });
+        }
+      })
+      .catch((failure: unknown) => {
+        // The event stays as it was and the operator still has the log. A dead
+        // letter that cannot be written must not take the worker down with it.
+        logger.error({
+          event: "integration_event_job",
+          result: "dead_letter_failed",
+          job_id: job?.id,
+          error: failure
+        });
+      });
   });
   return worker;
 }

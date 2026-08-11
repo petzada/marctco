@@ -4,7 +4,7 @@ O isolamento entre workspaces tem **duas camadas**: escopo explícito na aplica�
 
 **Status:** accepted · 2026-08-04
 
-> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a regra 9 agora fecha em quatro funções, incluindo a resolução de associação navegador → workspace; `FORCE RLS` exige um executor técnico `NOLOGIN` com policies/grants mínimos para que as funções privadas funcionem sem dar bypass ao app ou ao worker.
+> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a regra 9 fecha em **cinco** funções desde a emenda de 2026-08-11 (a quinta é a descoberta da varredura de retenção, ticket 15) — quatro, incluindo a resolução de associação navegador → workspace; `FORCE RLS` exige um executor técnico `NOLOGIN` com policies/grants mínimos para que as funções privadas funcionem sem dar bypass ao app ou ao worker.
 
 ## O problema que o stack doc não registra
 

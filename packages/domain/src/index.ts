@@ -6,6 +6,7 @@ export {
   type SuspiciousRequest
 } from "./rate-limit.js";
 export {
+  describeFailureReason,
   sanitizeTelemetry,
   type SafeTelemetry
 } from "./telemetry.js";

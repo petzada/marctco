@@ -9,6 +9,13 @@ const allowedKeys = new Set([
   "error_stack",
   "claimed",
   "dispatched",
+  // Ticket 15: the pace of the outbox sweep and the shape of a recovery pass.
+  // Counts and durations, never a lead.
+  "consecutive_failed_passes",
+  "next_pass_in_ms",
+  "expired_payloads",
+  "swept_workspaces",
+  "attempts_made",
   "job_id",
   "workspace_id",
   "integration_event_id",
@@ -54,6 +61,30 @@ function withoutEchoedValues(text: string): string {
   const marker = ECHOED_VALUE_MARKERS.exec(text);
   const kept = marker?.index === undefined ? text : text.slice(0, marker.index);
   return kept.trim().slice(0, MAX_ERROR_MESSAGE);
+}
+
+/**
+ * The one line a human reads when a lead lands in the dead letter. It is
+ * written to `IntegrationEvent.failure_reason`, a column the 90-day payload
+ * expiry does not reach (ADR-0014) — so it goes through exactly the same
+ * scrubbing a log line does: the sentence that names the failure survives, and
+ * everything from PostgreSQL's `DETAIL`/`Key (...)` on, which is where the
+ * offending row (the payload, with CPF and phone) gets echoed, does not
+ * (ADR-0006 regra 12).
+ *
+ * Kept here rather than in `packages/db` because it is the same rule as
+ * `sanitizeTelemetry`, and two copies of "what may leave the tenant" is how
+ * one of them silently stops being true.
+ */
+export function describeFailureReason(value: unknown): string {
+  if (value instanceof Error) {
+    const described = withoutEchoedValues(`${value.name}: ${value.message}`);
+    return described === "" || described === `${value.name}:` ? value.name : described;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    return withoutEchoedValues(value);
+  }
+  return "Unknown failure";
 }
 
 export function sanitizeTelemetry(value: unknown): SafeTelemetry {

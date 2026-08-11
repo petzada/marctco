@@ -483,8 +483,14 @@ describe("Seam 3: RLS and schema invariants", () => {
         AND namespace.nspname NOT LIKE 'pg_toast%'
       ORDER BY namespace.nspname, procedure.proname
     `;
+    // Five, not four: ticket 15 materialized the payload expiry sweep, whose
+    // discovery is circular for the same reason `claim_pending_events` is —
+    // setting the GUC needs the `workspace_id` only the read reveals (ADR-0019,
+    // emendado). Its answer is the narrowest of the five: tenant ids and one
+    // event id, never a payload.
     const allowed = new Set([
       "private.claim_pending_events",
+      "private.claim_expired_payload_workspaces",
       "private.provision_workspace",
       "private.resolve_workspace_by_token_hash",
       "private.resolve_user_workspaces"
@@ -1619,6 +1625,133 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
         worker_can_execute: false
       }
     ]);
+  });
+
+  it("holds every private function to the same contract, not just the ones with a test", async () => {
+    // Ticket 03 left this as carried debt — "EXECUTE revogado de todo papel
+    // exceto o do app, e `search_path` fixado por função", to be closed once
+    // the last of them existed. Written as a sweep rather than a fifth
+    // hand-written case so the sixth function, whenever it comes, is held to
+    // it without anyone remembering to add a test.
+    const functions = await client.$queryRaw<
+      Array<{
+        function_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        worker_can_execute: boolean;
+        owner_can_login: boolean;
+        owner_bypasses_rls: boolean;
+      }>
+    >`
+      SELECT
+        procedure.proname::text AS function_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute,
+        owner.rolcanlogin AS owner_can_login,
+        owner.rolbypassrls AS owner_bypasses_rls
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      JOIN pg_roles AS owner ON owner.oid = procedure.proowner
+      WHERE namespace.nspname = 'private' AND procedure.prosecdef
+    `;
+
+    expect(functions.length).toBeGreaterThanOrEqual(5);
+    for (const routine of functions) {
+      expect(routine.search_path, routine.function_name).toEqual(["search_path=pg_catalog"]);
+      expect(routine.public_can_execute, routine.function_name).toBe(false);
+      expect(routine.worker_can_execute, routine.function_name).toBe(false);
+      expect(routine.owner_can_login, routine.function_name).toBe(false);
+      expect(routine.owner_bypasses_rls, routine.function_name).toBe(false);
+    }
+  });
+
+  it("lets the expiry sweep find tenants without a tenant, and answers only with ids", async () => {
+    const ancient_event_id = randomUUID();
+    await client.$executeRawUnsafe(`
+      INSERT INTO integration_events (id, workspace_id, integration_connection_id, raw, received_at, updated_at)
+      VALUES ('${ancient_event_id}', '${workspace_a}', '${integration_connection_a}', '{"nome":"Antigo"}'::jsonb, CURRENT_TIMESTAMP - INTERVAL '200 days', CURRENT_TIMESTAMP)
+    `);
+
+    try {
+      const discovered = await client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+        return transaction.$queryRaw<Array<Record<string, unknown>>>`
+          SELECT *
+          FROM private.claim_expired_payload_workspaces(
+            (CURRENT_TIMESTAMP - INTERVAL '90 days')::timestamptz
+          )
+        `;
+      });
+
+      const row = discovered.find((candidate) => candidate.workspace_id === workspace_a);
+      expect(row).toBeDefined();
+      // The payload is what the 90 days exist to remove; a function running
+      // with no tenant may not carry it out of the tenant on the way.
+      expect(Object.keys(row ?? {}).sort()).toEqual([
+        "anchor_integration_event_id",
+        "workspace_id"
+      ]);
+    } finally {
+      await client.$executeRawUnsafe(
+        `DELETE FROM integration_events WHERE id = '${ancient_event_id}'`
+      );
+    }
+  });
+
+  it("keeps the expiry resolver owned, scoped and executable only as declared", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private'
+        AND procedure.proname = 'claim_expired_payload_workspaces'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: "marctco_private_definer",
+        search_path: ["search_path=pg_catalog"],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+  });
+
+  it("never lets the technical executor of the pre-tenant reads see a payload", async () => {
+    // The containment that makes a fifth function safe to add: the executor
+    // gained no privilege for it. Reading `raw` without a tenant would fail on
+    // the grant, not on code review.
+    const privileges = await client.$queryRaw<
+      Array<{ reads_ids: boolean; reads_raw: boolean; writes_events: boolean }>
+    >`
+      SELECT
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'workspace_id', 'SELECT') AS reads_ids,
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'raw', 'SELECT') AS reads_raw,
+        has_table_privilege('marctco_private_definer', 'public.integration_events', 'UPDATE') AS writes_events
+    `;
+    expect(privileges).toEqual([{ reads_ids: true, reads_raw: false, writes_events: false }]);
   });
 
   it("scopes the worker role to its own tenant's events, and to nothing without a GUC", async () => {
