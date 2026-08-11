@@ -456,3 +456,37 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   explícitos e não foram falsamente marcados como concluídos.
 - **Branch de hardening:** `fix/wave-review-ia-configuracoes`, sem push direto
   para `main`; entrega pelo fluxo `pnpm ship`.
+
+## Ticket 12 — Tela de Leads — CONCLUÍDO
+
+- **O que foi construído:** `/workspace/:slug/leads` — tabela paginada por
+  keyset, card em slot interceptado, contadores-filtro por marcador, indicador
+  de "novos leads" por consulta periódica, edição na linha e dentro do card, e
+  a resolução de possível duplicado e de conflito de identidade acontecendo
+  aqui, com comparação lado a lado.
+- **Arquivos-chave:** `packages/db/src/leads.ts` (operações nomeadas da tela);
+  migration `20260811001200_leads_list_indexes`; `apps/web/app/workspace/
+  [slug]/leads/**`; `apps/web/components/leads/*`; `apps/web/lib/leads/*`;
+  `DESIGN.md` (componente `markers-menu` e Known Gap resolvido).
+- **Critérios de aceite:** 37 de 37. Os visuais estão marcados por
+  conformidade de código com o `DESIGN.md`; **não houve passada em navegador**.
+- **Schema:** a resolução de conflito de identidade exigiu a coluna
+  `identity_conflict_resolution` e a reescrita dos dois CHECKs de
+  `intake_reviews` — o CHECK do ticket 11 forçava `resolution IS NULL` para
+  toda linha `IDENTITY_CONFLICT`, então metade dos marcadores não tinha como
+  ser resolvida. Migration aditiva.
+- **Testes:** `test:unit` 228/228, `test:db` 182/182 (22 novos em
+  `leads.test.ts`), `test:seam2` 19/19, `test:a7` 5/5; typecheck, lint, build,
+  `check:migrations` e `db:drift` verdes, sobre o rebase em `2fc64d3`.
+- **Integração:** rebase sobre `main` com um conflito em `workspace-shell.tsx`
+  — o rail compacto da PR #28 passou a exigir `icon` por item, e o branch ainda
+  trazia `shortLabel`. Resolvido pela forma do `main`, com `UsersIcon` no item
+  "Leads". O ticket 14 tinha o mesmo defeito, sem conflito de merge: o rebase
+  auto-mesclou e só o compilador pegou.
+- **Descobertas que afetam tickets seguintes:** o ticket 15 (varredor e
+  reprocessar) herda a fila de quarentena já exposta pelo ticket 14 e os
+  índices parciais desta tela; a observação do ticket 14 sobre submissão
+  requarentenada mais de uma vez continua valendo e é dívida do dead-letter.
+- **Precisa de mão humana:** uma passada visual na tela em navegador, nos
+  breakpoints do `DESIGN.md` — é o único critério cuja prova não é automatizável
+  aqui.
