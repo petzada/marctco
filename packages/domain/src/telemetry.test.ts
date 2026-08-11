@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeTelemetry } from "./telemetry.js";
+import { describeFailureReason, sanitizeTelemetry } from "./telemetry.js";
 
 describe("sanitizeTelemetry", () => {
   it("keeps the technical allowlist and discards a raw submission and Person", () => {
@@ -118,3 +118,27 @@ describe("sanitizeTelemetry", () => {
   });
 });
 
+
+describe("describeFailureReason", () => {
+  it("names the failure and drops everything PostgreSQL echoes back", () => {
+    const error = new Error(
+      "duplicate key value violates unique constraint\nDETAIL: Key (cpf)=(529.982.247-25) already exists."
+    );
+    const reason = describeFailureReason(error);
+
+    expect(reason).toContain("Error: duplicate key value violates unique constraint");
+    expect(reason).not.toContain("529.982.247-25");
+  });
+
+  it("caps the reason so it always fits the column that stores it", () => {
+    expect(describeFailureReason(new Error("x".repeat(1_000)).message).length).toBeLessThanOrEqual(
+      300
+    );
+  });
+
+  it("still says something when there is nothing to say", () => {
+    expect(describeFailureReason(undefined)).toBe("Unknown failure");
+    expect(describeFailureReason("   ")).toBe("Unknown failure");
+    expect(describeFailureReason(new Error(""))).toBe("Error");
+  });
+});

@@ -177,6 +177,8 @@ Persistir antes de responder é inegociável. O evento nasce com despacho penden
 - O dispatcher aplica retry com backoff e não depende de um job repetível guardado no próprio Redis para descobrir pendências; sua fonte é o PostgreSQL, lida por `private.claim_pending_events` (ADR-0006 regra 9), que devolve `(id, workspace_id)` e nada mais.
 - O botão “reprocessar” recoloca o evento no mesmo fluxo de despacho, sem caminho paralelo.
 
+**Nota de implementação (ticket 15) — republicação exige remover o job terminado.** “`jobId` determinístico torna republicação segura” é verdade sobre o *domínio* e falso sobre o BullMQ literal: ele recusa adicionar um job cujo id já existe, e um job terminado guarda esse id — os completos por um dia, os falhos para sempre, porque a fila morta precisa ficar inspecionável. Sem apagar o antigo antes de publicar, “reprocessar” marcaria o evento como despachado e não faria nada; a fila morta não teria saída. O publicador remove e então adiciona. O caso que o id determinístico existe para proteger continua protegido: um job em processamento está travado, a remoção falha, o `add` deduplica, e o evento fica com a execução já em curso.
+
 `IntegrationEvent` é a fonte única da tela de Integrações para recebimento, despacho, processamento, falha e reprocessamento. Estado no Redis é operacional e nunca a fonte de verdade.
 
 ### A resolução do token é cross-tenant por natureza

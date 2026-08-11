@@ -545,3 +545,86 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   primitivos não devem correr em paralelo sem que um deles seja declarado dono
   da camada. O comentário "bloco aditivo ao final" resolveu `packages/db/src/
   index.ts` sem colisão; nada equivalente protegia `components/ui/`.
+
+## Ticket 15 — Recuperação da outbox e reprocessamento — CONCLUÍDO
+
+- **O que foi construído:** o dispatcher passou a se auto-agendar com backoff
+  exponencial (2 s → teto de 5 min, zerado na primeira passada que move algo),
+  em vez de um `setInterval` que reperguntava a mesma dezena de linhas ao
+  PostgreSQL a cada dois segundos enquanto o Redis estivesse fora. Nasceu a
+  fila morta — `failed_at` e `failure_reason` em `integration_events`, escritas
+  pelo worker **só** quando o BullMQ esgota as tentativas — e com ela a coluna
+  "Erro" e a seção "Fila morta" da tela de Integrações, que o ticket 14 tinha
+  deixado explicitamente em aberto. E a expiração de payload do ADR-0014 saiu
+  do papel: varredura periódica que descobre tenants por função privada e apaga
+  o conteúdo em lotes, sob RLS, preservando a linha e a quarentena.
+- **Arquivos-chave criados/alterados:** migration
+  `20260811001500_dead_letter_and_payload_expiry` (duas colunas, CHECK total,
+  dois índices parciais, `private.claim_expired_payload_workspaces`);
+  `packages/db/src/payload-expiry.ts` (novo), `integration-event.ts`
+  (`markIntegrationEventFailed`, `listDeadLetterEvents`, requeue que limpa a
+  falha), `index.ts` (bloco aditivo ao final);
+  `packages/domain/src/telemetry.ts` (`describeFailureReason`);
+  `apps/web/lib/payload-expiry-sweep.ts` (novo), `ingestion-dispatcher.ts`
+  (backoff puro), `ingestion-queue.ts` (laço auto-agendado, remoção antes da
+  republicação), `instrumentation.ts`; `apps/worker/src/dead-letter.ts` (novo)
+  e `main.ts`; a tela `integrations/pluga/page.tsx`; ADRs 0007, 0014 e 0019.
+- **Critérios de aceite:** 15 de 15 no ticket 15, com uma ressalva escrita no
+  próprio arquivo (abaixo). Fechados também três critérios carregados de outros
+  tickets: a coluna de erro do ticket 14, e os dois do ticket 03 que a tabela de
+  pendências atribuía a este ("nenhuma transação envolve chamada de rede
+  externa" e o contrato do schema `private`).
+- **Onde eu desviei do ticket, e por quê:** o critério diz "rotina periódica no
+  **worker**"; ela ficou no processo **web**. A descoberta sem tenant passa pelo
+  schema `private`, e `marctco_worker` não tem `USAGE` nele — regra explícita do
+  ADR-0019, que vence a issue por precedência. É o mesmo desvio, pelo mesmo
+  motivo, que o ticket 07 registrou ao deixar o dispatcher no `web`. As saídas
+  alternativas eram conceder ao worker o acesso privado que o Seam 3 prova que
+  ele não tem, ou rotear manutenção por Redis e fazer a retenção depender da
+  fila. O ADR-0014 recebeu nota de supersessão apontando para cá.
+- **A lista fechada virou cinco.** `private.claim_expired_payload_workspaces`
+  devolve `(workspace_id, anchor_integration_event_id)` — menos que a
+  `claim_pending_events` — e **não recebeu privilégio novo nenhum**: cabe dentro
+  das quatro colunas que `marctco_private_definer` já lia desde o ticket 07, e
+  por isso reusa o executor em vez de criar um. O âncora existe para a varredura
+  abrir a transação com um `JobContext` real, evitando um terceiro tipo de
+  `AccessContext` para o único processo que toca todos os tenants.
+- **Um defeito real que o ticket revelou:** o BullMQ recusa adicionar um job
+  cujo id já existe, e o id é derivado do evento. Job terminado guarda esse id —
+  completo por 24 h, falho para sempre, porque `removeOnFail: false` mantém a
+  fila morta inspecionável. Ou seja: "reprocessar" virava a coluna para
+  `PENDING`, o dispatcher "publicava" no vazio, marcava `DISPATCHED` e nada
+  acontecia; a fila morta não tinha saída. O publicador passa a remover antes de
+  adicionar, e o Seam 2 prova a saída ponta a ponta. Nota no ADR-0007.
+- **Testes:** `test:db` 223/223 (19 novos em `outbox-recovery.test.ts` e o Seam 3
+  em 58, incluindo a varredura genérica das funções privadas); `test:unit`
+  278/278 (backoff, varredura de retenção, fila morta do worker,
+  `describeFailureReason`); `test:seam2` 22/22, com três provas novas contra
+  Postgres, Redis e BullMQ reais — lead aceito com o Redis fora chega ao funil
+  quando ele volta, reprocessar não cria segunda Pessoa nem segunda
+  Oportunidade, e um evento sai da fila morta pelo mesmo caminho; `test:a7`
+  5/5; `typecheck`, `lint`, `build`, `check:migrations` e `db:drift` verdes;
+  migration aplicada do zero no banco local.
+- **Decisões que tomei sozinho:** falha de publicação **nunca** vira fila morta —
+  Redis fora é motivo de backoff, não de desistir do lead; só o esgotamento das
+  tentativas do BullMQ escreve `FAILED`. A fila morta não sobrescreve evento
+  `PROCESSED` (o lead já está no funil) nem `QUARANTINED` (é ação humana
+  pendente, e rotulá-la de falha a tiraria da fila de quarentena *e* da exceção
+  de expiração — o único jeito de um lead completável virar buraco). Uma passada
+  só conta como falha quando teve trabalho e não moveu nada: passada vazia é o
+  caso saudável e passada parcial já é a recuperação acontecendo. A descoberta
+  de expiração não testa `raw IS NOT NULL`, porque testá-lo exigiria conceder
+  `SELECT (raw)` a um papel que roda sem tenant; o preço é um `UPDATE` que não
+  acha nada num workspace já limpo, servido por índice parcial.
+- **Descobertas que afetam tickets seguintes:** qualquer job novo do worker que
+  possa falhar em definitivo deve passar por `recordDeadLetter`, ou a tela vai
+  dizer que está tudo bem enquanto não está. Qualquer função privada nova nasce
+  coberta pela varredura do Seam 3 — e se precisar de coluna que o executor
+  atual não lê, o caminho é executor próprio, não grant novo no compartilhado.
+  A varredura de retenção e o dispatcher são hoje as duas rotinas agendadas do
+  processo `web`; uma terceira deve seguir o mesmo formato (`setTimeout`
+  auto-agendado com backoff, ou `setInterval` com trava de reentrância).
+- **Precisa de mão humana:** nada. Sem variável de ambiente obrigatória nova
+  (`PAYLOAD_EXPIRY_INTERVAL_MS` é opcional e vale 1 h por padrão), sem papel
+  novo no banco — portanto sem bootstrap manual no Supabase — e sem serviço
+  externo novo.

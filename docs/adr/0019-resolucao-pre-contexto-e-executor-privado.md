@@ -14,9 +14,9 @@ Também não basta criar uma função `SECURITY DEFINER` pertencente ao migrador
 
 ## A decisão
 
-### 1. Quatro funções sem contexto, lista fechada
+### 1. Cinco funções sem contexto, lista fechada
 
-As únicas funções `SECURITY DEFINER` do banco continuam no schema `private`, com `search_path` fixado e `EXECUTE` revogado de `PUBLIC`. São exatamente estas:
+As únicas funções `SECURITY DEFINER` do banco continuam no schema `private`, com `search_path` fixado e `EXECUTE` revogado de `PUBLIC`. São exatamente estas (a quinta entrou pela emenda de 2026-08-11, abaixo):
 
 | Função | Chamador autorizado | Por que não tem `AccessContext` | Retorno permitido |
 |---|---|---|---|
@@ -24,6 +24,13 @@ As únicas funções `SECURITY DEFINER` do banco continuam no schema `private`, 
 | `claim_pending_events` | app | O dispatcher ainda não tem job nem tenant para setar | Somente `(id, workspace_id)` |
 | `provision_workspace` | app | O Workspace ainda não existe | `workspace_id` |
 | `resolve_user_workspaces` | app | A sessão precisa validar o slug contra `WorkspaceMember` antes de ter `workspace_id` | Para associações do próprio usuário: `workspace_id`, `slug`, `name` e `role`; ausência de associação não devolve detalhe do workspace |
+| `claim_expired_payload_workspaces` | app | A varredura de retenção precisa do `workspace_id` que só a leitura revela, exatamente como o dispatcher | Somente `(workspace_id, anchor_integration_event_id)` |
+
+**Emenda de 2026-08-11 — a lista fecha em cinco.** O ticket 15 materializou a expiração de payload do [ADR-0014](./0014-copia-unica-e-retencao-do-payload.md), e a descoberta dela é a mesma circularidade da `claim_pending_events`: para setar `app.workspace_id` a varredura precisaria do `workspace_id` que só a leitura revela. `claim_expired_payload_workspaces(cutoff)` é a mais estreita das cinco — devolve identificadores de tenant e um evento âncora, nunca `raw` —, pertence a `marctco_private_definer`, e **não recebeu privilégio novo nenhum**: ela é escrita dentro das colunas `(id, workspace_id, dispatch_status, received_at)` que aquele papel já podia ler desde o ticket 07. É por isso que ela reusa o executor em vez de criar um: o Seam 3 prova a mesma contenção, incluindo que o papel continua sem `SELECT` em `raw` e sem `UPDATE` na tabela.
+
+O âncora existe para que a varredura abra sua transação com um `JobContext` real. Continua valendo que esta decisão **não cria um terceiro tipo de `AccessContext`**: o contexto do trabalho de manutenção é o mesmo do worker, e o evento que o nomeia é uma linha real do tenant.
+
+O Seam 3 passou a cobrar o contrato de **toda** função `SECURITY DEFINER` do schema `private` por varredura — `search_path` fixado, `EXECUTE` fora de `PUBLIC` e do worker, executor sem `LOGIN` e sem `BYPASSRLS` —, em vez de um caso escrito à mão por função. A sexta, se existir, nasce sujeita à prova sem que ninguém precise lembrar de escrevê-la.
 
 `resolve_user_workspaces(authenticated_user_id, requested_slug nullable)` tem dois modos, sob a mesma interface SQL estreita:
 

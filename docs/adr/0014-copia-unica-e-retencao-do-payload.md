@@ -31,7 +31,9 @@ O que **não** expira é o fato. A linha do `IntegrationEvent` permanece para se
 
 **Exceção dura:** evento em quarentena **não expira enquanto estiver em quarentena**. É exatamente o payload que o gestor precisa ler para completar e liberar ([ADR-0007](./0007-ingestao-idempotencia.md)); expirá-lo transformaria a quarentena de pendência em buraco definitivo.
 
-A rotina roda no **worker**, não em `pg_cron` — o plano do Supabase não o tem, e a decisão de hosting já previa que trabalho agendado mora no worker.
+A rotina roda na **aplicação**, não em `pg_cron` — o plano do Supabase não o tem, e a decisão de hosting já previa que trabalho agendado mora fora do banco.
+
+**Emenda de 2026-08-11 — em qual processo.** Este ADR dizia "no worker"; ao ser implementada no ticket 15, a rotina ficou no processo **web**, ao lado do dispatcher, pelo mesmo motivo que o ticket 07 encontrou: a descoberta de trabalho sem tenant passa pelo schema `private`, e `marctco_worker` não tem sequer `USAGE` nele ([ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md), que vence por ser decisão de isolamento). Levá-la para o worker exigiria uma de duas coisas — conceder àquele papel o acesso privado que o Seam 3 prova que ele não tem, ou rotear manutenção por Redis e fazer a retenção depender de uma fila estar de pé. Nenhuma das duas paga o que custa. O que a decisão sempre significou continua intacto: o agendamento é da aplicação, não do banco.
 
 ## O número que forçou a decisão
 

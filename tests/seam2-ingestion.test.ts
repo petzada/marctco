@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
   createIntegrationConnection,
+  createJobContext,
+  listDeadLetterEvents,
   listIntegrationEvents,
+  markIntegrationEventFailed,
   provisionWorkspace,
+  requeueIntegrationEventForReprocessing,
   resolveUserContextForSlug,
   type UserContext
 } from "@marctco/db";
@@ -508,5 +512,131 @@ describe("Seam 2: the tracer bullet closes — a submission becomes a Pessoa and
     }
     await expect(inspectCards(carrier.workspace_id)).resolves.toHaveLength(5);
     await expect(inspectSubmissions(neighbour.workspace_id)).resolves.toEqual([]);
+  });
+});
+
+/**
+ * Ticket 15. The two claims the outbox exists to make, proven end to end: a
+ * lead accepted while Redis was down reaches the funnel as soon as Redis
+ * returns, and the "reprocessar" button — the same mechanism, reached from the
+ * screen instead of from the sweep — never produces a second Pessoa or a
+ * second Oportunidade.
+ */
+describe("Seam 2: outbox recovery, reprocessing and the dead letter", () => {
+  let recovered: SeededWorkspace;
+
+  const unreachable = { publish: () => Promise.reject(new Error("ECONNREFUSED")) };
+
+  /**
+   * Publishes what is pending and lets a real BullMQ worker take it, waiting
+   * for that job specifically. The drain used by the tracer block waits for
+   * "no RECEIVED events left", which cannot see a reprocessing: an already
+   * PROCESSED event never goes back to RECEIVED.
+   */
+  async function processThroughWorker(integration_event_id: string): Promise<void> {
+    await dispatchPendingIntegrationEvents(queue.publisher, 100);
+    const job_id = integrationEventJobId(integration_event_id);
+    const worker = new Worker(
+      INTEGRATION_EVENT_QUEUE,
+      async (job: Job) => processIntegrationEventJob(job.data),
+      { connection: new IORedis(redis_url, { maxRetriesPerRequest: null }) }
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("the worker never took the job")), 30_000);
+        worker.on("completed", (job: Job) => {
+          if (job.id === job_id) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+        worker.on("failed", (job: Job | undefined, error: Error) => {
+          if (job?.id === job_id) {
+            clearTimeout(timer);
+            reject(error);
+          }
+        });
+      });
+    } finally {
+      await worker.close();
+    }
+  }
+
+  async function onlyEvent(): Promise<string> {
+    const [event] = await listIntegrationEvents(recovered.context, { limit: 5 });
+    if (!event) {
+      throw new Error("expected the workspace to have received an event");
+    }
+    return event.id;
+  }
+
+  beforeAll(async () => {
+    recovered = await seedWorkspace(randomUUID(), `Seam 2 outbox ${randomUUID()}`);
+  });
+
+  it("processes a lead accepted while Redis was down, as soon as Redis comes back", async () => {
+    const response = await POST(
+      leadRequest(
+        recovered.token,
+        JSON.stringify({ external_lead_id: "outbox-1", name: "Joana Lima", phone: "11912345678" })
+      )
+    );
+    expect(response.status).toBe(200);
+
+    // The queue is unreachable: the pass moves nothing and the lead is still
+    // only in PostgreSQL, which is where accepting it put it.
+    await expect(dispatchPendingIntegrationEvents(unreachable, 100)).resolves.toMatchObject({
+      dispatched: 0
+    });
+    await expect(inspectCards(recovered.workspace_id)).resolves.toEqual([]);
+
+    await processThroughWorker(await onlyEvent());
+
+    const cards = await inspectCards(recovered.workspace_id);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.person).toMatchObject({ name: "Joana Lima", phones: ["+5511912345678"] });
+  });
+
+  it("reprocesses without creating a second Pessoa or a second Oportunidade", async () => {
+    const event_id = await onlyEvent();
+    const [before] = await inspectCards(recovered.workspace_id);
+
+    await requeueIntegrationEventForReprocessing(recovered.context, event_id);
+    await processThroughWorker(event_id);
+
+    const after = await inspectCards(recovered.workspace_id);
+    expect(after).toHaveLength(1);
+    expect(after[0]?.id).toBe(before?.id);
+    expect(after[0]?.person_id).toBe(before?.person_id);
+    await expect(inspectSubmissions(recovered.workspace_id, "outbox-1")).resolves.toHaveLength(1);
+  });
+
+  it("lets an event leave the dead letter through that same mechanism", async () => {
+    const response = await POST(
+      leadRequest(
+        recovered.token,
+        JSON.stringify({ external_lead_id: "outbox-2", name: "Rita Alves", phone: "11955554444" })
+      )
+    );
+    expect(response.status).toBe(200);
+    const event_id = await onlyEvent();
+
+    // The state the worker leaves behind once BullMQ has run out of attempts,
+    // written by the same named operation `recordDeadLetter` calls.
+    await markIntegrationEventFailed(
+      createJobContext({ workspace_id: recovered.workspace_id, integration_event_id: event_id }),
+      "Error: connector could not read the payload"
+    );
+    await expect(listDeadLetterEvents(recovered.context, { limit: 5 })).resolves.toMatchObject([
+      { id: event_id, payload_present: true, failure_reason: "Error: connector could not read the payload" }
+    ]);
+
+    await requeueIntegrationEventForReprocessing(recovered.context, event_id);
+    await processThroughWorker(event_id);
+
+    await expect(listDeadLetterEvents(recovered.context, { limit: 5 })).resolves.toEqual([]);
+    const cards = await inspectCards(recovered.workspace_id);
+    expect(cards).toHaveLength(2);
+    expect(cards.some((card) => card.person.name === "Rita Alves")).toBe(true);
   });
 });

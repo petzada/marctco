@@ -144,3 +144,21 @@ export {
   type QuarantinedEventSummary
 } from "./quarantine.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 15 — recuperação da outbox, fila morta e expiração do payload.
+// ---------------------------------------------------------------------------
+export {
+  listDeadLetterEvents,
+  markIntegrationEventFailed,
+  type DeadLetterEventCursor,
+  type DeadLetterEventRecord,
+  type ListDeadLetterEventsOptions
+} from "./integration-event.js";
+export {
+  claimWorkspacesWithExpiringPayloads,
+  expireIntegrationEventPayloads,
+  payloadExpiryCutoff,
+  type ExpirePayloadsInput,
+  type ExpiringPayloadWorkspace
+} from "./payload-expiry.js";
+

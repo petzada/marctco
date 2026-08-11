@@ -1,8 +1,10 @@
 import {
   getIntegrationConnectionSummary,
   getLastSuccessfulSyncAt,
+  listDeadLetterEvents,
   listIntegrationEvents,
   listQuarantinedEvents,
+  type DeadLetterEventRecord,
   type IntegrationEventRecord,
   type IntegrationEventStatus,
   type QuarantinedEventSummary
@@ -75,13 +77,14 @@ export default async function PlugaIntegrationPage({
   }
 
   const isOwner = canManageIntegrationSecret(access.workspace.role);
-  const [connection, events, lastSync, quarantine] = await Promise.all([
+  const [connection, events, lastSync, quarantine, deadLetter] = await Promise.all([
     isOwner
       ? getIntegrationConnectionSummary(access.workspace.context, "PLUGA")
       : Promise.resolve(null),
     listIntegrationEvents(access.workspace.context, { limit: 20 }),
     getLastSuccessfulSyncAt(access.workspace.context),
-    listQuarantinedEvents(access.workspace.context, { limit: 20 })
+    listQuarantinedEvents(access.workspace.context, { limit: 20 }),
+    listDeadLetterEvents(access.workspace.context, { limit: 20 })
   ]);
 
   const releasedId = firstParam(query.released);
@@ -155,6 +158,7 @@ export default async function PlugaIntegrationPage({
                 <tr>
                   <DataTableHeaderCell>Data</DataTableHeaderCell>
                   <DataTableHeaderCell>Situação</DataTableHeaderCell>
+                  <DataTableHeaderCell>Erro</DataTableHeaderCell>
                   <DataTableHeaderCell>Mapeamento</DataTableHeaderCell>
                   <DataTableHeaderCell>Conteúdo</DataTableHeaderCell>
                   <DataTableHeaderCell>Ação</DataTableHeaderCell>
@@ -163,6 +167,38 @@ export default async function PlugaIntegrationPage({
               <tbody>
                 {events.map((event) => (
                   <EventRow event={event} key={event.id} slug={slug} />
+                ))}
+              </tbody>
+            </DataTable>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-sm">
+          <h2 className="text-title text-ink">Fila morta</h2>
+          <p className="max-w-prose text-body-sm text-ink-secondary">
+            Leads que o processamento tentou várias vezes e desistiu. O lead não se perdeu — ele
+            continua guardado aqui, com o motivo da falha. Corrigido o que causou o erro, use
+            &quot;Reprocessar&quot;: é o mesmo caminho que a recuperação automática usa, sem fila
+            paralela.
+          </p>
+          {deadLetter.length === 0 ? (
+            <EmptyState
+              description="Nenhum lead recebido parou de ser tentado."
+              title="Nada na fila morta"
+            />
+          ) : (
+            <DataTable>
+              <thead>
+                <tr>
+                  <DataTableHeaderCell>Falhou em</DataTableHeaderCell>
+                  <DataTableHeaderCell>Recebido em</DataTableHeaderCell>
+                  <DataTableHeaderCell>Motivo</DataTableHeaderCell>
+                  <DataTableHeaderCell>Ação</DataTableHeaderCell>
+                </tr>
+              </thead>
+              <tbody>
+                {deadLetter.map((event) => (
+                  <DeadLetterRow event={event} key={event.id} slug={slug} />
                 ))}
               </tbody>
             </DataTable>
@@ -238,6 +274,15 @@ function EventRow({
         </StatusBadge>
       </DataTableCell>
       <DataTableCell>
+        {event.failure_reason ? (
+          <span className="text-caption text-danger-ink" title={event.failure_reason}>
+            {event.failure_reason}
+          </span>
+        ) : (
+          <span className="text-caption text-ink-disabled">–</span>
+        )}
+      </DataTableCell>
+      <DataTableCell>
         {presence ? (
           <span className="text-caption text-ink-muted">
             Nome {presence.name ? "✓" : "–"} · Telefone {presence.phone ? "✓" : "–"} · E-mail{" "}
@@ -274,6 +319,37 @@ function EventRow({
             </Button>
           </form>
         ) : null}
+      </DataTableCell>
+    </DataTableRow>
+  );
+}
+
+function DeadLetterRow({
+  event,
+  slug
+}: Readonly<{ event: DeadLetterEventRecord; slug: string }>) {
+  return (
+    <DataTableRow>
+      <DataTableCell>{DATE_TIME.format(event.failed_at)}</DataTableCell>
+      <DataTableCell>{DATE_TIME.format(event.received_at)}</DataTableCell>
+      <DataTableCell>
+        <span className="text-caption text-danger-ink">{event.failure_reason}</span>
+      </DataTableCell>
+      <DataTableCell>
+        {event.payload_present ? (
+          <form
+            action={`/workspace/${slug}/integrations/pluga/events/${event.id}/reprocess`}
+            method="post"
+          >
+            <Button size="md" type="submit" variant="tertiary">
+              Reprocessar
+            </Button>
+          </form>
+        ) : (
+          <span className="text-caption text-ink-muted">
+            Conteúdo expirado — só o registro continua guardado.
+          </span>
+        )}
       </DataTableCell>
     </DataTableRow>
   );

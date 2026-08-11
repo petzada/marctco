@@ -64,6 +64,9 @@ export interface IntegrationEventRecord extends IntegrationEventFacts {
   readonly dispatch_status: IntegrationEventDispatchStatus;
   readonly dispatched_at: Date | null;
   readonly processed_at: Date | null;
+  /** Both null unless `status` is `FAILED`, enforced by a CHECK (ticket 15). */
+  readonly failed_at: Date | null;
+  readonly failure_reason: string | null;
 }
 
 /** The keyset a caller carries to ask for the page after this row (ADR-0013). */
@@ -75,6 +78,31 @@ export interface IntegrationEventCursor {
 export interface ListIntegrationEventsOptions {
   readonly limit?: number;
   readonly after?: IntegrationEventCursor;
+}
+
+/**
+ * One line of the dead letter. It carries the reason and whether the payload
+ * is still there — not the payload itself: the screen decides between
+ * "reprocessar" and "o conteúdo já expirou" from that boolean alone, and a
+ * list has no business shipping a page of raw payloads to render a badge
+ * (ADR-0014).
+ */
+export interface DeadLetterEventRecord {
+  readonly id: string;
+  readonly received_at: Date;
+  readonly failed_at: Date;
+  readonly failure_reason: string;
+  readonly payload_present: boolean;
+}
+
+export interface DeadLetterEventCursor {
+  readonly failed_at: Date;
+  readonly id: string;
+}
+
+export interface ListDeadLetterEventsOptions {
+  readonly limit?: number;
+  readonly after?: DeadLetterEventCursor;
 }
 
 interface IdRow {
@@ -188,6 +216,63 @@ export async function markIntegrationEventDispatched(
   });
 }
 
+/** Longer than any reason `describeFailureReason` produces; the CHECK agrees. */
+const MAX_FAILURE_REASON = 500;
+
+/**
+ * The dead letter, written once BullMQ has run out of attempts — never on the
+ * first failure, because a failure that will be retried is not yet a failure a
+ * human has to look at.
+ *
+ * It refuses to relabel an event that already settled. `PROCESSED` means the
+ * plan committed and a later step threw: the lead is in the funnel, and
+ * marking it failed would invent a problem for whoever reads the screen.
+ * `QUARANTINED` is a pending human action, not a defect — writing `FAILED`
+ * over it would drop the lead out of the quarantine queue *and* out of the
+ * quarantine exception to the payload expiry (ADR-0014), which is the one way
+ * a completable lead becomes unrecoverable.
+ *
+ * Returns whether it wrote. A job pointing at another workspace's event still
+ * fails loudly (ADR-0006): "not mine" is not "already settled".
+ */
+export async function markIntegrationEventFailed(
+  context: JobContext,
+  failure_reason: string,
+  prisma: PrismaClient = sharedPrisma
+): Promise<boolean> {
+  const reason = failure_reason.trim().slice(0, MAX_FAILURE_REASON);
+  if (reason === "") {
+    throw new Error("A dead-lettered event must record why it failed");
+  }
+
+  return withAccessContext(prisma, context, async (transaction) => {
+    const updated = await transaction.$executeRaw`
+      UPDATE integration_events
+      SET status = 'FAILED',
+          failed_at = COALESCE(failed_at, CURRENT_TIMESTAMP),
+          failure_reason = ${reason},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${context.integration_event_id}::uuid
+        AND workspace_id = ${context.workspace_id}::uuid
+        AND status NOT IN ('PROCESSED', 'QUARANTINED')
+    `;
+    if (updated > 0) {
+      return true;
+    }
+
+    const visible = await transaction.$queryRaw<IdRow[]>`
+      SELECT id
+      FROM integration_events
+      WHERE id = ${context.integration_event_id}::uuid
+        AND workspace_id = ${context.workspace_id}::uuid
+    `;
+    if (visible.length === 0) {
+      throw new Error(EVENT_NOT_VISIBLE);
+    }
+    return false;
+  });
+}
+
 /**
  * The worker's read, under RLS, scoped by the `workspace_id` the authenticated
  * handler put on the job. A job pointing at another workspace's event reads
@@ -253,7 +338,7 @@ export async function listIntegrationEvents(
 
   const after = options.after;
   const keyset = after
-    ? Prisma.sql`WHERE (received_at, id) < (${after.received_at}::timestamptz, ${after.id}::uuid)`
+    ? Prisma.sql`AND (received_at, id) < (${after.received_at}::timestamptz, ${after.id}::uuid)`
     : Prisma.empty;
 
   return withAccessContext(prisma, context, async (transaction) =>
@@ -266,10 +351,67 @@ export async function listIntegrationEvents(
         raw,
         received_at,
         dispatched_at,
-        processed_at
+        processed_at,
+        failed_at,
+        failure_reason
       FROM integration_events
+      WHERE workspace_id = ${context.workspace_id}::uuid
       ${keyset}
       ORDER BY received_at DESC, id DESC
+      LIMIT ${limit}::integer
+    `
+  );
+}
+
+/**
+ * The dead letter: the events whose job exhausted every BullMQ attempt and
+ * stopped being retried. It is a separate read rather than a filter over the
+ * history because the two answer different questions — the history answers
+ * "what arrived", newest first, and buries a failure from last week under a
+ * hundred healthy leads; this one answers "what is broken and still waiting
+ * for me", newest failure first, through the partial index that only the
+ * failed rows are in.
+ *
+ * Keyset by `(failed_at, id)`, never `OFFSET` (ADR-0013). MANAGER and up: the
+ * dead letter is operation, not credential (ADR-0015).
+ */
+export async function listDeadLetterEvents(
+  context: UserContext,
+  options: ListDeadLetterEventsOptions = {},
+  prisma: PrismaClient = sharedPrisma
+): Promise<DeadLetterEventRecord[]> {
+  if (context.role !== "OWNER" && context.role !== "MANAGER") {
+    throw new Error("Only MANAGER or OWNER can read the dead letter");
+  }
+  const limit = options.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENTS_PER_PAGE) {
+    throw new Error(`limit must be an integer between 1 and ${MAX_EVENTS_PER_PAGE}`);
+  }
+  if (options.after) {
+    assertUuid(options.after.id, "after.id");
+    if (Number.isNaN(options.after.failed_at.getTime())) {
+      throw new Error("after.failed_at must be a valid instant");
+    }
+  }
+
+  const after = options.after;
+  const keyset = after
+    ? Prisma.sql`AND (failed_at, id) < (${after.failed_at}::timestamptz, ${after.id}::uuid)`
+    : Prisma.empty;
+
+  return withAccessContext(prisma, context, async (transaction) =>
+    transaction.$queryRaw<DeadLetterEventRecord[]>`
+      SELECT
+        id,
+        received_at,
+        failed_at,
+        failure_reason,
+        raw IS NOT NULL AS payload_present
+      FROM integration_events
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND status = 'FAILED'
+      ${keyset}
+      ORDER BY failed_at DESC, id DESC
       LIMIT ${limit}::integer
     `
   );
@@ -350,7 +492,15 @@ export async function getLastSuccessfulSyncAt(
  * Puts an event back in front of the same dispatcher, "sem caminho paralelo"
  * (ADR-0007): it only ever resets `dispatch_status` to `PENDING`, the exact
  * column `private.claim_pending_events` already scans. There is no second
- * queue and no direct call into the worker from here.
+ * queue and no direct call into the worker from here — the button on the
+ * Integrações screen and the sweep that recovers after a Redis outage are the
+ * same mechanism, reached from two places.
+ *
+ * An event in the dead letter also leaves it here: `FAILED` goes back to
+ * `RECEIVED` and the reason is cleared. Reprocessing a failure that stayed
+ * labelled failed would leave the screen showing a queue nobody can empty,
+ * and the next real failure would overwrite a reason the operator never saw
+ * resolve.
  *
  * Refuses — with the instant the content left — when `raw` already expired
  * instead of requeuing a job the worker could never interpret (ADR-0014).
@@ -375,6 +525,7 @@ export async function requeueIntegrationEventForReprocessing(
       SELECT raw, received_at
       FROM integration_events
       WHERE id = ${integration_event_id}::uuid
+        AND workspace_id = ${context.workspace_id}::uuid
     `;
     const event = rows[0];
     if (!event) {
@@ -388,8 +539,13 @@ export async function requeueIntegrationEventForReprocessing(
       UPDATE integration_events
       SET dispatch_status = 'PENDING',
           dispatched_at = NULL,
+          status = CASE WHEN status = 'FAILED' THEN 'RECEIVED'::integration_event_status
+                        ELSE status END,
+          failed_at = NULL,
+          failure_reason = NULL,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${integration_event_id}::uuid
+        AND workspace_id = ${context.workspace_id}::uuid
     `;
     if (updated === 0) {
       throw new Error(EVENT_NOT_VISIBLE);
