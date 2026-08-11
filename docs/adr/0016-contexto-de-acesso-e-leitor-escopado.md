@@ -77,7 +77,7 @@ Vale também para o [ADR-0006 regra 11](./0006-rls-duas-camadas-guc-worker.md): 
 
 ## Consequences
 
-Cada leitura nova exige uma função nova em `packages/db` — não dá para "só escrever um `findMany` na tela". É o pedágio que torna o escopo verificável, e nesta fatia a lista tem doze operações: oito leituras e quatro escritas.
+Cada leitura nova exige uma função nova em `packages/db` — não dá para "só escrever um `findMany` na tela". É o pedágio que torna o escopo verificável, e nesta fatia a lista tem treze operações: oito leituras e cinco escritas.
 
 Em troca, três coisas deixam de depender de alguém lembrar: o escopo do `ATTENDANT`, o cursor keyset e o índice parcial de cada contador. Quando o `SUPERVISOR` ganhar escopo real na Fase 2, ele entra numa função e vale em toda tela que já existe — que é a razão pela qual o ADR-0015 quis o lugar único antes da matriz.
 

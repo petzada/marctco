@@ -674,6 +674,69 @@ describe("transactional intake and applyIntakePlan: NEW_OPPORTUNITY", () => {
     ).toEqual(new Set(opportunities.map((opportunity) => opportunity.id)));
   });
 
+  it("serializes distinct known identity keys that resolve to the same Pessoa", async () => {
+    const suffix = Math.floor(10_000_000 + Math.random() * 89_999_998);
+    const phone_a = `+55119${suffix}`;
+    const phone_b = `+55119${suffix + 1}`;
+    const person = await seeder.person.create({
+      data: {
+        workspace_id: workspace,
+        name: "Pessoa com duas chaves",
+        phones: {
+          create: [
+            { phone_e164: phone_a },
+            { phone_e164: phone_b }
+          ]
+        }
+      }
+    });
+    const normalizedFor = (phone: string) =>
+      normalize(
+        buildInboundLead(readLeadPayload({ phone }), {
+          source: "LANDING_PAGE",
+          external_lead_id: `ignored-${phone}`
+        })
+      );
+    const first = await submit(`known-key-first-${randomUUID()}`, { source: "LANDING_PAGE" });
+    const second = await submit(`known-key-second-${randomUUID()}`, { source: "LANDING_PAGE" });
+
+    await Promise.all(
+      [
+        { submitted: first, normalized: normalizedFor(phone_a) },
+        { submitted: second, normalized: normalizedFor(phone_b) }
+      ].map(({ submitted, normalized }) =>
+        decideAndApplyIntake(
+          submitted.job,
+          {
+            normalized,
+            submission: submitted.outcome,
+            destination: { pipeline_id: default_pipeline, entry_stage_id: default_entry_stage },
+            integration_event_id: submitted.event_id,
+            now: RECEIVED_AT
+          },
+          app
+        )
+      )
+    );
+
+    const opportunities = await seeder.opportunity.findMany({
+      where: { workspace_id: workspace, person_id: person.id },
+      orderBy: { id: "asc" }
+    });
+    expect(opportunities).toHaveLength(2);
+    const reviews = await seeder.intakeReview.findMany({
+      where: {
+        workspace_id: workspace,
+        type: "POSSIBLE_DUPLICATE",
+        opportunity_id: { in: opportunities.map((opportunity) => opportunity.id) }
+      }
+    });
+    expect(reviews).toHaveLength(1);
+    expect(
+      new Set([reviews[0]?.opportunity_id, reviews[0]?.related_opportunity_id])
+    ).toEqual(new Set(opportunities.map((opportunity) => opportunity.id)));
+  });
+
   it("never creates a legal Opportunity — ingestion has no way to ask for one", async () => {
     const applied = await applyNewOpportunity(await submit(`commercial-${randomUUID()}`));
     const areas = await seeder.opportunity.findMany({

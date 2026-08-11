@@ -428,6 +428,8 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   intacta e dona da concorrência do mesmo envio.
 - **Prova:** teste DB concorrente com dois `external_lead_id` distintos e o
   mesmo telefone exige uma Pessoa, duas Oportunidades, ambas as submissões
-  ligadas e uma revisão `POSSIBLE_DUPLICATE` conectando os cards.
+  ligadas e uma revisão `POSSIBLE_DUPLICATE` conectando os cards. Outra corrida
+  usa dois telefones distintos já pertencentes à mesma Pessoa para provar a
+  segunda trava, por `workspace + person_id`.
 - **Sem migration:** a correção usa advisory locks transacionais e consultas já
   servidas pelos índices existentes.
