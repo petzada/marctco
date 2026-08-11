@@ -433,3 +433,26 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   segunda trava, por `workspace + person_id`.
 - **Sem migration:** a correção usa advisory locks transacionais e consultas já
   servidas pelos índices existentes.
+
+## Consolidação pós-review da wave 10 · 11 · 13 · 16 — 2026-08-11
+
+- **Interface e IA:** a receita de landing page permanece na mesma rota e passa
+  a aparecer sob `Configurações`; o rail compacto usa ícones por subpath,
+  preserva rótulos acessíveis e atende foco e alvo de toque em telas pequenas.
+- **Isolamento:** as operações alteradas do intake têm predicado explícito de
+  `workspace_id` além de RLS. Testes com client privilegiado provam que destino,
+  duplicidade, quarentena, retransmissão, claim e settlement não atravessam o
+  tenant. Erros do executor não serializam mais `IntakePlan` nem PII.
+- **Concorrência:** depois dos locks canônicos por identidade e Pessoa, o
+  coordenador relê as candidatas antes de decidir. O teste determinístico de
+  telefones distintos e CPFs contraditórios prova que a transação que esperou
+  observa o CPF recém-gravado e produz `IDENTITY_CONFLICT`.
+- **Gate serial do orquestrador:** Postgres e Redis reais, banco vazio, 15/15
+  migrations aplicadas; `pnpm test` com **396 passando e 1 pulado**; DB 159/159;
+  Seam 2 19/19; typecheck, lint com fronteira Prisma, build de produção,
+  migration safety, `migrate dev`, drift e `git diff --check` verdes.
+- **Revisão independente final:** Standards **0 findings**; Spec **0 findings**.
+  Critérios externos do Google/Pluga e critérios visuais do ticket 12 continuam
+  explícitos e não foram falsamente marcados como concluídos.
+- **Branch de hardening:** `fix/wave-review-ia-configuracoes`, sem push direto
+  para `main`; entrega pelo fluxo `pnpm ship`.
