@@ -20,7 +20,7 @@ import {
   DataTableRow
 } from "../../../../../components/ui/data-table";
 import { EmptyState } from "../../../../../components/ui/empty-state";
-import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge";
+import { StatusBadge, type StatusBadgeTone } from "../../../../../components/ui/status-badge";
 import { isPayloadExpired } from "../../../../../lib/integration-payload-expiry";
 import { canManageIntegrationSecret, canOpenPlugaScreen } from "../../../../../lib/pluga-access";
 import { formatQuarantineWait } from "../../../../../lib/quarantine-wait-time";
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   description: "Ligue a captação de leads via Pluga sem depender de suporte técnico"
 };
 
-const EVENT_STATUS_TONE: Readonly<Record<IntegrationEventStatus, StatusTone>> = {
+const EVENT_STATUS_TONE: Readonly<Record<IntegrationEventStatus, StatusBadgeTone>> = {
   RECEIVED: "info",
   PROCESSED: "success",
   QUARANTINED: "warning",

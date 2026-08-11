@@ -533,3 +533,15 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - A contagem de critérios do registro original dizia "26 de 28"; a contagem real
   dos checkboxes é **27 marcados e 2 abertos**. Os dois abertos continuam os
   mesmos (modelo Google e coluna de erro do histórico).
+- **Os sete primitivos de `components/ui/` nasceram duas vezes.** Os tickets 12
+  e 14 correram em paralelo e cada um transcreveu o `DESIGN.md` por conta
+  própria, com implementações diferentes dos mesmos sete nomes. No rebase, o
+  ticket 12 já estava no `main` (PR #29), então a versão dele ficou como fonte
+  única e a deste ticket foi descartada — não por ser pior, mas porque duas
+  transcrições do mesmo componente é exatamente o que o `DESIGN.md` existe para
+  impedir. O único ajuste que o compilador cobrou foi o nome do tipo:
+  `StatusTone` (14) → `StatusBadgeTone` (12).
+- **Lição para a próxima wave:** dois tickets que tocam a mesma camada de
+  primitivos não devem correr em paralelo sem que um deles seja declarado dono
+  da camada. O comentário "bloco aditivo ao final" resolveu `packages/db/src/
+  index.ts` sem colisão; nada equivalente protegia `components/ui/`.
