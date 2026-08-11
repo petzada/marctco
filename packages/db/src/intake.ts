@@ -260,6 +260,7 @@ export async function applyIntakePlan(
               transmission_count = transmission_count + 1,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ${plan.lead_submission_id}::uuid
+            AND workspace_id = ${context.workspace_id}::uuid
             AND opportunity_id = ${plan.opportunity_id}::uuid
         `;
         if (updated === 0) {
@@ -282,6 +283,7 @@ export async function applyIntakePlan(
             event.received_at
           FROM integration_events AS event
           WHERE event.id = ${plan.integration_event_id}::uuid
+            AND event.workspace_id = ${context.workspace_id}::uuid
           ON CONFLICT (workspace_id, type, integration_event_id) DO NOTHING
         `;
         await settleEvent(transaction, plan.integration_event_id, "PROCESSED");

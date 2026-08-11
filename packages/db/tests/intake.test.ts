@@ -839,6 +839,56 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
       )
     ).rejects.toThrow(/not visible/i);
   });
+
+  it("rejects a neighbouring submission even when the caller bypasses RLS", async () => {
+    const neighbour_pipeline = await seeder.pipeline.findFirstOrThrow({
+      where: { workspace_id: neighbour_workspace },
+      include: { stages: true }
+    });
+    const neighbour_stage = neighbour_pipeline.stages.find((stage) => stage.role === "ENTRY");
+    if (!neighbour_stage) {
+      throw new Error("the neighbouring pipeline must have an entry stage");
+    }
+
+    const neighbour_event_id = await seedEvent(neighbour_workspace);
+    const local_event_id = await seedEvent(workspace);
+    const neighbour_opportunity = await seeder.opportunity.create({
+      data: {
+        workspace_id: neighbour_workspace,
+        person_id: neighbour_person,
+        pipeline_id: neighbour_pipeline.id,
+        stage_id: neighbour_stage.id,
+        area: "COMMERCIAL",
+        arrived_at: RECEIVED_AT
+      }
+    });
+    const neighbour_submission = await seeder.leadSubmission.create({
+      data: {
+        workspace_id: neighbour_workspace,
+        source: "META_LEAD_ADS",
+        external_lead_id: `superuser-scope-${randomUUID()}`,
+        received_at: RECEIVED_AT,
+        last_integration_event_id: neighbour_event_id,
+        opportunity_id: neighbour_opportunity.id
+      }
+    });
+
+    await expect(
+      applyIntakePlan(
+        createJobContext({
+          workspace_id: workspace,
+          integration_event_id: local_event_id
+        }),
+        {
+          kind: "RETRANSMISSION",
+          lead_submission_id: neighbour_submission.id,
+          opportunity_id: neighbour_opportunity.id,
+          integration_event_id: local_event_id
+        },
+        seeder
+      )
+    ).rejects.toThrow(/not visible/i);
+  });
 });
 
 describe("findOpenOpportunitiesOfPerson", () => {
