@@ -45,6 +45,12 @@ export async function findPersonCandidates(
   plan: PersonLookupPlan,
   prisma: PrismaClient = sharedPrisma
 ): Promise<PersonCandidate[]> {
+  // Preserve the cheap public seam: an empty domain plan has no candidate by
+  // construction and must not open a transaction merely to rediscover that.
+  if (plan.keys.length === 0) {
+    return [];
+  }
+
   return withAccessContext(prisma, context, (transaction) =>
     findPersonCandidatesInTransaction(transaction, context.workspace_id, plan)
   );

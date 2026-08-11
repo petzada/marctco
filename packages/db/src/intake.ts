@@ -339,8 +339,9 @@ async function lockResources(
 ): Promise<void> {
   const ordered = [...new Set(resources)].sort();
   for (const resource of ordered) {
-    await transaction.$queryRaw<Array<{ pg_advisory_xact_lock: null }>>`
-      SELECT pg_advisory_xact_lock(hashtextextended(${resource}, 0))
+    await transaction.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1 AS acquired
+      FROM pg_advisory_xact_lock(hashtextextended(${resource}, 0))
     `;
   }
 }
