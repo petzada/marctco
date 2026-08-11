@@ -12,6 +12,7 @@
   "dependencies": {
     "@marctco/db": "workspace:*",
     "@marctco/domain": "workspace:*",
+    "@phosphor-icons/react": "2.1.10",
     "@sentry/nextjs": "10.69.0",
     "@supabase/ssr": "0.12.4",
     "bullmq": "5.70.1",

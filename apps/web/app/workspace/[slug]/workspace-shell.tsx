@@ -1,5 +1,8 @@
 "use client";
 
+import { GearSixIcon } from "@phosphor-icons/react/GearSix";
+import { HouseIcon } from "@phosphor-icons/react/House";
+import { SignOutIcon } from "@phosphor-icons/react/SignOut";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, type ReactNode } from "react";
@@ -14,7 +17,7 @@ interface WorkspaceShellProps {
 
 interface NavigationProps {
   readonly compact?: boolean;
-  readonly items: ReadonlyArray<{ href: string; label: string; shortLabel: string }>;
+  readonly items: ReadonlyArray<{ href: string; icon: ReactNode; label: string }>;
   readonly onNavigate?: () => void;
   readonly pathname: string;
 }
@@ -29,13 +32,17 @@ export function WorkspaceShell({
   const pathname = usePathname();
   const mobileMenu = useRef<HTMLDetailsElement>(null);
   const items = [
-    { href: `/workspace/${slug}`, label: "Visão geral", shortLabel: "V" },
+    {
+      href: `/workspace/${slug}`,
+      icon: <HouseIcon aria-hidden="true" size={20} weight="regular" />,
+      label: "Visão geral"
+    },
     ...(canManageIntegrations
       ? [
           {
             href: `/workspace/${slug}/integrations/landing-page`,
-            label: "Landing page",
-            shortLabel: "LP"
+            icon: <GearSixIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Configurações"
           }
         ]
       : [])
@@ -59,7 +66,7 @@ export function WorkspaceShell({
 
       <header className="sticky top-0 z-10 border-b border-hairline bg-canvas-sunken md:hidden">
         <details className="group" ref={mobileMenu}>
-          <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between px-md text-label text-ink focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-primary-focus">
+          <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between px-md text-label text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus">
             <span className="truncate">{workspaceName}</span>
             <span className="text-primary group-open:hidden">Menu</span>
             <span className="hidden text-primary group-open:inline">Fechar</span>
@@ -101,9 +108,10 @@ function Navigation({ compact = false, items, onNavigate, pathname }: Navigation
         const active = pathname === item.href;
         return (
           <Link
+            aria-label={compact ? item.label : undefined}
             aria-current={active ? "page" : undefined}
             className={
-              "flex min-h-11 items-center rounded-md px-sm text-label focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus lg:min-h-9 " +
+              "flex min-h-11 items-center rounded-md px-sm text-label focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus lg:min-h-9 pointer-coarse:lg:min-h-11 " +
               (compact ? "justify-center px-xs " : "") +
               (active
                 ? "bg-primary-subtle text-primary"
@@ -114,7 +122,7 @@ function Navigation({ compact = false, items, onNavigate, pathname }: Navigation
             title={compact ? item.label : undefined}
             {...(onNavigate ? { onClick: onNavigate } : {})}
           >
-            {compact ? <span aria-hidden="true">{item.shortLabel}</span> : item.label}
+            {compact ? item.icon : item.label}
             {compact ? <span className="sr-only">{item.label}</span> : null}
           </Link>
         );
@@ -127,11 +135,12 @@ function Logout({ className, compact = false }: Readonly<{ className: string; co
   return (
     <form action="/auth/logout" className={className} method="post">
       <button
+        aria-label={compact ? "Sair" : undefined}
         className="min-h-11 w-full rounded-md border border-hairline bg-surface-inset px-sm text-button text-ink hover:border-hairline-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus active:scale-[0.98]"
         title={compact ? "Sair" : undefined}
         type="submit"
       >
-        {compact ? <span aria-hidden="true">S</span> : "Sair"}
+        {compact ? <SignOutIcon aria-hidden="true" size={20} weight="regular" /> : "Sair"}
         {compact ? <span className="sr-only">Sair</span> : null}
       </button>
     </form>

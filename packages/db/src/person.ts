@@ -6,7 +6,10 @@ import {
 } from "@marctco/domain";
 import type { AccessContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
-import { withAccessContext } from "./internal/scoped-transaction.js";
+import {
+  withAccessContext,
+  type ScopedTransactionClient
+} from "./internal/scoped-transaction.js";
 
 const sharedPrisma = createPrismaClient();
 
@@ -22,10 +25,10 @@ const MAX_CANDIDATES = 50;
 export type { PersonCandidate };
 
 /**
- * Executes a `PersonLookupPlan`. One of the two operations in `packages/db`
- * that accept **either** context variant, because ingestion has two callers:
- * the worker's job and the "completar e liberar" handler in `apps/web`
- * (ADR-0016, ADR-0017).
+ * Executes a `PersonLookupPlan`. One of the named ingestion operations in
+ * `packages/db` that accept **either** context variant, because ingestion has
+ * two callers: the worker's job and the "completar e liberar" handler in
+ * `apps/web` (ADR-0016, ADR-0017).
  *
  * The domain decided *what* to search for and how strong each key is; this
  * decides nothing. It reports, per Pessoa, which kinds of key matched — and the
@@ -41,6 +44,23 @@ export async function findPersonCandidates(
   context: AccessContext,
   plan: PersonLookupPlan,
   prisma: PrismaClient = sharedPrisma
+): Promise<PersonCandidate[]> {
+  // Preserve the cheap public seam: an empty domain plan has no candidate by
+  // construction and must not open a transaction merely to rediscover that.
+  if (plan.keys.length === 0) {
+    return [];
+  }
+
+  return withAccessContext(prisma, context, (transaction) =>
+    findPersonCandidatesInTransaction(transaction, context.workspace_id, plan)
+  );
+}
+
+/** Internal form used when intake must keep lookup and write in one snapshot. */
+export async function findPersonCandidatesInTransaction(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  plan: PersonLookupPlan
 ): Promise<PersonCandidate[]> {
   const cpfs = lookupValuesOfKind(plan, "CPF");
   const phones = lookupValuesOfKind(plan, "PHONE");
@@ -63,16 +83,24 @@ export async function findPersonCandidates(
   // from `persons` and testing each row would make the hottest read in
   // ingestion grow with the size of the customer base rather than with the
   // number of keys in the submission.
-  const rows = await withAccessContext(prisma, context, async (transaction) =>
-    transaction.$queryRaw<CandidateRow[]>`
+  const rows = await transaction.$queryRaw<CandidateRow[]>`
       WITH matched_by_cpf AS (
-        SELECT id AS person_id FROM persons WHERE cpf = ANY(${cpfs}::text[])
+        SELECT id AS person_id
+        FROM persons
+        WHERE workspace_id = ${workspace_id}::uuid
+          AND cpf = ANY(${cpfs}::text[])
       ),
       matched_by_phone AS (
-        SELECT person_id FROM person_phones WHERE phone_e164 = ANY(${phones}::text[])
+        SELECT person_id
+        FROM person_phones
+        WHERE workspace_id = ${workspace_id}::uuid
+          AND phone_e164 = ANY(${phones}::text[])
       ),
       matched_by_email AS (
-        SELECT person_id FROM person_emails WHERE email = ANY(${emails}::text[])
+        SELECT person_id
+        FROM person_emails
+        WHERE workspace_id = ${workspace_id}::uuid
+          AND email = ANY(${emails}::text[])
       ),
       candidate AS (
         SELECT person_id FROM matched_by_cpf
@@ -87,11 +115,11 @@ export async function findPersonCandidates(
         EXISTS (SELECT 1 FROM matched_by_email AS m WHERE m.person_id = person.id) AS matched_email
       FROM candidate
       JOIN persons AS person ON person.id = candidate.person_id
-      WHERE person.merged_into_person_id IS NULL
+      WHERE person.workspace_id = ${workspace_id}::uuid
+        AND person.merged_into_person_id IS NULL
       ORDER BY person.id
       LIMIT ${MAX_CANDIDATES}::integer
-    `
-  );
+    `;
 
   return rows.map((row) => ({
     person_id: row.person_id,

@@ -14,6 +14,27 @@ Despacha cada ticket a Composer 2.5 via Task (`composer-2.5-fast`,
 Formato de resumo fixo; self-review; confrontar critérios/ADRs; só então
 atualizar Status/registro.
 
+# Atualização de 2026-08-11 — wave 10 · 11 · 13 · 16 consolidada
+
+- **Wave implementada em paralelo e mesclada:** PR #27 levou os tickets 10, 11,
+  13 e 16 à `main`. O ticket 10 fechou 13/13; o 16, 12/12. O 11 permanece
+  24/25 porque o discriminador visual é do ticket 12. O 13 permanece 12/15:
+  conta Google/Pluga real é ação manual e a origem no card também é do ticket 12.
+- **Hardening pós-merge:** a landing page foi agregada sob `Configurações`; o
+  rail compacto ganhou ícones Phosphor, alvos de toque e foco corretos; leituras
+  e escritas do intake receberam predicados explícitos de workspace.
+- **Concorrência fechada:** `decideAndApplyIntake` serializa por chaves de
+  identidade e Pessoa, relê candidatas depois dos locks e mantém lookup,
+  decisões puras e escrita na mesma transação. O mesmo envio continua arbitrado
+  por `opportunity_id IS NULL`. Há provas para IDs distintos com a mesma chave,
+  chaves distintas da mesma Pessoa e CPFs contraditórios após espera.
+- **Gate final local:** banco vazio com 15 migrations; 396 testes passando e 1
+  condicional pulado; DB 159/159; Seam 2 19/19; typecheck, lint, build, safety de
+  migrations e drift verdes. Re-review independente: Standards 0 findings e
+  Spec 0 findings.
+- **Próxima ordem:** `12 · 14 → 15`. A pendência externa do Google continua em
+  `acoes-manuais-pendentes.md`; não é pendência de código desta wave.
+
 # Atualização de 2026-08-10 — ticket 09 concluído, o tracer bullet fechou
 
 ## O ticket

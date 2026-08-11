@@ -415,3 +415,44 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - Conflitos aditivos resolvidos preservando os exports de marcadores/resoluções, as relações `OpportunityTimelineEvent`/`WorkspaceFlag`, as fixtures RLS e ambos os projetos de teste.
 - Commits da wave: `03a3f59`, `5153006`, `4275279`, `842ac65` sobre o fixed point `887a8e9`.
 - A wave de código está consolidada. A pendência externa do Google permanece em `acoes-manuais-pendentes.md`; os critérios visuais explicitamente atribuídos ao ticket 12 continuam desmarcados nos tickets 11 e 13.
+
+## Correção de concorrência do mecanismo 2 — 2026-08-11
+
+- **Achado corrigido:** dois envios distintos da mesma Pessoa podiam ler
+  candidatas/cards antes de qualquer commit e criar duas Pessoas ou duas
+  Oportunidades sem `POSSIBLE_DUPLICATE`.
+- **Arbitragem:** `decideAndApplyIntake` trava, em ordem canônica, todas as
+  chaves de identidade com `workspace_id` explícito e depois as Pessoas
+  candidatas; lookup, decisões puras e `applyIntakePlan` passam a compartilhar
+  a transação. A condição `LeadSubmission.opportunity_id IS NULL` continua
+  intacta e dona da concorrência do mesmo envio.
+- **Prova:** teste DB concorrente com dois `external_lead_id` distintos e o
+  mesmo telefone exige uma Pessoa, duas Oportunidades, ambas as submissões
+  ligadas e uma revisão `POSSIBLE_DUPLICATE` conectando os cards. Outra corrida
+  usa dois telefones distintos já pertencentes à mesma Pessoa para provar a
+  segunda trava, por `workspace + person_id`.
+- **Sem migration:** a correção usa advisory locks transacionais e consultas já
+  servidas pelos índices existentes.
+
+## Consolidação pós-review da wave 10 · 11 · 13 · 16 — 2026-08-11
+
+- **Interface e IA:** a receita de landing page permanece na mesma rota e passa
+  a aparecer sob `Configurações`; o rail compacto usa ícones por subpath,
+  preserva rótulos acessíveis e atende foco e alvo de toque em telas pequenas.
+- **Isolamento:** as operações alteradas do intake têm predicado explícito de
+  `workspace_id` além de RLS. Testes com client privilegiado provam que destino,
+  duplicidade, quarentena, retransmissão, claim e settlement não atravessam o
+  tenant. Erros do executor não serializam mais `IntakePlan` nem PII.
+- **Concorrência:** depois dos locks canônicos por identidade e Pessoa, o
+  coordenador relê as candidatas antes de decidir. O teste determinístico de
+  telefones distintos e CPFs contraditórios prova que a transação que esperou
+  observa o CPF recém-gravado e produz `IDENTITY_CONFLICT`.
+- **Gate serial do orquestrador:** Postgres e Redis reais, banco vazio, 15/15
+  migrations aplicadas; `pnpm test` com **396 passando e 1 pulado**; DB 159/159;
+  Seam 2 19/19; typecheck, lint com fronteira Prisma, build de produção,
+  migration safety, `migrate dev`, drift e `git diff --check` verdes.
+- **Revisão independente final:** Standards **0 findings**; Spec **0 findings**.
+  Critérios externos do Google/Pluga e critérios visuais do ticket 12 continuam
+  explícitos e não foram falsamente marcados como concluídos.
+- **Branch de hardening:** `fix/wave-review-ia-configuracoes`, sem push direto
+  para `main`; entrega pelo fluxo `pnpm ship`.

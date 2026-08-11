@@ -2,21 +2,17 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const readIntegrationEventForProcessing = vi.fn();
-const findPersonCandidates = vi.fn();
 const resolveIntakeDestination = vi.fn();
 const recordLeadSubmission = vi.fn();
-const findOpenOpportunitiesOfPerson = vi.fn();
-const applyIntakePlan = vi.fn();
+const decideAndApplyIntake = vi.fn();
 const readWorkspaceFeatureFlags = vi.fn();
 const createJobContext = vi.fn((input: unknown) => input);
 
 vi.mock("@marctco/db", () => ({
   readIntegrationEventForProcessing,
-  findPersonCandidates,
   resolveIntakeDestination,
   recordLeadSubmission,
-  findOpenOpportunitiesOfPerson,
-  applyIntakePlan,
+  decideAndApplyIntake,
   readWorkspaceFeatureFlags,
   createJobContext
 }));
@@ -26,15 +22,14 @@ const { processIntegrationEventJob } = await import("./integration-event-job.js"
 const workspace_id = randomUUID();
 const integration_event_id = randomUUID();
 const lead_submission_id = randomUUID();
-const known_person_id = randomUUID();
 const pipeline_id = randomUUID();
 const entry_stage_id = randomUUID();
 const opportunity_id = randomUUID();
 const RECEIVED_AT = new Date("2026-08-08T12:00:00.000Z");
 
-/** The single plan `applyIntakePlan` was handed, narrowed for assertions. */
-function appliedPlan(): Record<string, unknown> {
-  const call = applyIntakePlan.mock.calls[0] as [unknown, Record<string, unknown>];
+/** The single transactional decision input the coordinator received. */
+function coordinatedInput(): Record<string, unknown> {
+  const call = decideAndApplyIntake.mock.calls[0] as [unknown, Record<string, unknown>];
   return call[1];
 }
 
@@ -49,17 +44,18 @@ describe("processIntegrationEventJob", () => {
       raw: { name: "Fulano", phone: "(11) 98765-4321" },
       received_at: RECEIVED_AT
     });
-    findPersonCandidates.mockReset().mockResolvedValue([]);
     resolveIntakeDestination
       .mockReset()
       .mockResolvedValue({ pipeline_id, entry_stage_id });
     recordLeadSubmission
       .mockReset()
       .mockResolvedValue({ kind: "INSERTED", lead_submission_id });
-    findOpenOpportunitiesOfPerson.mockReset().mockResolvedValue([]);
-    applyIntakePlan
+    decideAndApplyIntake
       .mockReset()
-      .mockResolvedValue({ kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() });
+      .mockResolvedValue({
+        intake_plan_kind: "NEW_OPPORTUNITY",
+        applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() }
+      });
     readWorkspaceFeatureFlags.mockReset().mockResolvedValue({
       auto_primeiro_contato: false,
       score_cabimento_llm: false,
@@ -72,7 +68,7 @@ describe("processIntegrationEventJob", () => {
     await processIntegrationEventJob({ integration_event_id, workspace_id });
 
     expect(createJobContext).toHaveBeenCalledWith({ workspace_id, integration_event_id });
-    expect(applyIntakePlan).toHaveBeenCalledOnce();
+    expect(decideAndApplyIntake).toHaveBeenCalledOnce();
   });
 
   it("fails loudly when the event is invisible in the workspace the job claims", async () => {
@@ -83,7 +79,7 @@ describe("processIntegrationEventJob", () => {
     await expect(
       processIntegrationEventJob({ integration_event_id, workspace_id })
     ).rejects.toThrow(/not visible/i);
-    expect(applyIntakePlan).not.toHaveBeenCalled();
+    expect(decideAndApplyIntake).not.toHaveBeenCalled();
   });
 
   it("stays inert for an event already processed, so republication costs nothing", async () => {
@@ -101,21 +97,19 @@ describe("processIntegrationEventJob", () => {
 
     expect(processed.intake_plan_kind).toBeNull();
     expect(recordLeadSubmission).not.toHaveBeenCalled();
-    expect(applyIntakePlan).not.toHaveBeenCalled();
+    expect(decideAndApplyIntake).not.toHaveBeenCalled();
   });
 
-  it("looks the Pessoa up by the normalized keys the domain planned, under the job's tenant", async () => {
+  it("hands the normalized lead to the transactional coordinator under the job's tenant", async () => {
     await processIntegrationEventJob({ integration_event_id, workspace_id });
 
-    expect(findPersonCandidates).toHaveBeenCalledOnce();
-    const [context, plan] = findPersonCandidates.mock.calls[0] as [
+    expect(decideAndApplyIntake).toHaveBeenCalledOnce();
+    const [context, input] = decideAndApplyIntake.mock.calls[0] as [
       { workspace_id: string },
-      { keys: Array<{ kind: string; value: string; strength: string }> }
+      { normalized: { phones: string[] } }
     ];
     expect(context.workspace_id).toBe(workspace_id);
-    expect(plan.keys).toEqual([
-      { kind: "PHONE", value: "+5511987654321", strength: "MODERATE" }
-    ]);
+    expect(input.normalized.phones).toEqual(["+5511987654321"]);
   });
 
   it("records the submission under the key the domain planned, before deciding anything", async () => {
@@ -135,16 +129,14 @@ describe("processIntegrationEventJob", () => {
     expect(input.received_at).toEqual(RECEIVED_AT);
   });
 
-  it("plans a card in the ENTRY stage, with arrived_at equal to the received instant", async () => {
+  it("coordinates the decision in the ENTRY stage, with now equal to the received instant", async () => {
     await processIntegrationEventJob({ integration_event_id, workspace_id });
 
-    expect(appliedPlan()).toMatchObject({
-      kind: "NEW_OPPORTUNITY",
-      lead_submission_id,
-      pipeline_id,
-      stage_id: entry_stage_id,
-      arrived_at: RECEIVED_AT,
-      missing_phone: false
+    expect(coordinatedInput()).toMatchObject({
+      submission: { kind: "INSERTED", lead_submission_id },
+      destination: { pipeline_id, entry_stage_id },
+      integration_event_id,
+      now: RECEIVED_AT
     });
   });
 
@@ -177,7 +169,10 @@ describe("processIntegrationEventJob", () => {
       score_cabimento_llm: false,
       resumo_handoff_llm: false
     });
-    applyIntakePlan.mockResolvedValue({ kind: "RETRANSMISSION", opportunity_id });
+    decideAndApplyIntake.mockResolvedValue({
+      intake_plan_kind: "RETRANSMISSION",
+      applied: { kind: "RETRANSMISSION", opportunity_id }
+    });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
@@ -202,51 +197,6 @@ describe("processIntegrationEventJob", () => {
     expect(resolveIntakeDestination).toHaveBeenCalledWith(expect.anything(), targeted);
   });
 
-  it("recognises a returning Pessoa instead of creating a second one", async () => {
-    findPersonCandidates.mockResolvedValue([
-      { person_id: known_person_id, cpf: null, matched: { cpf: false, phone: true, email: false } }
-    ]);
-
-    await processIntegrationEventJob({ integration_event_id, workspace_id });
-
-    expect(appliedPlan()).toMatchObject({ person: { kind: "REUSE", person_id: known_person_id } });
-    // Only a Pessoa that already exists can already have a card.
-    expect(findOpenOpportunitiesOfPerson).toHaveBeenCalledWith(expect.anything(), known_person_id);
-  });
-
-  it("links the new card to the open one the same Pessoa already had", async () => {
-    findPersonCandidates.mockResolvedValue([
-      { person_id: known_person_id, cpf: null, matched: { cpf: false, phone: true, email: false } }
-    ]);
-    findOpenOpportunitiesOfPerson.mockResolvedValue([opportunity_id]);
-
-    await processIntegrationEventJob({ integration_event_id, workspace_id });
-
-    expect(appliedPlan().reviews).toEqual([
-      { type: "POSSIBLE_DUPLICATE", related_opportunity_id: opportunity_id }
-    ]);
-  });
-
-  it("creates the card and marks the conflict when the keys disagree", async () => {
-    const other_person_id = randomUUID();
-    findPersonCandidates.mockResolvedValue([
-      { person_id: known_person_id, cpf: null, matched: { cpf: false, phone: true, email: false } },
-      { person_id: other_person_id, cpf: null, matched: { cpf: false, phone: false, email: true } }
-    ]);
-
-    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
-
-    expect(processed.intake_plan_kind).toBe("NEW_OPPORTUNITY");
-    expect(appliedPlan()).toMatchObject({
-      person: { kind: "CREATE" },
-      reviews: [
-        { type: "IDENTITY_CONFLICT", candidate_person_ids: [known_person_id, other_person_id] }
-      ]
-    });
-    // The new Pessoa does not exist yet, so there is no card to read.
-    expect(findOpenOpportunitiesOfPerson).toHaveBeenCalledWith(expect.anything(), null);
-  });
-
   it("quarantines a submission with no phone and no e-mail", async () => {
     readIntegrationEventForProcessing.mockResolvedValue({
       id: integration_event_id,
@@ -257,14 +207,16 @@ describe("processIntegrationEventJob", () => {
       raw: { name: "Fulano", campaign_id: "c1" },
       received_at: RECEIVED_AT
     });
-    applyIntakePlan.mockResolvedValue({ kind: "QUARANTINE" });
+    decideAndApplyIntake.mockResolvedValue({
+      intake_plan_kind: "QUARANTINE",
+      applied: { kind: "QUARANTINE" }
+    });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
     expect(processed.intake_plan_kind).toBe("QUARANTINE");
-    expect(appliedPlan()).toEqual({
-      kind: "QUARANTINE",
-      lead_submission_id,
+    expect(coordinatedInput()).toMatchObject({
+      submission: { kind: "INSERTED", lead_submission_id },
       integration_event_id
     });
   });
@@ -275,15 +227,16 @@ describe("processIntegrationEventJob", () => {
       lead_submission_id,
       opportunity_id
     });
-    applyIntakePlan.mockResolvedValue({ kind: "RETRANSMISSION", opportunity_id });
+    decideAndApplyIntake.mockResolvedValue({
+      intake_plan_kind: "RETRANSMISSION",
+      applied: { kind: "RETRANSMISSION", opportunity_id }
+    });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
     expect(processed.intake_plan_kind).toBe("RETRANSMISSION");
-    expect(appliedPlan()).toEqual({
-      kind: "RETRANSMISSION",
-      lead_submission_id,
-      opportunity_id,
+    expect(coordinatedInput()).toMatchObject({
+      submission: { kind: "DUPLICATE", lead_submission_id, opportunity_id },
       integration_event_id
     });
   });

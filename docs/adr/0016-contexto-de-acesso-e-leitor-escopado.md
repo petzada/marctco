@@ -6,6 +6,12 @@
 
 > **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a exceção pré-contexto inclui a quarta função `resolve_user_workspaces`, e `UserContext` é construído somente pelo resolvedor que usa seu resultado. As operações com `AccessContext` e suas garantias permanecem inalteradas.
 
+> **Emendado em 2026-08-11 pelo [ADR-0017](./0017-ingestao-como-decisao-e-plano.md):**
+> `decideAndApplyIntake(ctx, input)` é a operação nomeada que mantém lookup,
+> decisão pura e aplicação no mesmo snapshot transacional. Aceita ambas as
+> variantes de contexto pelos mesmos dois chamadores da ingestão e não devolve
+> o client transacional.
+
 ## O problema
 
 O [ADR-0015](./0015-perfis-de-acesso-e-escopo.md) promete que *"nenhuma consulta consegue ser escrita sem que o autor decida, ali, o que aquele papel enxerga"*, e a issue 03 repete a promessa como critério de aceite. Um helper com a forma `withWorkspace(workspaceId, role, tx => …)` **não consegue cumpri-la**.
@@ -38,11 +44,12 @@ O que as duas têm em comum é o `workspace_id`, que é o que alimenta o `SET LO
 | `findPersonCandidates(ctx, plan)` | ambos | | |
 | `resolveIntakeDestination(ctx, target)` | ambos | | |
 | `findOpenOpportunitiesOfPerson(ctx, id)` | ambos | | |
+| | | `decideAndApplyIntake(ctx, input)` | ambos |
 | `getQuarantinedEvent(ctx, id)` | `UserContext` | | |
 
 Cada uma abre a transação, faz o `SET LOCAL`, aplica o escopo do papel quando ele existe, e usa o cursor keyset e o índice parcial que lhe corresponde.
 
-**Cinco aceitam as duas variantes, e as cinco são do caminho de ingestão** ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)): `findPersonCandidates`, `recordLeadSubmission`, `resolveIntakeDestination`, `findOpenOpportunitiesOfPerson` e `applyIntakePlan`. É a consequência direta de a ingestão ter dois chamadores — o job e o "completar e liberar" do gestor.
+**Seis aceitam as duas variantes, e as seis são do caminho de ingestão** ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)): `findPersonCandidates`, `recordLeadSubmission`, `resolveIntakeDestination`, `findOpenOpportunitiesOfPerson`, `applyIntakePlan` e `decideAndApplyIntake`. As duas primeiras leituras e o executor permanecem seams nomeados, mas o caminho público usa o coordenador para que decisão e escrita compartilhem o snapshot. É a consequência direta de a ingestão ter dois chamadores — o job e o "completar e liberar" do gestor.
 
 > **Emendado pelo ticket 09.** Esta tabela dizia **duas**, escrita antes de o ADR-0017 quebrar a ingestão em três fases puras. Cada fase precisa de uma leitura executada sob o tenant, e o caminho compartilhado é literalmente o mesmo para os dois chamadores — então toda operação dele aceita as duas variantes, ou o "mesmo caminho" que a issue 14 exige não existe. O número não é o que a regra protege: o que ela protege é **por que** uma operação aceita `JobContext`, e a resposta continua sendo uma só. Nada fora do caminho de ingestão ganhou a segunda variante, e `listLeads(jobCtx)` continua não compilando.
 
@@ -70,7 +77,7 @@ Vale também para o [ADR-0006 regra 11](./0006-rls-duas-camadas-guc-worker.md): 
 
 ## Consequences
 
-Cada leitura nova exige uma função nova em `packages/db` — não dá para "só escrever um `findMany` na tela". É o pedágio que torna o escopo verificável, e nesta fatia a lista tem doze operações: oito leituras e quatro escritas.
+Cada leitura nova exige uma função nova em `packages/db` — não dá para "só escrever um `findMany` na tela". É o pedágio que torna o escopo verificável, e nesta fatia a lista tem treze operações: oito leituras e cinco escritas.
 
 Em troca, três coisas deixam de depender de alguém lembrar: o escopo do `ATTENDANT`, o cursor keyset e o índice parcial de cada contador. Quando o `SUPERVISOR` ganhar escopo real na Fase 2, ele entra numa função e vale em toda tela que já existe — que é a razão pela qual o ADR-0015 quis o lugar único antes da matriz.
 

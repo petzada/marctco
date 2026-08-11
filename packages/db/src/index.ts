@@ -40,10 +40,13 @@ export {
 } from "./feature-flags.js";
 export {
   applyIntakePlan,
+  decideAndApplyIntake,
   findOpenOpportunitiesOfPerson,
   recordLeadSubmission,
   resolveIntakeDestination,
   type AppliedIntakePlan,
+  type DecideAndApplyIntakeInput,
+  type DecidedAndAppliedIntake,
   type RecordLeadSubmissionInput
 } from "./intake.js";
 export {

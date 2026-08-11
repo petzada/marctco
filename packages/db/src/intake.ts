@@ -4,23 +4,33 @@ import type {
   IntakeDestination,
   IntakePlan,
   IntakeReviewPlan,
+  NormalizedLead,
+  PersonLookupPlan,
   SubmissionInsert,
   SubmissionKey
+} from "@marctco/domain";
+import {
+  decideIntake,
+  decidePersonIdentity,
+  planPersonLookup,
+  reusedPersonId
 } from "@marctco/domain";
 import type { AccessContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { assertUuid } from "./internal/uuid.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
+import { findPersonCandidatesInTransaction } from "./person.js";
 
 const sharedPrisma = createPrismaClient();
 
 /**
- * The write half of ingestion. Two of the operations here accept **either**
+ * The write half of ingestion. The named intake operations here accept **either**
  * context variant, because ingestion has two callers: the worker's job and the
  * "completar e liberar" handler in `apps/web` (ADR-0016, ADR-0017).
  *
- * None of them decides anything. The domain already decided; what is left is
- * to carry a plan into one transaction.
+ * Business decisions remain pure domain calls. This module either applies an
+ * already-decided plan or coordinates those calls with the scoped reads whose
+ * snapshot they depend on.
  */
 
 /** What `applyIntakePlan` wrote, so a caller can look at it without a second read. */
@@ -32,6 +42,20 @@ export type AppliedIntakePlan =
       readonly opportunity_id: string;
       readonly person_id: string;
     };
+
+export interface DecideAndApplyIntakeInput {
+  readonly normalized: NormalizedLead;
+  readonly submission: SubmissionInsert;
+  readonly destination: IntakeDestination;
+  readonly integration_event_id: string;
+  readonly now: Date;
+}
+
+/** PII-free result: safe for the worker to reduce to its BullMQ return value. */
+export interface DecidedAndAppliedIntake {
+  readonly intake_plan_kind: IntakePlan["kind"];
+  readonly applied: AppliedIntakePlan;
+}
 
 interface IdRow {
   readonly id: string;
@@ -100,7 +124,9 @@ export async function resolveIntakeDestination(
         ON stage.workspace_id = pipeline.workspace_id
        AND stage.pipeline_id = pipeline.id
        AND stage.role = 'ENTRY'
-      WHERE ${chosen}
+      WHERE pipeline.workspace_id = ${context.workspace_id}::uuid
+        AND stage.workspace_id = ${context.workspace_id}::uuid
+        AND ${chosen}
     `
   );
 
@@ -165,7 +191,8 @@ export async function recordLeadSubmission(
     >`
       SELECT id, opportunity_id
       FROM lead_submissions
-      WHERE source = ${key.source}::lead_source
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND source = ${key.source}::lead_source
         AND external_lead_id = ${key.external_lead_id}
     `;
     // An empty read here means the conflicting row belongs to a transaction
@@ -206,17 +233,129 @@ export async function findOpenOpportunitiesOfPerson(
   }
   assertUuid(person_id, "person_id");
 
-  const rows = await withAccessContext(prisma, context, async (transaction) =>
-    transaction.$queryRaw<IdRow[]>`
+  return withAccessContext(prisma, context, (transaction) =>
+    findOpenOpportunitiesOfPersonInTransaction(transaction, context.workspace_id, person_id)
+  );
+}
+
+async function findOpenOpportunitiesOfPersonInTransaction(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  person_id: string
+): Promise<string[]> {
+  const rows = await transaction.$queryRaw<IdRow[]>`
       SELECT id
       FROM opportunities
-      WHERE person_id = ${person_id}::uuid
+      WHERE workspace_id = ${workspace_id}::uuid
+        AND person_id = ${person_id}::uuid
         AND status = 'OPEN'
         AND merged_into_opportunity_id IS NULL
       ORDER BY arrived_at, id
-    `
-  );
+    `;
   return rows.map((row) => row.id);
+}
+
+/**
+ * Coordinates the pure intake sequence inside the transaction whose snapshot
+ * makes it true. Identity keys are application resources, so transaction-level
+ * advisory locks serialize only submissions that share one; existing Pessoas
+ * get a second, workspace-scoped lock so two different known keys cannot race
+ * the open-card read. Every lock set is acquired in canonical order.
+ *
+ * The domain still owns every decision: `planPersonLookup` describes the
+ * search, `decidePersonIdentity` and `decideIntake` produce inert data, and the
+ * executor below only applies that plan. The coordinator merely keeps those
+ * reads and the write under the same arbitration boundary (ADR-0007, ADR-0017).
+ */
+export async function decideAndApplyIntake(
+  context: AccessContext,
+  input: DecideAndApplyIntakeInput,
+  prisma: PrismaClient = sharedPrisma
+): Promise<DecidedAndAppliedIntake> {
+  assertUuid(input.integration_event_id, "integration_event_id");
+
+  return withAccessContext(prisma, context, async (transaction) => {
+    const lookup_plan = planPersonLookup(input.normalized);
+    await lockIdentityKeys(transaction, context.workspace_id, lookup_plan);
+
+    const candidates_before_lock = await findPersonCandidatesInTransaction(
+      transaction,
+      context.workspace_id,
+      lookup_plan
+    );
+    await lockCandidatePersons(
+      transaction,
+      context.workspace_id,
+      candidates_before_lock.map((candidate) => candidate.person_id)
+    );
+
+    // A competing transaction may have completed this Pessoa while this one
+    // waited for its lock. Decide from a fresh READ COMMITTED statement, not
+    // from the candidate snapshot taken before the wait.
+    const candidates = await findPersonCandidatesInTransaction(
+      transaction,
+      context.workspace_id,
+      lookup_plan
+    );
+
+    const person = decidePersonIdentity({ normalized: input.normalized, candidates });
+    const reused_person_id = reusedPersonId(person);
+    const open_opportunity_ids =
+      reused_person_id === null
+        ? []
+        : await findOpenOpportunitiesOfPersonInTransaction(
+            transaction,
+            context.workspace_id,
+            reused_person_id
+          );
+    const plan = decideIntake({
+      normalized: input.normalized,
+      submission: input.submission,
+      person,
+      destination: input.destination,
+      open_opportunity_ids,
+      integration_event_id: input.integration_event_id,
+      now: input.now
+    });
+    const applied = await applyIntakePlanInTransaction(transaction, context, plan);
+
+    return { intake_plan_kind: plan.kind, applied };
+  });
+}
+
+async function lockIdentityKeys(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  plan: PersonLookupPlan
+): Promise<void> {
+  const resources = plan.keys.map(
+    (key) => `intake:identity:${workspace_id}:${key.kind}:${key.value}`
+  );
+  await lockResources(transaction, resources);
+}
+
+async function lockCandidatePersons(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  person_ids: readonly string[]
+): Promise<void> {
+  await lockResources(
+    transaction,
+    person_ids.map((person_id) => `intake:person:${workspace_id}:${person_id}`)
+  );
+}
+
+async function lockResources(
+  transaction: ScopedTransactionClient,
+  resources: readonly string[]
+): Promise<void> {
+  const ordered = [...new Set(resources)].sort();
+  for (const resource of ordered) {
+    await transaction.$queryRaw<Array<{ acquired: number }>>`
+      SELECT 1 AS acquired
+      FROM pg_advisory_xact_lock(hashtextextended(${resource}, 0))
+    `;
+  }
 }
 
 /**
@@ -235,7 +374,16 @@ export async function applyIntakePlan(
   plan: IntakePlan,
   prisma: PrismaClient = sharedPrisma
 ): Promise<AppliedIntakePlan> {
-  return withAccessContext(prisma, context, async (transaction) => {
+  return withAccessContext(prisma, context, (transaction) =>
+    applyIntakePlanInTransaction(transaction, context, plan)
+  );
+}
+
+async function applyIntakePlanInTransaction(
+  transaction: ScopedTransactionClient,
+  context: AccessContext,
+  plan: IntakePlan
+): Promise<AppliedIntakePlan> {
     switch (plan.kind) {
       case "QUARANTINE": {
         // Still points the submission at the transmission being processed: a
@@ -246,8 +394,14 @@ export async function applyIntakePlan(
           SET last_integration_event_id = ${plan.integration_event_id}::uuid,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ${plan.lead_submission_id}::uuid
+            AND workspace_id = ${context.workspace_id}::uuid
         `;
-        await settleEvent(transaction, plan.integration_event_id, "QUARANTINED");
+        await settleEvent(
+          transaction,
+          context.workspace_id,
+          plan.integration_event_id,
+          "QUARANTINED"
+        );
         return { kind: "QUARANTINE" } as const;
       }
       case "RETRANSMISSION": {
@@ -260,6 +414,7 @@ export async function applyIntakePlan(
               transmission_count = transmission_count + 1,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ${plan.lead_submission_id}::uuid
+            AND workspace_id = ${context.workspace_id}::uuid
             AND opportunity_id = ${plan.opportunity_id}::uuid
         `;
         if (updated === 0) {
@@ -282,9 +437,15 @@ export async function applyIntakePlan(
             event.received_at
           FROM integration_events AS event
           WHERE event.id = ${plan.integration_event_id}::uuid
+            AND event.workspace_id = ${context.workspace_id}::uuid
           ON CONFLICT (workspace_id, type, integration_event_id) DO NOTHING
         `;
-        await settleEvent(transaction, plan.integration_event_id, "PROCESSED");
+        await settleEvent(
+          transaction,
+          context.workspace_id,
+          plan.integration_event_id,
+          "PROCESSED"
+        );
         return { kind: "RETRANSMISSION", opportunity_id: plan.opportunity_id } as const;
       }
       case "NEW_OPPORTUNITY": {
@@ -314,6 +475,7 @@ export async function applyIntakePlan(
               last_integration_event_id = ${plan.integration_event_id}::uuid,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ${plan.lead_submission_id}::uuid
+            AND workspace_id = ${context.workspace_id}::uuid
             AND opportunity_id IS NULL
         `;
         if (claimed === 0) {
@@ -321,7 +483,12 @@ export async function applyIntakePlan(
             "The submission already produced an Opportunity; the job will be retried"
           );
         }
-        await settleEvent(transaction, plan.integration_event_id, "PROCESSED");
+        await settleEvent(
+          transaction,
+          context.workspace_id,
+          plan.integration_event_id,
+          "PROCESSED"
+        );
         return { kind: "NEW_OPPORTUNITY", opportunity_id, person_id } as const;
       }
       default: {
@@ -329,10 +496,25 @@ export async function applyIntakePlan(
         // to the plan without a branch here, at runtime, in the one place that
         // must never guess.
         const unhandled: never = plan;
-        throw new Error(`Unhandled intake plan: ${JSON.stringify(unhandled)}`);
+        const unexpected = unhandled as unknown as {
+          readonly kind?: unknown;
+          readonly lead_submission_id?: unknown;
+          readonly integration_event_id?: unknown;
+        };
+        const kind = typeof unexpected.kind === "string" ? unexpected.kind : "UNKNOWN";
+        const lead_submission_id =
+          typeof unexpected.lead_submission_id === "string"
+            ? unexpected.lead_submission_id
+            : "unknown";
+        const integration_event_id =
+          typeof unexpected.integration_event_id === "string"
+            ? unexpected.integration_event_id
+            : "unknown";
+        throw new Error(
+          `Unhandled intake plan kind ${kind} for submission ${lead_submission_id} and event ${integration_event_id}`
+        );
       }
     }
-  });
 }
 
 /**
@@ -364,6 +546,7 @@ async function writePerson(
           cpf = COALESCE(cpf, ${contacts.cpf}),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${person_id}::uuid
+        AND workspace_id = ${workspace_id}::uuid
     `;
   } else {
     const created = await transaction.$queryRaw<IdRow[]>`
@@ -489,6 +672,7 @@ async function writeReview(
  */
 async function settleEvent(
   transaction: ScopedTransactionClient,
+  workspace_id: string,
   integration_event_id: string,
   status: "PROCESSED" | "QUARANTINED"
 ): Promise<void> {
@@ -507,6 +691,7 @@ async function settleEvent(
         processed_at = ${processed_at},
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ${integration_event_id}::uuid
+      AND workspace_id = ${workspace_id}::uuid
   `;
   if (updated === 0) {
     throw new Error("The integration event is not visible in the workspace its job claims");
