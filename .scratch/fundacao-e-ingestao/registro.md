@@ -514,3 +514,22 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   - `apps/web/components/ui/` nasceu neste ticket com sete primitivos (button, card, data-table, empty-state, field, modal, status-badge) no contrato exato que o prompt descreveu; o ticket 12 deve criar só os que faltarem, nos mesmos nomes/formas, sem duplicar os sete existentes.
 - **Documentos emendados:** issue 14 (`Status`, 28 critérios e evidência), este registro. Nenhum ADR — nenhuma regra nova foi decidida, só aplicada. `DESIGN.md` não foi tocado (pertence ao ticket 12 nesta rodada); as duas substituições de valor sem token (14px→`px-md`, 2px→`py-xxs`) ficaram documentadas em comentário no código, não no `DESIGN.md`.
 - **Precisa de mão humana:** 1. Conectar uma conta Pluga real a um Google Lead Form, disparar um lead de teste, e só então escrever o modelo Google — sem isso o critério correspondente não fecha, por desenho (ADR-0008 recusa presumir campos não confirmados). 2. Nenhuma outra ação humana: sem migration, sem variável de ambiente nova, sem serviço externo novo.
+
+## Ticket 14 — integração pós-rebase — 2026-08-11
+
+- Rebase sobre `2fc64d3` com conflito só no `registro.md` (aditivo, resolvido
+  preservando as duas seções do hardening e a deste ticket).
+- O item "Pluga" do rail nasceu com `shortLabel` e quebrou o typecheck depois
+  do rebase — o rail compacto da PR #28 passou a exigir `icon` por item. O
+  rebase auto-mesclou sem conflito e só o compilador pegou; corrigido com
+  `PlugsConnectedIcon` no commit `235d9ac`.
+- Gates depois do rebase: `test:unit` 248/248, `test:db` 178/178,
+  `test:seam2` 19/19, `test:a7` 5/5, typecheck, lint, build,
+  `check:migrations` e `db:drift` verdes.
+- O `test:a7` só fecha localmente com `PGBOUNCER_DATABASE_URL` apontando para o
+  banco `marctco`: o container do pgbouncer serve um banco fixo, e as worktrees
+  usam bancos próprios. Em CI as duas URLs são o mesmo banco e o gate roda
+  íntegro.
+- A contagem de critérios do registro original dizia "26 de 28"; a contagem real
+  dos checkboxes é **27 marcados e 2 abertos**. Os dois abertos continuam os
+  mesmos (modelo Google e coluna de erro do histórico).
