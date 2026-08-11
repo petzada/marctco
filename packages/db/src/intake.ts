@@ -24,7 +24,7 @@ import { findPersonCandidatesInTransaction } from "./person.js";
 const sharedPrisma = createPrismaClient();
 
 /**
- * The write half of ingestion. Two of the operations here accept **either**
+ * The write half of ingestion. The named intake operations here accept **either**
  * context variant, because ingestion has two callers: the worker's job and the
  * "completar e liberar" handler in `apps/web` (ADR-0016, ADR-0017).
  *
