@@ -74,6 +74,7 @@ export {
 } from "./intake/intake-plan.js";
 export {
   markersFor,
+  MARKERS,
   type Marker,
   type MarkerOpportunity,
   type MarkerReview

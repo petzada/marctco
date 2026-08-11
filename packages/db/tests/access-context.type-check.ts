@@ -16,6 +16,7 @@
  */
 import { createJobContext, type UserContext } from "../src/access-context.js";
 import { resolveIntakeReview } from "../src/intake-review.js";
+import { listLeads } from "../src/leads.js";
 
 function representativeUserOnlyOperation(context: UserContext): void {
   // A real operation would open a scoped transaction here. The type shape
@@ -45,6 +46,11 @@ void resolveIntakeReview(jobContext, {
   reason: "Contratos distintos",
   resolved_at: new Date()
 });
+
+// @ts-expect-error - listLeads(jobCtx) must not compile (ADR-0016, ADR-0018
+// registro §Ticket 03 "Pendências carregadas"): the worker never reads the
+// Leads screen, so there is no runtime path where a job could see it.
+void listLeads(jobContext);
 
 // @ts-expect-error - AccessContext has "two constructors and no literal"
 // (ADR-0016): the branded field that makes UserContext/JobContext nominal

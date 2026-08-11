@@ -3,6 +3,7 @@
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { HouseIcon } from "@phosphor-icons/react/House";
 import { SignOutIcon } from "@phosphor-icons/react/SignOut";
+import { UsersIcon } from "@phosphor-icons/react/Users";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, type ReactNode } from "react";
@@ -36,6 +37,11 @@ export function WorkspaceShell({
       href: `/workspace/${slug}`,
       icon: <HouseIcon aria-hidden="true" size={20} weight="regular" />,
       label: "Visão geral"
+    },
+    {
+      href: `/workspace/${slug}/leads`,
+      icon: <UsersIcon aria-hidden="true" size={20} weight="regular" />,
+      label: "Leads"
     },
     ...(canManageIntegrations
       ? [

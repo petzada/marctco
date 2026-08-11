@@ -84,3 +84,35 @@ export {
   type ResolvedIntegrationWorkspace
 } from "./integration-connection.js";
 
+// --- Ticket 12: the Leads screen's named operations -----------------------
+// Appended at the end, not interleaved above, because a parallel agent
+// (ticket 14) edits this same file.
+export { mergePersons, type MergedPersons, type MergePersonsInput } from "./person-merge.js";
+export {
+  assignLead,
+  countLeadsByMarker,
+  countNewLeads,
+  getLead,
+  listLeads,
+  resolveIdentityConflict,
+  updateLeadDetails,
+  type AssignedLead,
+  type AssignLeadInput,
+  type FinancingType,
+  type IdentityConflictResolution,
+  type LeadCandidatePerson,
+  type LeadDetail,
+  type LeadListCursor,
+  type LeadListRow,
+  type LeadMarkerCounts,
+  type LeadRelatedOpportunitySummary,
+  type LeadReviewDetail,
+  type LeadReviewMarker,
+  type LeadSource,
+  type ListLeadsOptions,
+  type ResolvedIdentityConflict,
+  type ResolveIdentityConflictInput,
+  type UpdateLeadDetailsInput,
+  type UpdateLeadDetailsResult
+} from "./leads.js";
+

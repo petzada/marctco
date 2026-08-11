@@ -47,7 +47,7 @@ export default defineConfig({
             "packages/db/src/provision-workspace.test.ts",
             "packages/db/src/runtime-database-url.test.ts",
             "packages/db/src/workspace-context.test.ts",
-            "packages/db/tests/{boot-check,feature-flags,intake,intake-review-resolution,person-candidates,rls}.test.ts"
+            "packages/db/tests/{boot-check,feature-flags,intake,intake-review-resolution,leads,person-candidates,rls}.test.ts"
           ],
           fileParallelism: false
         }
