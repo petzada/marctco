@@ -1,7 +1,12 @@
 # Ações manuais pendentes — fundação e ingestão
 
-> Atualizado em 2026-08-07, na recuperação do build Docker. Production migration
-> verde com 12/12 migrations aplicadas.
+> Atualizado em **2026-08-12**, na auditoria do passo 1. O provisionamento está
+> **confirmado em produção** e o passo 1 saiu da fila; o passo 2 continua aberto e
+> ganhou um caminho que não depende da Pluga paga. Ver
+> [a-fazer-geral.md](./a-fazer-geral.md) para a fila completa daqui em diante.
+>
+> Antes: atualizado em 2026-08-07, na recuperação do build Docker. Production
+> migration verde com 12/12 migrations aplicadas.
 
 ## Resolvido — 2026-08-07, `REDIS_URL` nos dois serviços
 
@@ -54,45 +59,100 @@ endereço com `613e6` que aparece no registro do ticket 01 é antigo e responde
 404 do edge do Railway em tudo. Confirme sempre com
 `railway variables --service web | grep RAILWAY_PUBLIC_DOMAIN`.
 
-### 1. Marcar o usuário em `app_metadata`
+### ~~1. Marcar o usuário em `app_metadata`~~ — ✅ RESOLVIDO em 2026-08-12
 
-No SQL Editor do Supabase (mais confiável que o campo do painel):
+**Fechado por evidência mais forte que a marcação: o workspace existe.** A
+auditoria de 2026-08-12 leu o Supabase de produção (Admin API) e o Postgres de
+produção (papel `marctco_app`, somente leitura) e encontrou o provisionamento
+**já concluído**:
+
+| Fato verificado | Valor em produção |
+|---|---|
+| Usuário | `marciopetigrosso@gmail.com` · `57bbc9aa-5a26-46d0-b766-de78a7471c10` |
+| Workspace | **Hugs Assessoria** · `ca942deb-3325-4342-a9e4-425cd56810dc` |
+| Slug (segmento de URL, ADR-0012) | `9c096b1a-6bcc-44cc-bb00-22a72139b26d` |
+| Associação | `OWNER`, resolvida por `private.resolve_user_workspaces` |
+| Funil | `Comercial`, `COMMERCIAL`, `is_default = true` |
+| Conexão | `PLUGA`, `ACTIVE`, contrato `v1`, token `••••L9rA`, criada 2026-08-11 18:04:56Z |
+
+Os seis critérios da marcação, cada um conferido contra o código que os aplica
+(`apps/web/lib/provisioning-entitlement.ts`):
+
+- [x] `can_provision_workspace` é **booleano `true`** — lido como `true` com
+  `typeof boolean`. A checagem é `!== true` estrita (`provisioning-entitlement.ts:37`),
+  então a string `"true"` teria falhado, e não falhou.
+- [x] `workspace_name` presente e não vazio — `"Hugs Assessoria"`, string, não
+  vazia depois do trim (`:42`).
+- [x] Está em **`app_metadata`**, e **nada vazou para `user_metadata`** — este
+  carrega apenas `email_verified`. Confirmado campo por campo.
+- [x] **O logout/login aconteceu** — provado pelo efeito, não pelo relógio: o
+  workspace nasceu às 18:04:56Z de 2026-08-11, o que só é possível com um JWT que
+  já continha a claim. `last_sign_in_at` é 18:19:49Z.
+- [x] **O login não tinha associação quando provisionou** — hoje tem, criada pelo
+  próprio provisionamento.
+- [x] **O direito foi gasto** — e é por isso que o `true` de hoje é uma
+  **re-marcação posterior**, não a original: gastar grava
+  `{ can_provision_workspace: false, workspace_name: null }`
+  (`apps/web/lib/supabase/admin.ts:36-38`). O `updated_at` do usuário é
+  18:19:49Z, igual ao último login, e um `UPDATE` manual no SQL Editor **não move
+  `updated_at`** — motivo pelo qual o timestamp não serve como prova de ordem
+  aqui, e a prova usada foi a existência do workspace.
+
+**Sequela a limpar (não bloqueia nada, mas é ruído de segurança):** a re-marcação
+deixou um direito de provisionar pendurado num login que já é `OWNER`. Hoje é
+inócuo — quem tem associação vai para `/access` e nunca provisiona — mas se a
+associação fosse removida algum dia, esse login criaria um **segundo** workspace
+sem ninguém pedir. Devolver ao estado que o consumo deixa:
 
 ```sql
 update auth.users
 set raw_app_meta_data =
   coalesce(raw_app_meta_data, '{}'::jsonb)
-  || jsonb_build_object(
-       'can_provision_workspace', true,
-       'workspace_name', 'Assessoria Exemplo'
-     )
-where email = 'pessoa@exemplo.com';
+  || jsonb_build_object('can_provision_workspace', false, 'workspace_name', null)
+where email = 'marciopetigrosso@gmail.com';
 ```
 
-- [ ] `can_provision_workspace` é **booleano `true`**, não a string `"true"` — a
-  checagem é estrita e aspas anulam a marcação.
-- [ ] `workspace_name` é **obrigatório** e não pode ser só espaço; o nome é
-  trimado e vazio nega o direito. Marcação sem nome não concede nada.
-- [ ] Sempre `app_metadata`, **nunca** `user_metadata` — os dois viajam no mesmo
-  JWT, mas `user_metadata` é reescrevível pelo browser com
-  `supabase.auth.updateUser()`.
-- [ ] **O usuário precisa sair e entrar de novo.** As claims vêm de
-  `getClaims()`, do JWT, e `app_metadata` é assado no token na emissão; com o
-  token antigo a tela continua dizendo "seu acesso está sendo preparado".
-- [ ] Só funciona para um login **sem nenhuma associação** — quem já pertence a
-  um workspace é mandado para `/access` e nunca provisiona.
-- [ ] O direito é **gasto antes** de o workspace nascer. Se o provisionamento
-  falhar depois disso, o log diz `right_spent_without_workspace` e **a marcação
-  precisa ser refeita**.
+- [ ] Direito pendurado revogado (ver `a-fazer-geral.md`, item 2).
 
-### 2. Lead de teste ponta a ponta
+**Para o próximo cliente real**, o roteiro da marcação continua válido e mora em
+"Ticket 17 — por cliente novo", mais abaixo. O `can_provision_workspace` **não**
+deve ser re-marcado neste login: ele já tem o workspace dele.
+
+### 2. Lead de teste ponta a ponta — 🟡 ABERTO, e **não depende mais da Pluga**
 
 - [ ] `POST → outbox → dispatcher → BullMQ → worker → Person` nunca rodou em
   produção, porque o código dos tickets 07 e 08 só chegou lá em 2026-08-07. O
   que está provado é que o worker **conecta** no Redis e o dispatcher **sobe**;
   o caminho de publicação só é exercitado quando existe evento pendente — numa
-  passada com zero eventos o dispatcher nem abre a conexão. **Depende do passo
-  1**, porque sem workspace não há conexão de integração e portanto não há token.
+  passada com zero eventos o dispatcher nem abre a conexão.
+
+**A dependência do passo 1 caiu:** o workspace, o funil default e a conexão
+`PLUGA` já existem (tabela acima). A auditoria de 2026-08-12 confirmou o outro
+lado da conta: **zero** `integration_events`, **zero** `persons`, **zero**
+`opportunities` no tenant. O caminho segue inteiramente inédito em produção.
+
+**Não é preciso plano pago da Pluga para exercitá-lo.** O endpoint é
+provider-agnóstico por desenho (`apps/web/lib/integration-lead-endpoint.ts`): o
+token seleciona a conexão e o worker interpreta depois. Um `curl`
+servidor-servidor com o token da conexão existente cobre o mesmo encanamento que
+a Pluga cobriria. O que a Pluga paga ainda gate é **só o modelo De→Para de Ads**
+(tickets 13 e 14), não a prova do caminho.
+
+Detalhe que decide o `source`: com uma conexão `PLUGA`, o conector honra o
+`source` declarado no payload e só cai em `META_LEAD_ADS` quando o payload não
+declara nada (`apps/worker/src/connector-v1.ts:67-70`). Declarar
+`"source": "LANDING_PAGE"` no corpo produz um lead de origem landing page pela
+conexão que já existe.
+
+O roteiro executável está em [a-fazer-geral.md](./a-fazer-geral.md), item 1.
+Resumo do que ele exige de você: **rotacionar o segredo** na tela (o valor em
+claro só aparece na geração, e o atual não está em lugar nenhum), disparar o
+`POST` e conferir o resultado.
+
+- [ ] Segredo rotacionado e token em claro em mãos (Direção/`OWNER`).
+- [ ] `POST` aceito com **200** e `{"status":"accepted"}`.
+- [ ] Evento visível no histórico da tela de Integrações.
+- [ ] Lead visível na tela de Leads, com origem e etapa `ENTRY`.
 
 ## Resolvido — 2026-08-07, recuperação do deploy
 

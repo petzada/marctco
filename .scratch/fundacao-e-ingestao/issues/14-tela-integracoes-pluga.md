@@ -2,7 +2,7 @@
 
 **Blocked by:** 06, 04, 02, 10
 
-**Status:** needs-info — two criteria stay unticked; both need something this environment cannot produce on its own. See "Implementation evidence" below.
+**Status:** needs-info — **um** critério permanece desmarcado (o modelo Google), e ele exige uma conta Pluga real com Google Lead Form conectado. Ver "Implementation evidence" abaixo.
 
 ## What to build
 
@@ -46,7 +46,9 @@ O mapeamento De→Para acontece **na Pluga**, não aqui. A tela fornece o contra
 
 ## Implementation evidence
 
-**26 de 28 critérios marcados.** Os dois desmarcados dependem de algo que este ambiente não tem: uma conta Pluga real com Google Lead Form conectado (modelo Google), e um produtor de `status = FAILED` com mensagem de erro, que é escopo do ticket 15 (dead-letter/reprocessamento automático), não deste.
+**27 de 28 critérios marcados** (era 26 quando este ticket fechou). O único desmarcado depende de algo que este ambiente não tem: uma conta Pluga real com Google Lead Form conectado.
+
+O segundo pendente — um produtor de `status = FAILED` com mensagem de erro — **foi fechado pelo ticket 15**, exatamente como previsto aqui: a migration `20260811001500` deu a `integration_events` as colunas `failed_at`/`failure_reason`, o worker passou a gravar `FAILED` ao esgotar as tentativas do BullMQ, e a tela ganhou a coluna "Erro" mais a seção "Fila morta". O critério do histórico já está marcado acima; esta seção estava desatualizada e foi corrigida em 2026-08-12.
 
 **Tela:** `apps/web/app/workspace/[slug]/integrations/pluga/page.tsx` (documentação, segredo, histórico, fila de quarentena), `pluga-secret-panel.tsx` (gerar/rotacionar/ativar/desativar, cliente), `copy-block.tsx` (bloco copiável), `quarantine/[eventId]/page.tsx` + `release-form.tsx` (completar e liberar).
 
