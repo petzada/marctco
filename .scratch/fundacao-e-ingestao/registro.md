@@ -628,3 +628,56 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   (`PAYLOAD_EXPIRY_INTERVAL_MS` é opcional e vale 1 h por padrão), sem papel
   novo no banco — portanto sem bootstrap manual no Supabase — e sem serviço
   externo novo.
+
+## Ticket 18 — Conexão de landing page com segredo próprio — CONCLUÍDO
+
+- **O que foi construído:** a tela de landing page ganhou o painel Direção-only
+  que a da Pluga já tinha — gerar, rotacionar, ativar/desativar — agindo sobre
+  o provider `LANDING_PAGE`. Fecha o item 3 de `a-fazer-geral.md`: a tela
+  mandava usar "o token exclusivo da conexão de landing page" e nenhuma rota do
+  produto sabia emitir esse token, porque a única que criava segredo tinha
+  `const PROVIDER = "PLUGA"` fixo. A fundação não precisou de nada — enum,
+  unique por `(workspace_id, provider)` e as três operações de `packages/db` já
+  recebiam `provider`. Faltava só superfície.
+- **Arquivos-chave criados/alterados:** `apps/web/lib/integration-surfaces.ts`
+  (novo — o único lugar que liga segmento de URL a provider, com o endpoint e a
+  cópia que difere entre as telas); `apps/web/lib/integration-secret-route.ts`
+  (novo — fábrica dos dois handlers a partir de uma surface); as quatro rotas
+  `integrations/{pluga,landing-page}/{secret,status}`, agora com seis linhas
+  cada; `components/integrations/integration-secret-panel.tsx` e
+  `copy-block.tsx` (movidos de `integrations/pluga/`, o painel parametrizado
+  por surface); a tela de LP; `canOpenPlugaScreen` → `canOpenIntegrationScreen`.
+- **A decisão que estruturou o ticket:** a causa da lacuna não foi esquecimento,
+  foi forma. A rota da Pluga era um arquivo com uma constante dentro, então a
+  segunda origem só existiria se alguém copiasse o arquivo e lembrasse de trocar
+  a constante — exatamente o que não aconteceu. Trocar os quatro arquivos por
+  uma fábrica que recebe `IntegrationSurface` tira a possibilidade: não existe
+  mais lugar onde errar o provider. O teste roda `describe.each` sobre as duas
+  surfaces, de modo que a conexão de landing page é provada e não presumida.
+- **Duas perguntas de produto respondidas antes de codar:** painel próprio na
+  tela de LP em vez de uma tela de Integrações única (o menu já tem as duas
+  entradas; a tela índice mexeria em navegação, home do workspace e nos links do
+  ticket 14 sem resolver mais nada), e **sem** histórico por conexão — a tela da
+  Pluga segue listando os eventos do workspace inteiro, inclusive os de LP.
+- **O que não precisou mudar, e por quê:** a atribuição do evento à conexão
+  certa. `recordIntegrationEvent` re-seleciona a conexão por `token_hash`, não
+  por provider, e filtra `status = 'ACTIVE'` naquela linha — é isso que torna
+  verdadeira a promessa do painel de que desativar uma origem não desativa a
+  outra. Duas conexões no mesmo workspace já eram um caso que o código
+  suportava; ninguém tinha como criar a segunda.
+- **Ganho que o item 3 não previa:** a origem do lead passa a estar certa por
+  construção. O conector força `LANDING_PAGE` quando o provider da conexão é
+  `LANDING_PAGE` (`connector-v1.ts:66-69`), enquanto um lead de LP entrando pelo
+  token da Pluga só escapava do rótulo Meta se quem enviou lembrasse de declarar
+  `source`.
+- **Testes:** `test:unit` 303/303 em 47 arquivos (era 278 em 46) — os 25 novos
+  em `integration-secret-route.test.ts` cobrem 401, 403 para os três papéis
+  abaixo de Direção, 403 para workspace não associado, 400 para JSON inválido e
+  ação desconhecida, 409 para segredo já existente, o provider correto em cada
+  chamada de banco, o segredo ausente da linha de log, e o redirect de status
+  voltando para a tela da própria origem. `lint`, `tsc --noEmit` e
+  `next build` verdes; o build registra as duas rotas novas. Sem migration,
+  portanto sem `check:migrations` nem `db:drift` a rodar.
+- **Precisa de mão humana:** apertar o botão em produção. O workspace real tem
+  uma conexão `PLUGA`; a de landing page só nasce quando a Direção abrir a tela
+  e clicar em "Gerar segredo". Está incluído no item 1 de `a-fazer-geral.md`.

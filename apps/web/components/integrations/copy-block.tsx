@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "../../../../../components/ui/button";
+import { Button } from "../ui/button";
 
 /**
- * A code block with a working copy button — specific to this screen, not a
- * `components/ui/` primitive: the raw-payload viewer and the HTTP Request
- * templates are the only places in this ticket that need "copiável", and
- * DESIGN.md documents no generic clipboard component to build one against.
+ * A code block with a working copy button — shared by the integration screens
+ * rather than a `components/ui/` primitive: the HTTP Request templates, the
+ * webhook URL and the once-visible secret are the only places that need
+ * "copiável", and DESIGN.md documents no generic clipboard component to build
+ * one against.
  */
 export function CopyBlock({ code, label }: Readonly<{ code: string; label: string }>) {
   const [copied, setCopied] = useState(false);

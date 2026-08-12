@@ -1,5 +1,9 @@
+import { getIntegrationConnectionSummary } from "@marctco/db";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { IntegrationSecretPanel } from "../../../../../components/integrations/integration-secret-panel";
+import { Card } from "../../../../../components/ui/card";
+import { LANDING_PAGE_SURFACE } from "../../../../../lib/integration-surfaces";
 import {
   canonicalLandingPagePayload,
   contactForm7Recipe,
@@ -11,6 +15,10 @@ import {
   wordpressBaseRecipe,
   wpFormsRecipe
 } from "../../../../../lib/landing-page-recipes";
+import {
+  canManageIntegrationSecret,
+  canOpenIntegrationScreen
+} from "../../../../../lib/pluga-access";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
 export const metadata: Metadata = {
@@ -23,12 +31,14 @@ export default async function LandingPageIntegrationGuide({
 }: Readonly<{ params: Promise<{ slug: string }> }>) {
   const { slug } = await params;
   const access = await resolveWorkspaceAccess(slug);
-  if (
-    access.status !== "resolved" ||
-    (access.workspace.role !== "MANAGER" && access.workspace.role !== "OWNER")
-  ) {
+  if (access.status !== "resolved" || !canOpenIntegrationScreen(access.workspace.role)) {
     notFound();
   }
+
+  const isOwner = canManageIntegrationSecret(access.workspace.role);
+  const connection = isOwner
+    ? await getIntegrationConnectionSummary(access.workspace.context, LANDING_PAGE_SURFACE.provider)
+    : null;
 
   return (
     <main className="min-h-[100dvh] bg-canvas px-md py-xl md:px-lg md:py-xxl">
@@ -58,11 +68,34 @@ export default async function LandingPageIntegrationGuide({
           </p>
         </section>
 
+        {/*
+          The panel sits below the security warning on purpose: it is where the
+          token becomes visible, and the rule about never putting it in the
+          browser has to be read before it is copied — not after.
+        */}
+        <div className="mt-lg">
+          {isOwner ? (
+            <IntegrationSecretPanel
+              connection={connection}
+              slug={slug}
+              surface={LANDING_PAGE_SURFACE}
+            />
+          ) : (
+            <Card>
+              <p className="text-body-sm text-ink-secondary">
+                A URL e o segredo desta conexão são administrados pela Direção. Fale com quem tem
+                esse papel para gerar, rotacionar ou desativar a chave da landing page.
+              </p>
+            </Card>
+          )}
+        </div>
+
         <section className="mt-lg rounded-lg border border-hairline bg-canvas p-lg md:p-xl">
           <h2 className="text-title text-ink">Endereço e autenticação</h2>
           <p className="mt-sm text-body text-ink-secondary">
-            Complete o caminho abaixo com o domínio público do CRM e use o token exclusivo da
-            conexão de landing page.
+            Complete o caminho abaixo com o domínio público do CRM. O segredo é o desta conexão,
+            gerado no painel acima — não o da Pluga: cada origem tem o seu, para que rotacionar
+            uma não derrube a outra.
           </p>
           <CodeBlock
             code={

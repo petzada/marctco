@@ -13,6 +13,8 @@ import { readLeadPayload } from "@marctco/domain";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CopyBlock } from "../../../../../components/integrations/copy-block";
+import { IntegrationSecretPanel } from "../../../../../components/integrations/integration-secret-panel";
 import { Button } from "../../../../../components/ui/button";
 import { Card } from "../../../../../components/ui/card";
 import {
@@ -24,16 +26,11 @@ import {
 import { EmptyState } from "../../../../../components/ui/empty-state";
 import { StatusBadge, type StatusBadgeTone } from "../../../../../components/ui/status-badge";
 import { isPayloadExpired } from "../../../../../lib/integration-payload-expiry";
-import { canManageIntegrationSecret, canOpenPlugaScreen } from "../../../../../lib/pluga-access";
+import { PLUGA_SURFACE } from "../../../../../lib/integration-surfaces";
+import { canManageIntegrationSecret, canOpenIntegrationScreen } from "../../../../../lib/pluga-access";
 import { formatQuarantineWait } from "../../../../../lib/quarantine-wait-time";
-import {
-  metaHttpRequestTemplate,
-  PLUGA_LEADS_ENDPOINT_PATH,
-  pluginRequestHeaders
-} from "../../../../../lib/pluga-templates";
+import { metaHttpRequestTemplate, pluginRequestHeaders } from "../../../../../lib/pluga-templates";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
-import { CopyBlock } from "./copy-block";
-import { PlugaSecretPanel } from "./pluga-secret-panel";
 
 export const metadata: Metadata = {
   title: "Pluga | marctco",
@@ -72,14 +69,14 @@ export default async function PlugaIntegrationPage({
   const { slug } = await params;
   const query = await searchParams;
   const access = await resolveWorkspaceAccess(slug);
-  if (access.status !== "resolved" || !canOpenPlugaScreen(access.workspace.role)) {
+  if (access.status !== "resolved" || !canOpenIntegrationScreen(access.workspace.role)) {
     notFound();
   }
 
   const isOwner = canManageIntegrationSecret(access.workspace.role);
   const [connection, events, lastSync, quarantine, deadLetter] = await Promise.all([
     isOwner
-      ? getIntegrationConnectionSummary(access.workspace.context, "PLUGA")
+      ? getIntegrationConnectionSummary(access.workspace.context, PLUGA_SURFACE.provider)
       : Promise.resolve(null),
     listIntegrationEvents(access.workspace.context, { limit: 20 }),
     getLastSuccessfulSyncAt(access.workspace.context),
@@ -122,10 +119,10 @@ export default async function PlugaIntegrationPage({
         ) : null}
 
         {isOwner ? (
-          <PlugaSecretPanel
+          <IntegrationSecretPanel
             connection={connection}
-            endpointUrlHint={`POST https://SEU-CRM.example${PLUGA_LEADS_ENDPOINT_PATH}`}
             slug={slug}
+            surface={PLUGA_SURFACE}
           />
         ) : (
           <Card>
