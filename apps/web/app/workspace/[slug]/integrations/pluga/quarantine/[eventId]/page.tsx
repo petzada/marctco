@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card } from "../../../../../../../components/ui/card";
-import { canOperateIntegrations } from "../../../../../../../lib/pluga-access";
+import { canOperateIntegrations } from "../../../../../../../lib/integration-access";
 import { resolveWorkspaceAccess } from "../../../../../../../lib/workspace-access";
 import { ReleaseForm } from "./release-form";
 

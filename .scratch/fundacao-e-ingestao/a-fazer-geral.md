@@ -9,9 +9,9 @@
 
 ## Estado da fatia, em uma linha
 
-Os 17 tickets estão implementados. **Nenhuma lacuna de código conhecida bloqueia
-o MVP.** O que falta é uma prova em produção (item 1) e uma decisão de produto
-que virou lacuna quando as telas de LP e Pluga foram comparadas (item 3).
+Os 17 tickets estão implementados, e o **18** fechou a única lacuna de código
+que a auditoria encontrou (item 3). **Nada conhecido bloqueia o MVP no código.**
+O que falta é uma prova em produção (item 1).
 
 ## O que já foi conferido — não reabrir
 
@@ -131,6 +131,13 @@ contexto de tenant) — peça e eu rodo.
       (ticket 11, retransmissão inerte).
 - [ ] Um `POST` sem telefone e sem e-mail, confirmando quarentena e o fluxo
       "completar e liberar" (tickets 10 e 14).
+- [ ] **Criar a conexão de landing page** (ticket 18): abrir
+      `/workspace/<slug>/integrations/landing-page`, clicar em "Gerar segredo",
+      copiar na hora, e disparar um `POST` para
+      `/v1/integrations/webhooks/leads` com esse token. Confirmar que o lead
+      entra com origem **Landing page** mesmo **sem** declarar `source` no
+      corpo — é o provider da conexão que decide — e que a Pluga continua
+      recebendo normalmente com o token dela.
 - [ ] Marcar o critério da fatia como provado em produção no `registro.md`.
 
 ---
@@ -146,7 +153,19 @@ armado: sem a associação, esse login criaria um segundo workspace. SQL em
 
 ---
 
-## 3. 🔴 Lacuna de código encontrada na auditoria — conexão de landing page não tem como nascer
+## 3. ✅ Conexão de landing page não tinha como nascer — **fechado pelo ticket 18**
+
+Implementado em 2026-08-12. A tela de LP ganhou painel próprio de segredo
+(gerar, rotacionar, ativar/desativar), agindo sobre o provider `LANDING_PAGE` e
+só sobre ele. As quatro rotas de segredo/status passaram a sair de uma fábrica
+parametrizada por `IntegrationSurface`, então a próxima origem não pode nascer
+apontando para o provider errado. Evidência e o que ficou de fora em
+[issues/18-conexao-de-landing-page-com-segredo-proprio.md](./issues/18-conexao-de-landing-page-com-segredo-proprio.md).
+
+Falta só apertar o botão em produção — está incluído no item 1 abaixo.
+
+<details>
+<summary>O diagnóstico original, preservado</summary>
 
 **A tela de landing page documenta um token que nenhuma superfície emite.**
 
@@ -173,7 +192,10 @@ para decidir a superfície (a tela de LP ganha painel próprio de segredo? uma t
 de Integrações única lista as duas conexões?) e daí `/to-tickets` ou `/implement`
 direto, que é candidato natural a **ticket 18**.
 
-- [ ] Decidido e implementado.
+</details>
+
+- [x] Decidido e implementado — painel próprio na tela de LP, sem histórico por
+      conexão. As duas perguntas em aberto estão respondidas no topo do ticket 18.
 
 ---
 

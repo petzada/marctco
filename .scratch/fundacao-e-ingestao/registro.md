@@ -628,3 +628,112 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   (`PAYLOAD_EXPIRY_INTERVAL_MS` é opcional e vale 1 h por padrão), sem papel
   novo no banco — portanto sem bootstrap manual no Supabase — e sem serviço
   externo novo.
+
+## Ticket 18 — Conexão de landing page com segredo próprio — CONCLUÍDO
+
+- **O que foi construído:** a tela de landing page ganhou o painel Direção-only
+  que a da Pluga já tinha — gerar, rotacionar, ativar/desativar — agindo sobre
+  o provider `LANDING_PAGE`. Fecha o item 3 de `a-fazer-geral.md`: a tela
+  mandava usar "o token exclusivo da conexão de landing page" e nenhuma rota do
+  produto sabia emitir esse token, porque a única que criava segredo tinha
+  `const PROVIDER = "PLUGA"` fixo. A fundação não precisou de nada — enum,
+  unique por `(workspace_id, provider)` e as três operações de `packages/db` já
+  recebiam `provider`. Faltava só superfície.
+- **Arquivos-chave criados/alterados:** `apps/web/lib/integration-surfaces.ts`
+  (novo — o único lugar que liga segmento de URL a provider, com o endpoint e a
+  cópia que difere entre as telas); `apps/web/lib/integration-secret-route.ts`
+  (novo — fábrica dos dois handlers a partir de uma surface); as quatro rotas
+  `integrations/{pluga,landing-page}/{secret,status}`, agora com seis linhas
+  cada; `components/integrations/integration-secret-panel.tsx` e
+  `copy-block.tsx` (movidos de `integrations/pluga/`, o painel parametrizado
+  por surface); a tela de LP; `canOpenPlugaScreen` → `canOpenIntegrationScreen`.
+- **A decisão que estruturou o ticket:** a causa da lacuna não foi esquecimento,
+  foi forma. A rota da Pluga era um arquivo com uma constante dentro, então a
+  segunda origem só existiria se alguém copiasse o arquivo e lembrasse de trocar
+  a constante — exatamente o que não aconteceu. Trocar os quatro arquivos por
+  uma fábrica que recebe `IntegrationSurface` tira a possibilidade: não existe
+  mais lugar onde errar o provider. O teste roda `describe.each` sobre as duas
+  surfaces, de modo que a conexão de landing page é provada e não presumida.
+- **Duas perguntas de produto respondidas antes de codar:** painel próprio na
+  tela de LP em vez de uma tela de Integrações única (o menu já tem as duas
+  entradas; a tela índice mexeria em navegação, home do workspace e nos links do
+  ticket 14 sem resolver mais nada), e **sem** histórico por conexão — a tela da
+  Pluga segue listando os eventos do workspace inteiro, inclusive os de LP.
+- **O que não precisou mudar, e por quê:** a atribuição do evento à conexão
+  certa. `recordIntegrationEvent` re-seleciona a conexão por `token_hash`, não
+  por provider, e filtra `status = 'ACTIVE'` naquela linha — é isso que torna
+  verdadeira a promessa do painel de que desativar uma origem não desativa a
+  outra. Duas conexões no mesmo workspace já eram um caso que o código
+  suportava; ninguém tinha como criar a segunda.
+- **Ganho que o item 3 não previa:** a origem do lead passa a estar certa por
+  construção. O conector força `LANDING_PAGE` quando o provider da conexão é
+  `LANDING_PAGE` (`connector-v1.ts:66-69`), enquanto um lead de LP entrando pelo
+  token da Pluga só escapava do rótulo Meta se quem enviou lembrasse de declarar
+  `source`.
+- **Testes:** `test:unit` 303/303 em 47 arquivos (era 278 em 46) — os 25 novos
+  em `integration-secret-route.test.ts` cobrem 401, 403 para os três papéis
+  abaixo de Direção, 403 para workspace não associado, 400 para JSON inválido e
+  ação desconhecida, 409 para segredo já existente, o provider correto em cada
+  chamada de banco, o segredo ausente da linha de log, e o redirect de status
+  voltando para a tela da própria origem. `lint`, `tsc --noEmit` e
+  `next build` verdes; o build registra as duas rotas novas. Sem migration,
+  portanto sem `check:migrations` nem `db:drift` a rodar.
+- **Precisa de mão humana:** apertar o botão em produção. O workspace real tem
+  uma conexão `PLUGA`; a de landing page só nasce quando a Direção abrir a tela
+  e clicar em "Gerar segredo". Está incluído no item 1 de `a-fazer-geral.md`.
+
+## Ticket 18 — passada de `/code-review` — 2026-08-12
+
+Os dois eixos rodaram contra o commit inicial do ticket. **Um achado duro de
+padrão, quatro de spec, seis juízos de valor.** O que mudou por causa deles:
+
+- **Glossário (duro, ADR-0005).** `IntegrationSurface` era termo novo sem linha
+  no `CONTEXT.md` nem na tabela de mapeamento, enquanto o vizinho
+  `IntegrationConnection` tinha. Entrou nos dois, marcado como tipo da camada
+  web e não model — a tabela ganhou a distinção junto, porque até aqui só
+  listava nome de schema.
+- **A frase que eu tinha escrito era exagerada.** O registro dizia "não há mais
+  um arquivo onde esquecer a constante". Não é verdade: cada rota ainda amarra
+  a surface à mão, e `pluga/secret/route.ts` passando `LANDING_PAGE_SURFACE`
+  compila. Em vez de suavizar a frase, tirei a consequência: o redirect da rota
+  de status passou a ser lido do caminho da requisição
+  (`screenPathForStatusRoute`) e não de `surface.segment`, então uma amarração
+  errada não larga mais o operador num 404 silencioso. `segment` também virou
+  união fechada, o que faz um typo não compilar. O que sobra do risco está
+  escrito no ticket, sem eufemismo.
+- **AC meio verdadeiro.** Eu tinha marcado "403 nas rotas" para Atendente e
+  Supervisor. A rota de segredo dá 403; a de status devolve 303 para a tela,
+  porque é submetida por `<form>` e um JSON trocaria a página por texto cru. O
+  AC foi reescrito para dizer as duas coisas, e os testes de status — que só
+  exercitavam `MANAGER` — passaram a cobrir os três papéis.
+- **Texto que contradizia a própria tela.** A nota para a Gestão dizia "A URL e
+  o segredo são administrados pela Direção", mas a tela de LP imprime a URL
+  logo abaixo, para qualquer papel. Virou só "o segredo", num componente único
+  (`IntegrationSecretNotice`) em vez de um `<Card>` copiado nas duas telas —
+  que era também o achado de duplicação do eixo de padrões.
+- **Nomes que passaram a mentir.** `pluga-access.ts` guardava a regra de duas
+  telas e `integration-secret-route.ts` guardava o handler de status, que não
+  emite segredo. Viraram `integration-access.ts` e
+  `integration-connection-routes.ts`.
+- **`IntegrationSurface` misturava dois eixos.** Roteamento (`segment`,
+  `provider`, `endpointPath`) e texto de tela estavam no mesmo nível, então
+  mexer numa palavra e adicionar uma origem editavam o mesmo objeto. O texto
+  desceu para `copy`. Junto foi embora a interpolação `Desativar a {noun}?`,
+  que dependia de todo nome de origem ser feminino — agora cada rótulo é
+  literal.
+- **Recusado, com motivo:** desexportar `IntegrationRouteHandler`. É o tipo de
+  retorno declarado de duas funções exportadas, e o build do web roda um
+  segundo `tsc` sobre `tsconfig.server.json`; esconder o tipo é risco de emissão
+  de declaração em troca de nada.
+- **Confirmado pelo eixo de spec, não presumido:** as quatro operações de banco
+  filtram `WHERE provider = $1`, o token em claro não aparece em log nem em
+  redirect, as strings da Pluga saíram byte a byte iguais às antigas, e nenhum
+  ponto do código assumia uma conexão por workspace.
+- **Um erro meu no meio da correção:** rodei o rename de import com um laço
+  PowerShell, e o 5.1 leu os arquivos como ANSI — nove arquivos saíram com
+  mojibake (`DireÃ§Ã£o`). Restaurei os cinco afetados do commit e refiz as
+  edições com ferramenta que respeita UTF-8. Vale como aviso: neste repo,
+  reescrita em massa de arquivo com acento não passa por
+  `Get-Content`/`Set-Content` sem `-Encoding utf8` nos dois lados.
+- **Suíte depois da passada:** 47 arquivos, 309 testes (eram 303), `lint`,
+  `typecheck` e `build` verdes.

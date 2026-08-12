@@ -2,46 +2,58 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button } from "../../../../../components/ui/button";
-import { Card } from "../../../../../components/ui/card";
-import { Modal } from "../../../../../components/ui/modal";
-import { StatusBadge } from "../../../../../components/ui/status-badge";
-import { maskIntegrationSecret } from "../../../../../lib/mask-integration-secret";
+import type { IntegrationSurface } from "../../lib/integration-surfaces";
+import { maskIntegrationSecret } from "../../lib/mask-integration-secret";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Modal } from "../ui/modal";
+import { StatusBadge } from "../ui/status-badge";
 import { CopyBlock } from "./copy-block";
 
-export interface PlugaConnectionSummaryProps {
+export interface IntegrationConnectionSummaryProps {
   readonly status: "ACTIVE" | "DISABLED";
   readonly token_last4: string;
 }
 
-export interface PlugaSecretPanelProps {
+export interface IntegrationSecretPanelProps {
   readonly slug: string;
-  readonly endpointUrlHint: string;
-  readonly connection: PlugaConnectionSummaryProps | null;
+  /** Decides which provider the routes below act on, and the wording around them. */
+  readonly surface: IntegrationSurface;
+  readonly connection: IntegrationConnectionSummaryProps | null;
 }
 
 type PendingAction = "generate" | "rotate" | null;
 type ConfirmKind = "rotate" | "disable" | null;
 
 /**
- * The Direção-only half of the screen (ADR-0015): webhook URL, secret
- * generation/rotation and enable/disable. A client island because the
+ * The Direção-only half of an integration screen (ADR-0015): webhook URL,
+ * secret generation/rotation and enable/disable. A client island because the
  * generated secret must be shown exactly once, in memory, never round-tripped
  * through a redirect or a URL where it would land in browser history or
  * server logs.
+ *
+ * One component for every origin, parameterised by `surface`. Pluga and
+ * landing page each administer their own connection, and the credentials stay
+ * separate on purpose: rotating one must not silence the other.
  */
-export function PlugaSecretPanel({ slug, endpointUrlHint, connection }: PlugaSecretPanelProps) {
+export function IntegrationSecretPanel({
+  slug,
+  surface,
+  connection
+}: IntegrationSecretPanelProps) {
   const router = useRouter();
   const [revealed, setRevealed] = useState<{ token: string; token_last4: string } | null>(null);
   const [pending, setPending] = useState<PendingAction>(null);
   const [confirm, setConfirm] = useState<ConfirmKind>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const basePath = `/workspace/${slug}/integrations/${surface.segment}`;
+
   async function generateOrRotate(action: "generate" | "rotate"): Promise<void> {
     setPending(action);
     setError(null);
     try {
-      const response = await fetch(`/workspace/${slug}/integrations/pluga/secret`, {
+      const response = await fetch(`${basePath}/secret`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action })
@@ -67,14 +79,12 @@ export function PlugaSecretPanel({ slug, endpointUrlHint, connection }: PlugaSec
     <Card className="flex flex-col gap-md">
       <div>
         <h2 className="text-title text-ink">Segredo e conexão</h2>
-        <p className="mt-xs text-body-sm text-ink-secondary">
-          Cole a URL e o segredo no destino HTTP Request da automação da Pluga.
-        </p>
+        <p className="mt-xs text-body-sm text-ink-secondary">{surface.copy.panelDescription}</p>
       </div>
 
       <div>
         <p className="text-label text-ink-secondary">URL do webhook</p>
-        <CopyBlock code={endpointUrlHint} label="URL" />
+        <CopyBlock code={`POST https://SEU-CRM.example${surface.endpointPath}`} label="URL" />
       </div>
 
       {revealed ? (
@@ -123,13 +133,13 @@ export function PlugaSecretPanel({ slug, endpointUrlHint, connection }: PlugaSec
                   setConfirm("disable");
                 }}
               >
-                Desativar integração
+                {surface.copy.disableButton}
               </Button>
             ) : (
-              <form action={`/workspace/${slug}/integrations/pluga/status`} method="post">
+              <form action={`${basePath}/status`} method="post">
                 <input name="status" type="hidden" value="ACTIVE" />
                 <Button type="submit" variant="secondary">
-                  Ativar integração
+                  {surface.copy.enableButton}
                 </Button>
               </form>
             )}
@@ -182,8 +192,7 @@ export function PlugaSecretPanel({ slug, endpointUrlHint, connection }: PlugaSec
           setConfirm(null);
         }}
       >
-        O segredo atual para de funcionar imediatamente. Você vai precisar colar o novo valor
-        na Pluga antes que os leads voltem a chegar.
+        {surface.copy.rotateWarning}
       </Modal>
 
       <Modal
@@ -198,7 +207,7 @@ export function PlugaSecretPanel({ slug, endpointUrlHint, connection }: PlugaSec
             >
               Cancelar
             </Button>
-            <form action={`/workspace/${slug}/integrations/pluga/status`} method="post">
+            <form action={`${basePath}/status`} method="post">
               <input name="status" type="hidden" value="DISABLED" />
               <Button type="submit" variant="danger">
                 Desativar agora
@@ -207,14 +216,12 @@ export function PlugaSecretPanel({ slug, endpointUrlHint, connection }: PlugaSec
           </>
         }
         open={confirm === "disable"}
-        title="Desativar a integração?"
+        title={surface.copy.disableTitle}
         onClose={() => {
           setConfirm(null);
         }}
       >
-        Nenhum lead novo é aceito enquanto a integração estiver desativada. A configuração e o
-        segredo continuam guardados — você pode reativar a qualquer momento sem gerar um novo
-        segredo.
+        {surface.copy.disableWarning}
       </Modal>
     </Card>
   );

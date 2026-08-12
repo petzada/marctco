@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { QuarantineCompletionInput } from "../../../../../../../../lib/build-release-inbound-lead";
 import { logger } from "../../../../../../../../lib/logger";
-import { canOperateIntegrations } from "../../../../../../../../lib/pluga-access";
+import { canOperateIntegrations } from "../../../../../../../../lib/integration-access";
 import { canReleaseQuarantinedLead } from "../../../../../../../../lib/quarantine-release-eligibility";
 import { releaseQuarantinedLead } from "../../../../../../../../lib/release-quarantined-lead";
 import { resolveWorkspaceAccess } from "../../../../../../../../lib/workspace-access";

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   canManageIntegrationSecret,
-  canOpenPlugaScreen,
+  canOpenIntegrationScreen,
   canOperateIntegrations
-} from "./pluga-access";
+} from "./integration-access";
 
-describe("canOpenPlugaScreen", () => {
-  it("is Gestão and up", () => {
-    expect(canOpenPlugaScreen("ATTENDANT")).toBe(false);
-    expect(canOpenPlugaScreen("SUPERVISOR")).toBe(false);
-    expect(canOpenPlugaScreen("MANAGER")).toBe(true);
-    expect(canOpenPlugaScreen("OWNER")).toBe(true);
+describe("canOpenIntegrationScreen", () => {
+  it("is Gestão and up — the same gate on Pluga and on landing page", () => {
+    expect(canOpenIntegrationScreen("ATTENDANT")).toBe(false);
+    expect(canOpenIntegrationScreen("SUPERVISOR")).toBe(false);
+    expect(canOpenIntegrationScreen("MANAGER")).toBe(true);
+    expect(canOpenIntegrationScreen("OWNER")).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 import { IntegrationEventPayloadExpiredError, requeueIntegrationEventForReprocessing } from "@marctco/db";
 import { logger } from "../../../../../../../../lib/logger";
-import { canOperateIntegrations } from "../../../../../../../../lib/pluga-access";
+import { canOperateIntegrations } from "../../../../../../../../lib/integration-access";
 import { redirectTo } from "../../../../../../../../lib/redirect-response";
 import { resolveWorkspaceAccess } from "../../../../../../../../lib/workspace-access";
 
