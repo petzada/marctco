@@ -1,13 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  buildInboundLead,
-  decideIntake,
-  decidePersonIdentity,
-  normalize,
-  planPersonLookup,
-  readLeadPayload,
-  reusedPersonId
-} from "@marctco/domain";
+import { buildInboundLead, normalize, readLeadPayload } from "@marctco/domain";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -17,21 +9,19 @@ import {
 } from "../src/access-context.js";
 import {
   applyIntakePlan,
-  findOpenOpportunitiesOfPerson,
+  decideAndApplyIntake,
   recordLeadSubmission,
   resolveIntakeDestination
 } from "../src/intake.js";
-import { findPersonCandidates } from "../src/person.js";
 import { getQuarantinedEvent, listQuarantinedEvents } from "../src/quarantine.js";
 
 /**
  * The seam ticket 14 exists to prove: "completar e liberar" reaches the funnel
- * through the exact same primitives the worker's job calls
+ * through the same named operations the worker's job calls
  * (`apps/worker/src/integration-event-job.ts`) — `recordLeadSubmission` →
- * `findPersonCandidates`/`decidePersonIdentity` → `resolveIntakeDestination`/
- * `findOpenOpportunitiesOfPerson` → `decideIntake` → `applyIntakePlan` — with
- * `now` set to the release instant instead of `received_at`, and reusing the
- * one `IntegrationEvent` that was already quarantined (ADR-0014, ADR-0017).
+ * `resolveIntakeDestination` → `decideAndApplyIntake` — with `now` set to
+ * the release instant instead of `received_at`, and reusing the one
+ * `IntegrationEvent` that was already quarantined (ADR-0014, ADR-0017).
  */
 
 const database_url = process.env.DATABASE_URL;
@@ -118,9 +108,10 @@ async function seedQuarantinedLead(raw: Record<string, string>): Promise<Quarant
 }
 
 /**
- * The exact sequence `apps/web/lib/release-quarantined-lead.ts` runs, spelled
- * out here so the seam proves the composition rather than trusting a mirror
- * of it. `completion` is what a manager typed while reading the raw payload.
+ * The same named operations `apps/web/lib/release-quarantined-lead.ts` runs.
+ * Inbound construction stays local because this package cannot import the
+ * web adapter; the coordinator is the real `decideAndApplyIntake`.
+ * `completion` is what a manager typed while reading the raw payload.
  */
 async function releaseQuarantinedLead(
   fixture: QuarantinedFixture,
@@ -144,22 +135,23 @@ async function releaseQuarantinedLead(
     },
     app
   );
-  const candidates = await findPersonCandidates(manager_context, planPersonLookup(normalized), app);
-  const person = decidePersonIdentity({ normalized, candidates });
-  const [destination, open_opportunity_ids] = await Promise.all([
-    resolveIntakeDestination(manager_context, quarantined.target_pipeline_id, app),
-    findOpenOpportunitiesOfPerson(manager_context, reusedPersonId(person), app)
-  ]);
-  const plan = decideIntake({
-    normalized,
-    submission,
-    person,
-    destination,
-    open_opportunity_ids,
-    integration_event_id: quarantined.integration_event_id,
-    now
-  });
-  return applyIntakePlan(manager_context, plan, app);
+  const destination = await resolveIntakeDestination(
+    manager_context,
+    quarantined.target_pipeline_id,
+    app
+  );
+  const { applied } = await decideAndApplyIntake(
+    manager_context,
+    {
+      normalized,
+      submission,
+      destination,
+      integration_event_id: quarantined.integration_event_id,
+      now
+    },
+    app
+  );
+  return applied;
 }
 
 beforeAll(async () => {
