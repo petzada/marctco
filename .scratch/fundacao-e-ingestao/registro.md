@@ -737,3 +737,50 @@ padrão, quatro de spec, seis juízos de valor.** O que mudou por causa deles:
   `Get-Content`/`Set-Content` sem `-Encoding utf8` nos dois lados.
 - **Suíte depois da passada:** 47 arquivos, 309 testes (eram 303), `lint`,
   `typecheck` e `build` verdes.
+
+## Aviso `url.parse()` nos logs do web — 2026-08-12
+
+Anotado na passada do ticket 18 como "vem de dependência, não bloqueia nada".
+Estava certo sobre o culpado e errado sobre a causa, e a causa é que dava para
+corrigir.
+
+- **O sintoma, em produção.** `railway logs --service web` traz o
+  `[DEP0169] DeprecationWarning: url.parse()` na linha seguinte a
+  `event="integration_event_dispatch" result="started"` — ou seja, no
+  `new IORedis(redis_url)` de `createIngestionQueue()`, que o
+  `instrumentation.ts` chama no boot.
+- **Não é código nosso.** Zero `url.parse()` fora de `node_modules`. Quem chama
+  é o `ioredis@5.9.3`, em `parseURL` (`built/utils/index.js:205`). O BullMQ
+  recebe a instância pronta e nunca parseia URL.
+- **Mas o aviso não deveria aparecer.** O Node suprime o DEP0169 quando a
+  chamada vem de dentro de `node_modules` — `lib/url.js` guarda com
+  `isInsideNodeModules(4)`, justamente para a aplicação não pagar pela chamada
+  depreciada de uma dependência. Conferido nos dois sentidos: o mesmo
+  `url.parse("redis://…", true, true)` chamado de um arquivo sob `node_modules`
+  fica silencioso; chamado da raiz do repo, avisa.
+- **O que quebrava a guarda: o bundle.** O Turbopack inlinava o ioredis dentro
+  de `.next/server/chunks/[root-of-the-server]__a1f2d87f._.js`, onde o código
+  deixa de estar sob `node_modules`. O `parseURL` minificado está lá
+  (`let t=(0,i.parse)(e,!0,!0)`) e o módulo `92509` que ele importa é
+  literalmente `t.exports=e.x("url",()=>require("url"))`.
+- **A correção:** `serverExternalPackages: ["bullmq", "ioredis"]` no
+  `next.config.ts`. É o que o Next documenta para pacote server-only de Node, e
+  o `pino` já está na lista default dele pelo mesmo motivo. Depois do rebuild o
+  `parseURL` sumiu de todo chunk de servidor, os dois pacotes passaram a
+  resolver de `.next/node_modules/`, e chamar o `parseURL` dessa cópia com
+  `--trace-deprecation` não emite nada.
+- **A causa-raiz é upstream e ainda não dá para pegar.** O ioredis trocou
+  `url.parse()` por `new URL()` no PR #2081, lançado na **5.11.0**. O
+  `bullmq@5.70.1` fixa `"ioredis": "5.9.3"` **exato**, e a linha 5.x do bullmq
+  nunca passou de 5.10.1 — subir só o ioredis duplicaria o pacote e divergiria
+  da versão contra a qual o bullmq testa. O `bullmq@6.x` largou a dependência;
+  quando essa migração for encarada, a correção vem junto e o
+  `serverExternalPackages` continua valendo.
+- **O worker não sofria disso.** Build é `tsc` puro, o ioredis fica em
+  `node_modules`, a guarda do Node se aplica.
+- **O que não deu para verificar aqui:** o build com `output: "standalone"`, que
+  o `next.config.ts` desliga no win32. O risco é baixo — `pino` e
+  `@prisma/client` já eram externals e já apareciam em `.next/node_modules`
+  antes desta mudança, então o caminho de tracing já rodava em produção, e o
+  Dockerfile ainda copia `apps/web/node_modules` e o `node_modules` raiz
+  inteiros (linhas 54 e 68).
