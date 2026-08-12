@@ -44,6 +44,16 @@ contra código ou contra produção em 2026-08-12, não contra memória.
       testes.
 - [x] **`REDIS_URL` nos dois serviços do Railway**, e o worker consumindo. Ver
       `acoes-manuais-pendentes.md`.
+- [x] **Actions do CI fora do Node.js 20 deprecado.** As anotações do run pós-merge
+      do PR #32 avisavam que `actions/checkout@v4`, `actions/setup-node@v4`,
+      `pnpm/action-setup@v4`, `docker/setup-buildx-action@v3` e
+      `docker/build-push-action@v6` ainda declaravam `node20` e estavam sendo
+      forçadas para `node24` pelo runner. Todas subiram para a major que declara
+      `node24` de origem (v7, v7, v6, v4, v7). Os breaking changes foram conferidos
+      contra as notas de release e nenhum toca este workflow: o auto-caching de
+      `setup-node` v5/v6 não se aplica porque `cache: pnpm` é explícito, o
+      `version: 10.32.0` do pnpm casa com o `packageManager` do `package.json`, e
+      os inputs/envs removidos pelas actions do Docker não eram usados.
 
 ---
 
