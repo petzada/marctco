@@ -5,6 +5,7 @@ Fatia vertical cobrindo as **Fases 0 e 1** de [docs/plano-de-construcao.md](../.
 - **Começar aqui:** [PROMPT-INICIAL.md](../../PROMPT-INICIAL.md) — na raiz do repo; prompt para abrir a sessão de implementação
 - **Spec:** [spec.md](./spec.md)
 - **Tickets:** [issues/](./issues/) — 17, numerados em ordem de dependência
+- **A fazer daqui em diante:** [a-fazer-geral.md](./a-fazer-geral.md) — a fila aberta, separada por quem executa, com o que já foi conferido marcado para não reabrir
 - **Correções de arquitetura:** [correcoes-de-arquitetura.md](./correcoes-de-arquitetura.md) — três decisões aplicadas à spec **antes de codar**, para que os módulos de ingestão, acesso a dado e marcador não nasçam rasos (ADRs 0016, 0017, 0018)
 
 ## Critério de aceite da fatia
