@@ -9,11 +9,10 @@ import { resolveWorkspaceAccess } from "../../../../../../../../lib/workspace-ac
 export const dynamic = "force-dynamic";
 
 /**
- * "Completar e liberar". The whole sequence — `getQuarantinedEvent` →
- * `recordLeadSubmission` → `findPersonCandidates`/`decidePersonIdentity` →
- * `resolveIntakeDestination` + `findOpenOpportunitiesOfPerson` →
- * `decideIntake` → `applyIntakePlan` — lives in
- * `apps/web/lib/release-quarantined-lead.ts`, called here with `now` set to
+ * "Completar e liberar". The adapter in
+ * `apps/web/lib/release-quarantined-lead.ts` sequences the same named
+ * operations as the worker — `recordLeadSubmission` →
+ * `resolveIntakeDestination` → `decideAndApplyIntake` — with `now` set to
  * this request's instant: the release, not the original receipt (ADR-0007
  * §Quarentena, ADR-0017).
  *

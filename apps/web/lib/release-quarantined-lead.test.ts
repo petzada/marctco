@@ -2,31 +2,26 @@
 import type { UserContext } from "@marctco/db";
 
 /**
- * Proves the exact call sequence ADR-0017 requires — `getQuarantinedEvent` →
- * `recordLeadSubmission` → `findPersonCandidates`/`decidePersonIdentity` →
- * `resolveIntakeDestination` + `findOpenOpportunitiesOfPerson` →
- * `decideIntake` → `applyIntakePlan` — by mocking only the I/O boundary
- * (`@marctco/db`) and letting the real `@marctco/domain` functions run, so
- * this is a test of composition, not of a hand-written stand-in for
- * `decideIntake`.
+ * Proves the adapter sequences the same named operations as the worker
+ * (ADR-0017) — `getQuarantinedEvent` → `recordLeadSubmission` →
+ * `resolveIntakeDestination` → `decideAndApplyIntake` — by mocking only the
+ * I/O boundary (`@marctco/db`). Lookup, identity and the plan stay inside
+ * the coordinator; this test does not reach past that seam. `now` is the
+ * release instant, not `received_at`.
  */
 
 const mocks = vi.hoisted(() => ({
   getQuarantinedEvent: vi.fn(),
   recordLeadSubmission: vi.fn(),
-  findPersonCandidates: vi.fn(),
   resolveIntakeDestination: vi.fn(),
-  findOpenOpportunitiesOfPerson: vi.fn(),
-  applyIntakePlan: vi.fn()
+  decideAndApplyIntake: vi.fn()
 }));
 
 vi.mock("@marctco/db", () => ({
   getQuarantinedEvent: mocks.getQuarantinedEvent,
   recordLeadSubmission: mocks.recordLeadSubmission,
-  findPersonCandidates: mocks.findPersonCandidates,
   resolveIntakeDestination: mocks.resolveIntakeDestination,
-  findOpenOpportunitiesOfPerson: mocks.findOpenOpportunitiesOfPerson,
-  applyIntakePlan: mocks.applyIntakePlan
+  decideAndApplyIntake: mocks.decideAndApplyIntake
 }));
 
 const { releaseQuarantinedLead } = await import("./release-quarantined-lead");
@@ -39,6 +34,17 @@ const context = {
 } as unknown as UserContext;
 const RECEIVED_AT = new Date("2026-08-08T12:00:00.000Z");
 const RELEASED_AT = new Date("2026-08-11T09:30:00.000Z");
+const destination = { pipeline_id: "pipeline-1", entry_stage_id: "stage-1" };
+const submission = {
+  kind: "DUPLICATE" as const,
+  lead_submission_id: "sub-1",
+  opportunity_id: null
+};
+
+function coordinatedInput(): Record<string, unknown> {
+  const call = mocks.decideAndApplyIntake.mock.calls[0] as [unknown, Record<string, unknown>];
+  return call[1];
+}
 
 describe("releaseQuarantinedLead", () => {
   beforeEach(() => {
@@ -53,21 +59,11 @@ describe("releaseQuarantinedLead", () => {
       source: "META_LEAD_ADS",
       external_lead_id: "lead-1"
     });
-    mocks.recordLeadSubmission.mockResolvedValue({
-      kind: "DUPLICATE",
-      lead_submission_id: "sub-1",
-      opportunity_id: null
-    });
-    mocks.findPersonCandidates.mockResolvedValue([]);
-    mocks.resolveIntakeDestination.mockResolvedValue({
-      pipeline_id: "pipeline-1",
-      entry_stage_id: "stage-1"
-    });
-    mocks.findOpenOpportunitiesOfPerson.mockResolvedValue([]);
-    mocks.applyIntakePlan.mockResolvedValue({
-      kind: "NEW_OPPORTUNITY",
-      opportunity_id: "opp-1",
-      person_id: "person-1"
+    mocks.recordLeadSubmission.mockResolvedValue(submission);
+    mocks.resolveIntakeDestination.mockResolvedValue(destination);
+    mocks.decideAndApplyIntake.mockResolvedValue({
+      intake_plan_kind: "NEW_OPPORTUNITY",
+      applied: { kind: "NEW_OPPORTUNITY", opportunity_id: "opp-1", person_id: "person-1" }
     });
   });
 
@@ -101,30 +97,7 @@ describe("releaseQuarantinedLead", () => {
     });
   });
 
-  it("looks up person candidates by the plan derived from the manager's completion", async () => {
-    await releaseQuarantinedLead(
-      context,
-      {
-        integration_event_id: "event-1",
-        completion: { name: "Maria", phone: "11987654321", email: "maria@exemplo.com", cpf: "" }
-      },
-      RELEASED_AT
-    );
-
-    const [calledContext, lookupPlan] = mocks.findPersonCandidates.mock.calls[0] as [
-      unknown,
-      { keys: ReadonlyArray<{ kind: string; value: string }> }
-    ];
-    expect(calledContext).toBe(context);
-    expect(lookupPlan.keys).toEqual(
-      expect.arrayContaining([
-        { kind: "PHONE", value: "+5511987654321", strength: "MODERATE" },
-        { kind: "EMAIL", value: "maria@exemplo.com", strength: "WEAK" }
-      ])
-    );
-  });
-
-  it("resolves the destination from the connection's target_pipeline_id, and looks up the person's open cards", async () => {
+  it("resolves the destination from the connection's target_pipeline_id before coordinating", async () => {
     await releaseQuarantinedLead(
       context,
       {
@@ -135,12 +108,10 @@ describe("releaseQuarantinedLead", () => {
     );
 
     expect(mocks.resolveIntakeDestination).toHaveBeenCalledWith(context, null);
-    // No candidates matched, so decidePersonIdentity produced NEW_PERSON —
-    // reusedPersonId is null, and a Pessoa that does not exist yet has no cards.
-    expect(mocks.findOpenOpportunitiesOfPerson).toHaveBeenCalledWith(context, null);
+    expect(mocks.decideAndApplyIntake).toHaveBeenCalledOnce();
   });
 
-  it("decides with now = the release instant, not received_at, and applies exactly that plan", async () => {
+  it("coordinates the decision with now = the release instant, not received_at", async () => {
     await releaseQuarantinedLead(
       context,
       {
@@ -150,18 +121,30 @@ describe("releaseQuarantinedLead", () => {
       RELEASED_AT
     );
 
-    expect(mocks.applyIntakePlan).toHaveBeenCalledWith(
-      context,
-      expect.objectContaining({
-        kind: "NEW_OPPORTUNITY",
-        integration_event_id: "event-1",
-        arrived_at: RELEASED_AT,
-        missing_phone: false
-      })
-    );
+    expect(coordinatedInput()).toMatchObject({
+      submission,
+      destination,
+      integration_event_id: "event-1",
+      now: RELEASED_AT
+    });
   });
 
-  it("returns exactly what applyIntakePlan reports", async () => {
+  it("hands the manager's completion to the coordinator as a normalized lead", async () => {
+    await releaseQuarantinedLead(
+      context,
+      {
+        integration_event_id: "event-1",
+        completion: { name: "Maria", phone: "11987654321", email: "maria@exemplo.com", cpf: "" }
+      },
+      RELEASED_AT
+    );
+
+    const input = coordinatedInput() as { normalized: { phones: string[]; emails: string[] } };
+    expect(input.normalized.phones).toEqual(["+5511987654321"]);
+    expect(input.normalized.emails).toEqual(["maria@exemplo.com"]);
+  });
+
+  it("returns exactly what decideAndApplyIntake applied", async () => {
     const result = await releaseQuarantinedLead(
       context,
       {
@@ -175,7 +158,10 @@ describe("releaseQuarantinedLead", () => {
   });
 
   it("stays QUARANTINE when the manager left both phone and e-mail empty", async () => {
-    mocks.applyIntakePlan.mockResolvedValue({ kind: "QUARANTINE" });
+    mocks.decideAndApplyIntake.mockResolvedValue({
+      intake_plan_kind: "QUARANTINE",
+      applied: { kind: "QUARANTINE" }
+    });
 
     const result = await releaseQuarantinedLead(
       context,
@@ -183,10 +169,8 @@ describe("releaseQuarantinedLead", () => {
       RELEASED_AT
     );
 
-    expect(mocks.applyIntakePlan).toHaveBeenCalledWith(
-      context,
-      expect.objectContaining({ kind: "QUARANTINE" })
-    );
+    expect(mocks.decideAndApplyIntake).toHaveBeenCalledOnce();
+    expect(coordinatedInput()).toMatchObject({ now: RELEASED_AT });
     expect(result).toEqual({ kind: "QUARANTINE" });
   });
 });
