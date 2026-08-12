@@ -1,4 +1,4 @@
-import { createIntegrationSecretHandler } from "../../../../../../lib/integration-secret-route";
+﻿import { createIntegrationSecretHandler } from "../../../../../../lib/integration-connection-routes";
 import { PLUGA_SURFACE } from "../../../../../../lib/integration-surfaces";
 
 export const dynamic = "force-dynamic";

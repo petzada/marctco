@@ -51,7 +51,10 @@ Duas perguntas estavam abertas no item 3 e foram decididas:
       o segredo da LP não derruba a Pluga, e desativar uma não desativa a outra
 - [x] Gestão abre a tela de LP mas **não** vê o painel — vê a nota de que a
       credencial é da Direção ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
-- [x] Atendente e Supervisor continuam recebendo 404 na tela e 403 nas rotas
+- [x] Atendente e Supervisor continuam recebendo 404 na tela. Na rota de
+      **segredo** recebem 403; na de **status** recebem redirect de volta para a
+      tela — que é onde levam o 404. A diferença é de propósito: `status` é
+      submetido por `<form>`, e responder JSON trocaria a página por texto cru
 - [x] O segredo em claro não passa por redirect nem por URL, e não entra na
       linha de log ([ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md))
 - [x] Gerar duas vezes para o mesmo provider responde 409 em vez de criar uma
@@ -66,16 +69,34 @@ Duas perguntas estavam abertas no item 3 e foram decididas:
   URL a provider. `PLUGA_SURFACE` e `LANDING_PAGE_SURFACE` carregam também o
   endpoint de ingestão e a cópia que difere entre as telas, para que o painel
   continue sendo um componente só.
-- `apps/web/lib/integration-secret-route.ts` produz os dois handlers a partir
-  de uma surface. As quatro rotas
+- `apps/web/lib/integration-connection-routes.ts` produz os dois handlers a
+  partir de uma surface. As quatro rotas
   (`integrations/{pluga,landing-page}/{secret,status}`) passaram a ser seis
-  linhas cada, chamando a fábrica — não há mais um arquivo onde esquecer a
-  constante.
+  linhas cada, chamando a fábrica.
+  **O que isso resolve, sem exagero:** o provider deixa de ser uma constante
+  solta no meio de um arquivo e passa a vir de um objeto nomeado, e `segment` é
+  união fechada, então errar o nome não compila. O que **não** resolve: cada
+  rota ainda amarra sua surface à mão, e nada garante que a surface amarrada
+  case com a pasta onde o arquivo mora — `pluga/secret/route.ts` passando
+  `LANDING_PAGE_SURFACE` compila. Por isso o redirect da rota de status é lido
+  do caminho da requisição (`screenPathForStatusRoute`) e não da surface: uma
+  amarração errada não tem como largar o operador num 404, porque o formulário
+  sempre volta para a tela de onde saiu. Há teste para isso.
 - `apps/web/components/integrations/integration-secret-panel.tsx` é o antigo
   `PlugaSecretPanel` parametrizado por surface; `copy-block.tsx` mudou de lugar
   junto, porque agora serve as duas telas. Comportamento do painel inalterado.
-- `canOpenPlugaScreen` virou `canOpenIntegrationScreen`: a mesma regra passou a
-  guardar duas telas, e o nome antigo mentia sobre isso.
+  `integration-secret-notice.tsx` é o que a Gestão vê no lugar dele, agora um
+  componente só em vez de um `<Card>` copiado nas duas telas.
+- `canOpenPlugaScreen` virou `canOpenIntegrationScreen`, e os arquivos
+  `pluga-access.ts` e `integration-secret-route.ts` viraram
+  `integration-access.ts` e `integration-connection-routes.ts`: os três nomes
+  mentiam depois que a regra passou a guardar duas telas e o módulo passou a
+  conter também o handler de status, que não emite segredo nenhum.
+- **Gestão não vê o painel** (`landing-page/page.tsx`): verificado por
+  inspeção, não por teste — este repo não tem teste de página, e o ticket não
+  inventou um framework para isso. O gate é o mesmo `canManageIntegrationSecret`
+  que a rota de segredo usa, e esse **tem** teste nos três papéis abaixo de
+  Direção.
 - A atribuição do evento à conexão certa não precisou mudar:
   `recordIntegrationEvent` re-seleciona a conexão **por `token_hash`**
   (`packages/db/src/integration-event.ts:145-154`), então cada token cai na sua
@@ -87,14 +108,16 @@ Duas perguntas estavam abertas no item 3 e foram decididas:
   (`apps/worker/src/connector-v1.ts:66-69`), enquanto um lead de LP entrando
   pelo token da Pluga só não era rotulado como Meta se quem enviou lembrasse de
   declarar `source`.
-- Testes: `apps/web/lib/integration-secret-route.test.ts`, 25 casos rodados
-  **duas vezes** — `describe.each(INTEGRATION_SURFACES)` — de modo que a
-  conexão de landing page é provada, não presumida. Cobrem 401, 403 para os
-  três papéis abaixo de Direção, 403 para workspace não associado, 400 para
-  JSON inválido e ação desconhecida, 409 para segredo já existente, o provider
-  correto em cada chamada de banco, o segredo ausente do log, e o redirect de
-  status voltando para a tela da própria origem.
-- Suíte local: 47 arquivos, 303 testes, verde. `pnpm lint` e
+- Testes: `apps/web/lib/integration-connection-routes.test.ts`, 31 casos, com
+  os das rotas rodados **duas vezes** — `describe.each` sobre as duas surfaces —
+  de modo que a conexão de landing page é provada, não presumida. Cobrem 401,
+  403 para os três papéis abaixo de Direção na rota de segredo, o mesmo trio
+  sendo devolvido à tela na rota de status, workspace não associado nas duas,
+  400 para JSON inválido e ação desconhecida, 409 para segredo já existente, o
+  provider correto em cada chamada de banco, o segredo ausente do log, o
+  redirect voltando para a tela da própria origem, e o redirect seguindo o
+  ponto de montagem mesmo com a surface errada amarrada.
+- Suíte local: 47 arquivos, 309 testes, verde. `pnpm lint` e
   `tsc --noEmit` limpos. `next build` registra as duas rotas novas.
 
 ## O que este ticket não fez

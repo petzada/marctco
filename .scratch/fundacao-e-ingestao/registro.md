@@ -681,3 +681,59 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - **Precisa de mão humana:** apertar o botão em produção. O workspace real tem
   uma conexão `PLUGA`; a de landing page só nasce quando a Direção abrir a tela
   e clicar em "Gerar segredo". Está incluído no item 1 de `a-fazer-geral.md`.
+
+## Ticket 18 — passada de `/code-review` — 2026-08-12
+
+Os dois eixos rodaram contra o commit inicial do ticket. **Um achado duro de
+padrão, quatro de spec, seis juízos de valor.** O que mudou por causa deles:
+
+- **Glossário (duro, ADR-0005).** `IntegrationSurface` era termo novo sem linha
+  no `CONTEXT.md` nem na tabela de mapeamento, enquanto o vizinho
+  `IntegrationConnection` tinha. Entrou nos dois, marcado como tipo da camada
+  web e não model — a tabela ganhou a distinção junto, porque até aqui só
+  listava nome de schema.
+- **A frase que eu tinha escrito era exagerada.** O registro dizia "não há mais
+  um arquivo onde esquecer a constante". Não é verdade: cada rota ainda amarra
+  a surface à mão, e `pluga/secret/route.ts` passando `LANDING_PAGE_SURFACE`
+  compila. Em vez de suavizar a frase, tirei a consequência: o redirect da rota
+  de status passou a ser lido do caminho da requisição
+  (`screenPathForStatusRoute`) e não de `surface.segment`, então uma amarração
+  errada não larga mais o operador num 404 silencioso. `segment` também virou
+  união fechada, o que faz um typo não compilar. O que sobra do risco está
+  escrito no ticket, sem eufemismo.
+- **AC meio verdadeiro.** Eu tinha marcado "403 nas rotas" para Atendente e
+  Supervisor. A rota de segredo dá 403; a de status devolve 303 para a tela,
+  porque é submetida por `<form>` e um JSON trocaria a página por texto cru. O
+  AC foi reescrito para dizer as duas coisas, e os testes de status — que só
+  exercitavam `MANAGER` — passaram a cobrir os três papéis.
+- **Texto que contradizia a própria tela.** A nota para a Gestão dizia "A URL e
+  o segredo são administrados pela Direção", mas a tela de LP imprime a URL
+  logo abaixo, para qualquer papel. Virou só "o segredo", num componente único
+  (`IntegrationSecretNotice`) em vez de um `<Card>` copiado nas duas telas —
+  que era também o achado de duplicação do eixo de padrões.
+- **Nomes que passaram a mentir.** `pluga-access.ts` guardava a regra de duas
+  telas e `integration-secret-route.ts` guardava o handler de status, que não
+  emite segredo. Viraram `integration-access.ts` e
+  `integration-connection-routes.ts`.
+- **`IntegrationSurface` misturava dois eixos.** Roteamento (`segment`,
+  `provider`, `endpointPath`) e texto de tela estavam no mesmo nível, então
+  mexer numa palavra e adicionar uma origem editavam o mesmo objeto. O texto
+  desceu para `copy`. Junto foi embora a interpolação `Desativar a {noun}?`,
+  que dependia de todo nome de origem ser feminino — agora cada rótulo é
+  literal.
+- **Recusado, com motivo:** desexportar `IntegrationRouteHandler`. É o tipo de
+  retorno declarado de duas funções exportadas, e o build do web roda um
+  segundo `tsc` sobre `tsconfig.server.json`; esconder o tipo é risco de emissão
+  de declaração em troca de nada.
+- **Confirmado pelo eixo de spec, não presumido:** as quatro operações de banco
+  filtram `WHERE provider = $1`, o token em claro não aparece em log nem em
+  redirect, as strings da Pluga saíram byte a byte iguais às antigas, e nenhum
+  ponto do código assumia uma conexão por workspace.
+- **Um erro meu no meio da correção:** rodei o rename de import com um laço
+  PowerShell, e o 5.1 leu os arquivos como ANSI — nove arquivos saíram com
+  mojibake (`DireÃ§Ã£o`). Restaurei os cinco afetados do commit e refiz as
+  edições com ferramenta que respeita UTF-8. Vale como aviso: neste repo,
+  reescrita em massa de arquivo com acento não passa por
+  `Get-Content`/`Set-Content` sem `-Encoding utf8` nos dois lados.
+- **Suíte depois da passada:** 47 arquivos, 309 testes (eram 303), `lint`,
+  `typecheck` e `build` verdes.

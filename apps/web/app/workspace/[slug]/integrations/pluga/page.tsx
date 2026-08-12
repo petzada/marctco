@@ -14,9 +14,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CopyBlock } from "../../../../../components/integrations/copy-block";
+import { IntegrationSecretNotice } from "../../../../../components/integrations/integration-secret-notice";
 import { IntegrationSecretPanel } from "../../../../../components/integrations/integration-secret-panel";
 import { Button } from "../../../../../components/ui/button";
-import { Card } from "../../../../../components/ui/card";
 import {
   DataTable,
   DataTableCell,
@@ -26,8 +26,11 @@ import {
 import { EmptyState } from "../../../../../components/ui/empty-state";
 import { StatusBadge, type StatusBadgeTone } from "../../../../../components/ui/status-badge";
 import { isPayloadExpired } from "../../../../../lib/integration-payload-expiry";
+import {
+  canManageIntegrationSecret,
+  canOpenIntegrationScreen
+} from "../../../../../lib/integration-access";
 import { PLUGA_SURFACE } from "../../../../../lib/integration-surfaces";
-import { canManageIntegrationSecret, canOpenIntegrationScreen } from "../../../../../lib/pluga-access";
 import { formatQuarantineWait } from "../../../../../lib/quarantine-wait-time";
 import { metaHttpRequestTemplate, pluginRequestHeaders } from "../../../../../lib/pluga-templates";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
@@ -125,12 +128,7 @@ export default async function PlugaIntegrationPage({
             surface={PLUGA_SURFACE}
           />
         ) : (
-          <Card>
-            <p className="text-body-sm text-ink-secondary">
-              A URL e o segredo do webhook são administrados pela Direção. Fale com quem tem esse
-              papel para gerar, rotacionar ou desativar a chave.
-            </p>
-          </Card>
+          <IntegrationSecretNotice />
         )}
 
         <DocumentationSection />

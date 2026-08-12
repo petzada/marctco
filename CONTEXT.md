@@ -126,6 +126,10 @@ _Avoid_: Pré-checar duplicata com um SELECT, capturar a violação de unicidade
 O que uma submissão recebida vai produzir, descrito como dado antes de acontecer: quarentena, retransmissão inerte ou Oportunidade nova com seus marcadores. É decidido sem tocar no banco e executado numa transação só, o que faz caber num teste puro aquilo que antes só o ambiente inteiro exercitava. Um plano de retransmissão não tem onde guardar etapa, responsável, situação ou chegada — é assim que o funil não rebobina.
 _Avoid_: Roteiro espalhado pelo worker, plano com campos opcionais que alguém preenche, decidir consultando, um caminho para a ingestão e outro para a liberação da quarentena
 
+**Superfície de integração**:
+A tela de uma origem somada à conexão que ela administra: o segmento de URL, o provedor, o endereço de ingestão e o texto que difere entre as telas. Existe porque os dois lados já se separaram uma vez — a tela de landing page documentava um token que nenhuma rota sabia emitir, porque a rota da Pluga trazia o provedor fixo dentro do arquivo. Tela e rotas passam a ler o provedor do mesmo lugar. Vive na camada web; não é model nem coluna.
+_Avoid_: Fixar o provedor dentro de uma rota, deixar o segmento de URL divergir da pasta onde a rota mora, misturar texto de tela com o roteamento no mesmo grupo de campos
+
 **Evento de integração**:
 Payload bruto recebido de uma origem, persistido transacionalmente como outbox antes da resposta HTTP e reprocessável. Um dispatcher independente o entrega ao BullMQ quando o Redis estiver disponível. É a **única** cópia do payload; o EnvioLead aponta para a transmissão mais recente em vez de repetir o conteúdo.
 _Avoid_: Confundir com EnvioLead (que já é lead interpretado), publicar no Redis antes do commit, descartar o bruto antes de processar, guardar o mesmo payload em dois lugares

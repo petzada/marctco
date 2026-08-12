@@ -3,7 +3,7 @@ import {
   canManageIntegrationSecret,
   canOpenIntegrationScreen,
   canOperateIntegrations
-} from "./pluga-access";
+} from "./integration-access";
 
 describe("canOpenIntegrationScreen", () => {
   it("is Gestão and up — the same gate on Pluga and on landing page", () => {

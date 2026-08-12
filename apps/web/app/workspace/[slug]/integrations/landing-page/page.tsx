@@ -1,8 +1,12 @@
 import { getIntegrationConnectionSummary } from "@marctco/db";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { IntegrationSecretNotice } from "../../../../../components/integrations/integration-secret-notice";
 import { IntegrationSecretPanel } from "../../../../../components/integrations/integration-secret-panel";
-import { Card } from "../../../../../components/ui/card";
+import {
+  canManageIntegrationSecret,
+  canOpenIntegrationScreen
+} from "../../../../../lib/integration-access";
 import { LANDING_PAGE_SURFACE } from "../../../../../lib/integration-surfaces";
 import {
   canonicalLandingPagePayload,
@@ -15,10 +19,6 @@ import {
   wordpressBaseRecipe,
   wpFormsRecipe
 } from "../../../../../lib/landing-page-recipes";
-import {
-  canManageIntegrationSecret,
-  canOpenIntegrationScreen
-} from "../../../../../lib/pluga-access";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
 export const metadata: Metadata = {
@@ -81,12 +81,7 @@ export default async function LandingPageIntegrationGuide({
               surface={LANDING_PAGE_SURFACE}
             />
           ) : (
-            <Card>
-              <p className="text-body-sm text-ink-secondary">
-                A URL e o segredo desta conexão são administrados pela Direção. Fale com quem tem
-                esse papel para gerar, rotacionar ou desativar a chave da landing page.
-              </p>
-            </Card>
+            <IntegrationSecretNotice />
           )}
         </div>
 

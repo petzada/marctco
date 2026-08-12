@@ -79,7 +79,7 @@ export function IntegrationSecretPanel({
     <Card className="flex flex-col gap-md">
       <div>
         <h2 className="text-title text-ink">Segredo e conexão</h2>
-        <p className="mt-xs text-body-sm text-ink-secondary">{surface.panelDescription}</p>
+        <p className="mt-xs text-body-sm text-ink-secondary">{surface.copy.panelDescription}</p>
       </div>
 
       <div>
@@ -133,13 +133,13 @@ export function IntegrationSecretPanel({
                   setConfirm("disable");
                 }}
               >
-                Desativar {surface.noun}
+                {surface.copy.disableButton}
               </Button>
             ) : (
               <form action={`${basePath}/status`} method="post">
                 <input name="status" type="hidden" value="ACTIVE" />
                 <Button type="submit" variant="secondary">
-                  Ativar {surface.noun}
+                  {surface.copy.enableButton}
                 </Button>
               </form>
             )}
@@ -192,7 +192,7 @@ export function IntegrationSecretPanel({
           setConfirm(null);
         }}
       >
-        {surface.rotateWarning}
+        {surface.copy.rotateWarning}
       </Modal>
 
       <Modal
@@ -216,12 +216,12 @@ export function IntegrationSecretPanel({
           </>
         }
         open={confirm === "disable"}
-        title={`Desativar a ${surface.noun}?`}
+        title={surface.copy.disableTitle}
         onClose={() => {
           setConfirm(null);
         }}
       >
-        {surface.disableWarning}
+        {surface.copy.disableWarning}
       </Modal>
     </Card>
   );

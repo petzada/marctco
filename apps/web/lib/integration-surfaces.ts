@@ -3,28 +3,45 @@ import { LANDING_PAGE_ENDPOINT_PATH } from "./landing-page-recipes";
 import { PLUGA_LEADS_ENDPOINT_PATH } from "./pluga-templates";
 
 /**
- * Binds an integration screen's URL segment to the provider it administers.
+ * The URL segment an integration screen lives under. A closed union rather
+ * than a string because it has to equal a directory name on disk
+ * (`app/workspace/[slug]/integrations/<segment>/`), and nothing at runtime
+ * checks that it does — a typo would compile.
+ */
+export type IntegrationSegment = "pluga" | "landing-page";
+
+/**
+ * Binds an integration screen to the provider it administers.
  *
  * This exists because the two drifted apart once: the landing-page screen
  * documented "o token exclusivo da conexão de landing page" while the only
  * route that could mint a secret hard-coded `PROVIDER = "PLUGA"`, so the
  * connection the screen described had no way to be born. A screen and its
- * secret routes now read the provider from the same object, and a third
- * origin cannot be added by copying a route file and forgetting the constant.
+ * secret routes now read the provider from the same object.
  *
- * The copy that differs between the screens lives here too, so the panel can
- * stay one component. Both nouns are feminine — "a integração", "a conexão da
- * landing page" — which is what lets the panel build its labels by
- * interpolation instead of carrying a phrase per surface.
+ * Routing and wording are kept apart on purpose: adding an origin touches the
+ * first group, rewording a screen touches `copy`, and neither is a reason to
+ * edit the other.
  */
 export interface IntegrationSurface {
-  /** The `integrations/<segment>` path this surface's screen and routes live under. */
-  readonly segment: string;
+  readonly segment: IntegrationSegment;
   readonly provider: IntegrationProvider;
   /** Ingestion endpoint the operator pastes into the origin. */
   readonly endpointPath: string;
-  readonly noun: string;
+  readonly copy: IntegrationSurfaceCopy;
+}
+
+/**
+ * Every user-visible string that differs between the screens, so the panel can
+ * stay one component. Spelled out rather than interpolated from a noun: the
+ * first version built "Desativar a {noun}?" and quietly depended on every
+ * origin's name being feminine, which is not a constraint the type can hold.
+ */
+export interface IntegrationSurfaceCopy {
   readonly panelDescription: string;
+  readonly enableButton: string;
+  readonly disableButton: string;
+  readonly disableTitle: string;
   readonly rotateWarning: string;
   readonly disableWarning: string;
 }
@@ -33,35 +50,32 @@ export const PLUGA_SURFACE: IntegrationSurface = {
   segment: "pluga",
   provider: "PLUGA",
   endpointPath: PLUGA_LEADS_ENDPOINT_PATH,
-  noun: "integração",
-  panelDescription:
-    "Cole a URL e o segredo no destino HTTP Request da automação da Pluga.",
-  rotateWarning:
-    "O segredo atual para de funcionar imediatamente. Você vai precisar colar o novo valor na Pluga antes que os leads voltem a chegar.",
-  disableWarning:
-    "Nenhum lead novo é aceito enquanto a integração estiver desativada. A configuração e o segredo continuam guardados — você pode reativar a qualquer momento sem gerar um novo segredo."
+  copy: {
+    panelDescription:
+      "Cole a URL e o segredo no destino HTTP Request da automação da Pluga.",
+    enableButton: "Ativar integração",
+    disableButton: "Desativar integração",
+    disableTitle: "Desativar a integração?",
+    rotateWarning:
+      "O segredo atual para de funcionar imediatamente. Você vai precisar colar o novo valor na Pluga antes que os leads voltem a chegar.",
+    disableWarning:
+      "Nenhum lead novo é aceito enquanto a integração estiver desativada. A configuração e o segredo continuam guardados — você pode reativar a qualquer momento sem gerar um novo segredo."
+  }
 };
 
 export const LANDING_PAGE_SURFACE: IntegrationSurface = {
   segment: "landing-page",
   provider: "LANDING_PAGE",
   endpointPath: LANDING_PAGE_ENDPOINT_PATH,
-  noun: "conexão da landing page",
-  panelDescription:
-    "Guarde o segredo no servidor do site — no WordPress, no backend ou nos segredos da função serverless. Ele nunca vai no JavaScript da página.",
-  rotateWarning:
-    "O segredo atual para de funcionar imediatamente. Atualize o valor no servidor da landing page antes que os formulários voltem a chegar.",
-  disableWarning:
-    "Nenhum lead novo da landing page é aceito enquanto a conexão estiver desativada. A configuração e o segredo continuam guardados — você pode reativar a qualquer momento sem gerar um novo segredo."
+  copy: {
+    panelDescription:
+      "Guarde o segredo no servidor do site — no WordPress, no backend ou nos segredos da função serverless. Ele nunca vai no JavaScript da página.",
+    enableButton: "Ativar conexão",
+    disableButton: "Desativar conexão",
+    disableTitle: "Desativar a conexão da landing page?",
+    rotateWarning:
+      "O segredo atual para de funcionar imediatamente. Atualize o valor no servidor da landing page antes que os formulários voltem a chegar.",
+    disableWarning:
+      "Nenhum lead novo da landing page é aceito enquanto a conexão estiver desativada. A configuração e o segredo continuam guardados — você pode reativar a qualquer momento sem gerar um novo segredo."
+  }
 };
-
-/**
- * Every surface that administers its own connection. A landing page keeps a
- * credential separate from Pluga's on purpose: rotating one because the
- * automation leaked must not silence the other, and disabling one origin must
- * not disable the other.
- */
-export const INTEGRATION_SURFACES: readonly IntegrationSurface[] = [
-  PLUGA_SURFACE,
-  LANDING_PAGE_SURFACE
-];

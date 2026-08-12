@@ -6,9 +6,9 @@ import {
   type IntegrationConnectionStatus
 } from "@marctco/db";
 import { NextResponse } from "next/server";
+import { canManageIntegrationSecret } from "./integration-access";
 import type { IntegrationSurface } from "./integration-surfaces";
 import { logger } from "./logger";
-import { canManageIntegrationSecret } from "./pluga-access";
 import { redirectTo } from "./redirect-response";
 import { resolveWorkspaceAccess } from "./workspace-access";
 
@@ -22,6 +22,25 @@ export type IntegrationRouteHandler = (
   request: Request,
   context: RouteContext
 ) => Promise<NextResponse>;
+
+/**
+ * The screen a `.../<segment>/status` route belongs to, read from the path the
+ * request actually arrived on rather than from the surface.
+ *
+ * The surface is bound to the route by hand, one `export const POST` per file,
+ * and nothing makes `surface.segment` agree with the directory the file sits
+ * in. Building the redirect from the surface would turn that disagreement into
+ * a silent bounce to a 404; building it from the mount point means the form
+ * always returns to the screen that submitted it, even if the binding is
+ * wrong. Only the path is used — the host on `request.url` is the internal
+ * container behind Railway's edge, which is the whole subject of
+ * `redirect-response.ts`.
+ */
+export function screenPathForStatusRoute(request_url: string): `/${string}` {
+  const { pathname } = new URL(request_url);
+  const screen = pathname.replace(/\/status\/?$/, "");
+  return (screen === "" ? "/" : screen) as `/${string}`;
+}
 
 /**
  * Generates or rotates the bearer secret of one origin's connection.
@@ -107,6 +126,11 @@ export function createIntegrationSecretHandler(
  * low-stakes writes (`Sair`, onboarding provisioning) — nothing here needs to
  * be shown once and held out of a redirect, unlike the secret itself.
  *
+ * Every refusal returns to the screen instead of answering 403, because the
+ * caller is a form and not `fetch`: a JSON body would replace the page with
+ * raw text. A role that cannot open the screen at all lands on the same 404
+ * the screen itself would have given it.
+ *
  * Scoped to the surface's provider, so disabling the landing page cannot
  * silence Pluga.
  *
@@ -117,7 +141,7 @@ export function createIntegrationStatusHandler(
 ): IntegrationRouteHandler {
   return async function POST(request, { params }) {
     const { slug } = await params;
-    const back = `/workspace/${slug}/integrations/${surface.segment}` as const;
+    const back = screenPathForStatusRoute(request.url);
     const access = await resolveWorkspaceAccess(slug);
     if (access.status === "unauthenticated") {
       return redirectTo("/login");

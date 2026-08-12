@@ -80,6 +80,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Etapa de conclusão | `Stage.role = CLOSING` | Fim do fluxo em aberto; não é ganho nem perdido |
 | Conector de origem | `LeadSourceConnector` | — |
 | Conexão de integração | `IntegrationConnection` | — |
+| Superfície de integração | `IntegrationSurface` | Tipo da camada web, não model: liga o segmento de URL da tela ao `IntegrationProvider` que ela administra, para que as duas não voltem a divergir |
 | Evento de integração | `IntegrationEvent` | — |
 | Estado de despacho do evento | `IntegrationEvent.dispatch_status` | `PENDING \| DISPATCHED`; outbox PostgreSQL → BullMQ |
 | Estado do evento | `IntegrationEvent.status` | `RECEIVED \| PROCESSED \| QUARANTINED \| FAILED`. Fonte única da tela de Integrações: `RECEIVED` no commit que aceita o lead, `PROCESSED` quando o worker conclui, `QUARANTINED` sem contato, `FAILED` quando o processamento esgota as tentativas |
