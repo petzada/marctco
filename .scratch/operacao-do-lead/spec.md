@@ -4,7 +4,7 @@ Status: ready-for-agent
 
 > Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).
-> ADRs vinculantes: 0002, 0003 (só o campo de telefone no membro; o disparo é Fase 4), 0005, 0009, 0013, 0015, 0016, 0019, 0020, 0021, 0022, 0023.
+> ADRs vinculantes: 0002, 0003 (só o campo de telefone no membro; o disparo é Fase 4), 0005, 0009, 0013, 0014, 0015, 0016, 0019, 0020, 0021, 0022, 0023.
 > Costuras: as três da [spec de fundação e ingestão](../fundacao-e-ingestao/spec.md) — nenhuma quarta numerada. A costura principal desta fase é o mesmo lugar em que `listLeads` e `assignLead` já vivem.
 
 ---
@@ -13,13 +13,21 @@ Status: ready-for-agent
 
 O lead já entra, já tem Pessoa, já tem card na tabela. Ninguém consegue trabalhar nele.
 
-A Direção não tem como cadastrar atendente, supervisor ou gestão — o workspace só tem o dono que o provisionamento criou. Sem Equipe não há responsável, e sem responsável a tabela de Leads é uma fila que ninguém puxa. Dois gestores clicam no mesmo card e os dois acham que ficou com cada um. O Supervisor, no papel, deveria ver o time e a fila sem dono; no código ainda enxerga o workspace inteiro, porque não existe tag no membro. O atendente não tem um quadro das próprias etapas — só a tabela geral de triagem, pensada para volume, não para o dia a dia de quem liga. O supervisor que separa fila mista (Hugs e REAL no mesmo anúncio) não vê campanha nem formulário na linha, então atribui no escuro. A Direção que já é dona da Hugs não consegue nascer a ACR: o onboarding recusa quem já tem vínculo, e o provisionamento devolve o workspace antigo em vez de criar o segundo.
+A Direção não tem como cadastrar atendente, supervisor ou gestão — o workspace só tem o dono que o provisionamento criou. Sem Equipe não há responsável, e sem responsável a tabela de Leads é uma fila que ninguém puxa. Dois gestores clicam no mesmo card e os dois acham que ficou com cada um. O Supervisor, no papel, deveria ver o time e a fila sem dono; no código ainda enxerga o workspace inteiro, porque não existe tag no membro.
+
+**E o caminho do lead até quem atende não existe.** A operação real é em dois níveis: de manhã a Gestão abre a fila única — leads de todas as campanhas do grupo, misturados de propósito — e entrega cada um ao Supervisor da equipe que vai trabalhá-lo; o Supervisor então reparte entre os atendentes do seu time. Hoje só o primeiro movimento é possível: `assignLead` exige `assigned_user_id IS NULL`, e depois disso o Supervisor não tem operação nenhuma que passe o lead adiante. O segundo nível morre na porta.
+
+O atendente também não tem um quadro das próprias etapas — só a tabela geral de triagem, pensada para volume, não para o dia a dia de quem liga. E a Direção que já é dona da Hugs não consegue nascer a ACR: o onboarding recusa quem já tem vínculo, e o provisionamento devolve o workspace antigo em vez de criar o segundo.
 
 ## Solution
 
-A Direção cadastra a Equipe no próprio CRM: login e vínculo nascem juntos, com papel e tag no mesmo gesto. Tag no membro é o time. O Supervisor passa a ver só quem compartilha tag com ele e a fila sem dono daquele workspace — e deixa de herdar o alcance da Gestão. Atribuir vale só sobre lead sem dono e o banco arbitra a corrida; reatribuir é outra operação, com o dono atual visível e confirmação. Desatrelar tira a pessoa daquele workspace; desligar tira do quadro inteiro; nos dois casos os leads em aberto voltam à fila sem dono daquele tenant, sem apagar login, membro nem Oportunidade.
+A Direção cadastra a Equipe no próprio CRM: login e vínculo nascem juntos, com papel e tag no mesmo gesto. Tag no membro é o time. O Supervisor passa a ver só quem compartilha tag com ele e a fila sem dono daquele workspace — e deixa de herdar o alcance da Gestão.
 
-O atendente ganha **Meus leads**: Kanban das etapas em aberto, com troca de etapa. A tabela geral continua sendo a triagem. O card aceita valor opcional. A fila sem dono mostra campanha e formulário. Workspace adicional da mesma Direção nasce da mesma marcação da marctco de sempre — o vínculo que já existe não bloqueia.
+**A distribuição em dois níveis vira operação de primeira classe.** Atribuir vale só sobre lead sem dono e o banco arbitra a corrida. Reatribuir é outra operação, com o dono atual no `WHERE`: Gestão e Direção reatribuem em qualquer lugar; o **Supervisor reatribui dentro do time** — dono atual e destino compartilhando tag com ele —, e é isso que faz o segundo nível existir. A confirmação de "este lead é de fulano, tem certeza?" existe para impedir que alguém tome o lead de um colega, então não aparece quando o dono atual é o próprio ator. A tabela ganha filtro por responsável e por equipe, que é como a Gestão acompanha sem precisar de um quadro.
+
+Desatrelar tira a pessoa daquele workspace; desligar tira de todos os tenants daquela Direção; nos dois casos os leads em aberto voltam à fila sem dono daquele tenant, sem apagar login, membro nem Oportunidade, e guardando quem os tinha.
+
+Quem atende ganha **Meus leads**: Kanban das etapas em aberto, com troca de etapa — Atendente vê os seus, Supervisor vê o time. Gestão e Direção não têm quadro porque não atendem: distribuem e acompanham na tabela, que continua sendo a vista de alto volume. A Oportunidade passa a guardar campanha e formulário, com os nomes legíveis, para a atribuição de mídia e para discriminar duplicado. Workspace adicional da mesma Direção nasce da mesma marcação da marctco de sempre — o vínculo que já existe não bloqueia.
 
 ## User Stories
 
@@ -43,7 +51,7 @@ O atendente ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 16. Como Direção, não quero desatrelar nem desligar a mim mesmo, nem desfazer o vínculo de Direção que o provisionamento criou neste workspace, para o tenant não ficar sem dono.
 17. Como Gestão da Hugs, não quero desligar alguém da ACR, porque desligar atravessa tenants e só a Direção opera os dois.
 18. Como colaborador desatrelado só da ACR, quero continuar entrando na Hugs, e quero 404 uniforme se eu colar o slug da ACR.
-19. Como pessoa desligada, sem vínculo ativo e sem direito de provisionar, quero ir para o login — não para uma sala de espera.
+19. Como pessoa desligada, sem vínculo ativo e sem direito de provisionar, quero uma tela que me diga que perdi o acesso e que a Direção resolve — não uma sala de espera que promete nada, e não um retorno mudo ao login que me faz achar que a senha quebrou.
 20. Como Direção, quero editar papel e tags de um membro ativo, porque o time muda sem recadastrar.
 
 ### Perfil de acesso e escopo do Supervisor
@@ -51,7 +59,7 @@ O atendente ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 21. Como Atendente, quero ver só os leads atribuídos a mim, na tabela e no Kanban, para não navegar a carteira da empresa.
 22. Como Supervisor com tag, quero ver na tabela os leads do meu time **e** a fila sem dono deste workspace, para atribuir o que chegou misturado.
 23. Como Supervisor com tag, quero que o Kanban **Meus leads** mostre só o time já atribuído — não a fila sem dono —, porque a fila se atribui na tabela.
-24. Como Supervisor sem tag, quero não ter time e não atribuir, para o alcance não voltar a ser o da Gestão por omissão.
+24. Como Supervisor sem tag, quero não ter time e não atribuir, para o alcance não voltar a ser o da Gestão por omissão — e quero que a tela me diga **por que** está vazia, em vez de parecer defeito.
 25. Como Atendente sem tag, quero ser alcançado só pela Gestão e pela Direção na atribuição, porque não pertenço a time nenhum.
 26. Como Gestão ou Direção, quero ver e atribuir a operação inteira deste workspace.
 27. Como Supervisor, quero resolver identidade e duplicidade só no time, não na carteira inteira.
@@ -61,48 +69,57 @@ O atendente ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 ### Atribuição e reatribuição
 
 30. Como Gestão, quero atribuir um lead sem dono a um colaborador ativo, para o atendimento ter responsável.
-31. Como Supervisor, quero atribuir um lead da fila sem dono só a quem compartilha tag comigo.
-32. Como gestor, quero que dois cliques no mesmo lead sem dono produzam um ganhador e uma falha limpa para o outro, em vez do último escrever em silêncio.
-33. Como gestor, quero ver na falha que o lead já tem dono, para não ligar em duplicata.
-34. Como Gestão ou Direção, quero reatribuir um lead que já tem dono, vendo quem é o responsável atual e confirmando, para cobrir férias e saída.
-35. Como sistema, quero que atribuir e reatribuir sejam operações diferentes: atribuir exige `assigned_user_id` nulo; reatribuir exige o dono atual no `WHERE`.
-36. Como gestor, quero que a linha atribuída saia da fila sem dono na hora, para eu não atribuir de novo na mesma vista.
-37. Como atendente, quero que o lead atribuído a mim apareça no meu Kanban sem eu procurar na tabela geral.
+31. Como Gestão, quero entregar o lead ao **Supervisor** da equipe que vai trabalhá-lo, sem precisar saber quem são os atendentes dele — o organograma é problema do supervisor, não meu.
+32. Como Supervisor, quero atribuir um lead da fila sem dono só a quem compartilha tag comigo.
+33. Como Supervisor, quero repassar ao atendente do meu time um lead que a Gestão atribuiu a mim, porque é assim que o lead chega em quem liga.
+34. Como Supervisor, não quero alcançar lead cujo dono atual está fora do meu time, para não tirar trabalho de outra equipe.
+35. Como Supervisor, quero repassar sem confirmação um lead que já é meu — a confirmação existe para eu não tomar o lead de um colega, e este não é o caso.
+36. Como gestor, quero que dois cliques no mesmo lead sem dono produzam um ganhador e uma falha limpa para o outro, em vez do último escrever em silêncio.
+37. Como gestor, quero ver na falha que o lead já tem dono, para não ligar em duplicata.
+38. Como Gestão ou Direção, quero reatribuir qualquer lead que já tem dono, vendo quem é o responsável atual e confirmando, para cobrir férias e saída.
+39. Como sistema, quero que atribuir e reatribuir sejam operações diferentes: atribuir exige `assigned_user_id` nulo; reatribuir exige o dono atual no `WHERE`.
+40. Como sistema, quero guardar quem era o responsável antes de cada reatribuição e de cada devolução à fila, porque a linha do tempo só nasce na Fase 3 e até lá esse rastro não existe em lugar nenhum.
+41. Como gestor, quero que a linha atribuída saia da fila sem dono na hora, para eu não atribuir de novo na mesma vista.
+42. Como atendente, quero que o lead atribuído a mim apareça no meu Kanban sem eu procurar na tabela geral.
+43. Como Gestão, quero filtrar a tabela por responsável e por equipe, para acompanhar a operação inteira sem precisar de um quadro.
 
 ### Fila, card e discriminadores
 
-38. Como Supervisor, quero ver `campaign_id` e `form_id` na fila sem dono, para não separar Hugs e REAL no escuro.
-39. Como atendente, quero ver campanha e formulário no card, para saber de qual anúncio o cliente veio.
-40. Como atendente, quero registrar um valor opcional no card, distinto da parcela, para Ranking e Metas terem o que agregar depois.
-41. Como atendente, quero que valor vazio continue válido, porque nem todo lead de revisional nasce com ticket.
-42. Como gestor, quero distinguir dois cards da mesma Pessoa pelos dados de financiamento **e** por campanha, formulário, origem e responsável — o conjunto que a operação tem, não um campo tratado como prova.
-43. Como atendente, quero ver o **nome** do responsável no card ligado por possível duplicado, não um identificador opaco.
+44. Como gestor, quero ver campanha e formulário na linha e no card, para saber de qual anúncio o cliente veio e ter leitura de mídia depois — **não** para decidir quem atende, que é decisão minha e da capacidade das equipes.
+45. Como gestor, quero o **nome** da campanha e do formulário, não só o identificador numérico do Meta, porque identificador não se lê.
+46. Como sistema, quero gravar campanha e formulário na ingestão, porque o payload bruto expira em 90 dias e essa é a única janela em que esses valores existem.
+47. Como gestor, quero distinguir dois cards da mesma Pessoa pelos dados de financiamento **e** por campanha, formulário, origem e responsável — o conjunto que a operação tem, não um campo tratado como prova.
+48. Como atendente, quero ver o **nome** do responsável no card ligado por possível duplicado, não um identificador opaco.
 
 ### Kanban Meus leads
 
-44. Como atendente, quero um Kanban só dos meus leads em aberto, para conduzir o dia pelas etapas.
-45. Como atendente, quero alternar Kanban e tabela em Meus leads, porque às vezes preciso varrer nomes, não colunas.
-46. Como gestor, quero que a lista geral continue sendo tabela paginada, sem Kanban global.
-47. Como atendente, quero arrastar um card em aberto para outra etapa do mesmo funil, e quero que a etapa persista.
-48. Como sistema, quero que ganho e perda **não** apareçam como colunas do Kanban: só etapas da jornada em aberto.
-49. Como sistema, quero recusar mover lead ganho, perdido ou mesclado, e recusar destino de outro funil.
-50. Como sistema, quero que dois arrastes concorrentes da mesma etapa sejam arbitrados pelo `WHERE` da etapa atual, não por leitura anterior.
-51. Como sistema, quero que mover etapa **não** toque `arrived_at`, porque o relógio de atendimento não recomeça por drag-and-drop.
-52. Como Supervisor, quero o Kanban do time; como Gestão ou Direção, o de todos os leads em aberto deste funil comercial.
-53. Como atendente no celular, quero o Kanban em faixa com scroll-snap, porque colunas lado a lado não cabem.
+49. Como atendente, quero um Kanban só dos meus leads em aberto, para conduzir o dia pelas etapas.
+50. Como atendente, quero alternar Kanban e tabela em Meus leads, porque às vezes preciso varrer nomes, não colunas.
+51. Como Supervisor, quero o Kanban do meu time já atribuído, para ver onde parou cada lead da equipe — não a fila sem dono, que se trabalha na tabela.
+52. Como Gestão ou Direção, **não** quero o quadro: eu distribuo e acompanho, não atendo. O que preciso está na tabela, que é a vista de alto volume.
+53. Como gestor, quero que a lista geral continue sendo tabela paginada, sem Kanban global.
+54. Como atendente, quero arrastar um card em aberto para outra etapa do mesmo funil, e quero que a etapa persista.
+55. Como sistema, quero que ganho e perda **não** apareçam como colunas do Kanban: só etapas da jornada em aberto.
+56. Como sistema, quero recusar mover lead ganho, perdido ou mesclado, e recusar destino de outro funil.
+57. Como sistema, quero que dois arrastes concorrentes da mesma etapa sejam arbitrados pelo `WHERE` da etapa atual, não por leitura anterior.
+58. Como sistema, quero que mover etapa **não** toque `arrived_at`, porque o relógio de atendimento não recomeça por drag-and-drop.
+59. Como atendente no celular, quero o Kanban em faixa com scroll-snap, porque colunas lado a lado não cabem.
 
 ### Workspace adicional e login fechado
 
-54. Como Direção já associada à Hugs, quero provisionar a ACR quando a marctco me marcar de novo com direito e nome, sem perder o primeiro workspace.
-55. Como Direção com dois workspaces, quero o seletor para alternar, cada aba no seu tenant.
-56. Como colaborador já associado, mesmo que alguém me marque por engano, não quero provisionar — eu não tenho o direito, e o cadastro na Equipe nunca o concede.
-57. Como pessoa autenticada sem vínculo ativo e sem direito, quero sair para o login, não ficar numa tela de espera.
-58. Como sistema, quero que o gasto do direito continue acontecendo **antes** do provisionamento, para um direito pendurado não nascer tenant fantasma.
+60. Como Direção já associada à Hugs, quero provisionar a ACR quando a marctco me marcar de novo com direito e nome, sem perder o primeiro workspace.
+61. Como Direção com dois workspaces, quero o seletor para alternar, cada aba no seu tenant.
+62. Como colaborador já associado, mesmo que alguém me marque por engano, não quero provisionar — eu não tenho o direito, e o cadastro na Equipe nunca o concede.
+63. Como pessoa autenticada sem vínculo ativo e sem direito, quero uma **tela de erro** que diga que minha conta não tem acesso a nenhum workspace e que a Direção da empresa resolve, com um botão de sair — não uma sala de espera que promete algo, nem um chute de volta ao login que me faz achar que errei a senha.
+64. Como sistema, quero que o gasto do direito continue acontecendo **antes** do provisionamento, para um direito pendurado não nascer tenant fantasma.
+65. Como sistema, quero que dois POSTs simultâneos com o mesmo direito não produzam dois tenants, porque o provisionamento deixou de reusar o vínculo existente.
 
 ### Navegação
 
-59. Como membro, quero **Equipe** na barra lateral se o meu perfil a alcança, e quero **Meus leads** além de **Leads**.
-60. Como Atendente, não quero o item Equipe na barra — ausência de item não é o controle de acesso; a rota recusa sozinha.
+66. Como membro, quero **Equipe** na barra lateral se o meu perfil a alcança, e quero **Meus leads** além de **Leads** se eu atendo.
+67. Como Atendente, não quero o item Equipe na barra — ausência de item não é o controle de acesso; a rota recusa sozinha.
+68. Como Gestão ou Direção, não quero o item **Meus leads**, porque não atendo — e isso não é recusa de acesso, é ausência de escopo.
+69. Como Supervisor recém-cadastrado sem tag, quero que a Equipe e os Leads me expliquem que ainda não tenho time e que a Direção define isso, em vez de mostrarem tela vazia sem motivo.
 
 ## Implementation Decisions
 
@@ -117,12 +134,13 @@ Esta fase acrescenta operações nomeadas no mesmo módulo de acesso — Equipe,
 ### Schema
 
 - `WorkspaceMember.status`: `ACTIVE | DETACHED`, default `ACTIVE`. Desatrelar e desligar desativam o vínculo; não apagam a linha. Não existe terceiro valor “desligado”.
-- `WorkspaceMember.display_name` e `WorkspaceMember.email`: denormalizados no cadastro, para a Equipe e o nome do responsável listarem sem Auth a cada linha.
+- `WorkspaceMember.display_name` e `WorkspaceMember.email`: denormalizados no cadastro, para a Equipe e o nome do responsável listarem sem Auth a cada linha. **A migration faz o backfill do vínculo que já existe**: o `OWNER` da Hugs em produção nunca passou por cadastro, e sem isso a Equipe abre com a linha da Direção em branco. `UPDATE ... FROM auth.users` na mesma migration que cria as colunas.
 - `WorkspaceMember.whatsapp_phone_e164`: opcional, normalizado pelo mesmo leitor de telefone da ingestão. A Equipe coleta agora porque o cadastro é o gesto; o disparo WhatsApp permanece Fase 4.
 - `Tag`: catálogo do workspace. Unicidade por workspace e nome, sem distinguir maiúscula.
 - `MemberTag`: aplicação da tag ao membro. É o que computa o time. Nunca herdada pela Oportunidade.
-- `Opportunity.amount`: decimal opcional, distinto de `installment_amount`. Mesma normalização monetária da parcela.
-- `Opportunity.campaign_id` e `Opportunity.form_id`: texto opcional, gravados na ingestão a partir do lead normalizado. Retransmissão **não** sobrescreve. A fila não lê o payload bruto: ele expira em 90 dias.
+- `Opportunity.campaign_id`, `campaign_name`, `form_id`, `form_name`: texto opcional, gravados na ingestão a partir do lead normalizado. Os quatro, não só os identificadores: o `campaign_id` do Meta é numérico e ilegível, e o nome é o que uma pessoa consegue ler. Retransmissão **não** sobrescreve. A fila não lê o payload bruto: ele expira em 90 dias, e a ingestão é a única janela.
+- `Opportunity.previous_assigned_user_id`: uuid opcional. Escrito por `reassignLead` e pelo desatrelamento, com o responsável que saiu. É a trilha mínima até a `Activity` da Fase 3 — quem tinha 200 leads abertos larga 200 cards na fila, e sem esta coluna não há como saber de quem eram. Nunca participa de escopo nem de filtro de permissão.
+- **Nenhum campo monetário novo.** `amount` sai desta fase: a grandeza que Ranking e Metas precisam agregar é honorários, que deriva da economia estimada — saída da análise de cabimento, Fase 7. Item A10 do [plano](../../docs/plano-de-construcao.md). `installment_amount` continua sendo o único sinal de tamanho do caso.
 
 Toda tabela nova entra no Seam 3: RLS habilitada e forçada, policy de isolamento, índice que começa por `workspace_id`. Expand/contract: `status` nasce com default; colunas novas são anuláveis.
 
@@ -150,41 +168,61 @@ Time = membros `ACTIVE` que compartilham **ao menos uma** tag com o Supervisor, 
 
 A função pura em `packages/domain` recebe as tags do ator e o quadro de membros e devolve o conjunto de `user_id` do time — incluindo o caso vazio. As operações nomeadas aplicam esse conjunto no SQL. `ATTENDANT` continua filtrando `assigned_user_id = user_id` e **não** vê fila sem dono.
 
+O time vazio é o estado normal de todo Supervisor no minuto seguinte ao cadastro, e no dia 1 do piloto ele é a regra, não a exceção — antes desta fase o código dava a esse papel o alcance de `MANAGER`, então a tela vai encolher de "tudo" para "quase nada" de uma vez. A recusa está certa e continua; o que não pode acontecer é ela parecer defeito. **Toda tela que fica vazia por falta de tag diz por quê** — Equipe, Leads e Kanban trazem estado vazio nomeando a causa ("você ainda não tem uma tag de equipe") e quem resolve (a Direção, na Equipe). Isso é texto de UI, não exceção de escopo: a operação continua devolvendo conjunto vazio.
+
 ### Atribuição
 
 `assignLead` já existe e já arbitra com `assigned_user_id IS NULL`. Nesta fase ela passa a exigir destino `ACTIVE` neste workspace, a recusar `ATTENDANT`, e a recusar Supervisor cujo destino não está no time. Gestão e Direção atribuem a qualquer membro `ACTIVE` que não seja o `OWNER` de provisionamento, se o destino for colaborador da Equipe — na prática, qualquer `ACTIVE` do tenant, inclusive Gestão que assume um card.
 
-`reassignLead` é operação nova: `WHERE assigned_user_id = :current`. Só Gestão e Direção. A UI mostra o dono atual e pede confirmação. Supervisor não reatribui.
+`reassignLead` é operação nova: `WHERE assigned_user_id = :current`, e grava `previous_assigned_user_id` com o dono que saiu.
+
+**Ela é o segundo nível da distribuição, e por isso o Supervisor a alcança.** Gestão e Direção reatribuem qualquer lead do workspace. O Supervisor reatribui quando **o dono atual e o destino** estão no seu time — o mesmo conjunto de `user_id` que o domínio computa para a listagem, aplicado duas vezes no SQL. Sem tag não há time e não há reatribuição, pelo mesmo motivo que não há atribuição. `ATTENDANT` continua recusado nas duas.
+
+A confirmação da UI existe para impedir que alguém tome o lead de um colega, então ela aparece quando o dono atual **não** é o ator. Supervisor repassando lead que a Gestão entregou a ele repassa direto — é o gesto que ele faz trinta vezes numa manhã, e um diálogo por lead transforma a rotina em fricção.
 
 Nenhuma das duas dispara WhatsApp.
 
 TanStack Query entra só onde o ADR-0013 mandou: remoção otimista da linha atribuída e o Kanban. A tabela geral continua Server Component + `router.refresh()`.
 
+O filtro por responsável e por equipe da tabela é parâmetro de busca lido no Server Component, aplicado dentro da operação nomeada como qualquer outro recorte — a tela não monta `where`, e o filtro **estreita** o escopo do papel, nunca o alarga: Supervisor filtrando por outra equipe recebe vazio, não recusa.
+
 ### Kanban
 
 Rota própria de Meus leads, item na barra. Toggle `{component.toggle-segmented}` Lista / Kanban. Colunas = etapas do funil comercial padrão, só `OPEN` não mescladas, no escopo do papel. `@dnd-kit` persiste por route handler que chama `moveLeadStage`. Condição: etapa atual, mesmo `pipeline_id`, `status = OPEN`, não mesclado. Destino tem de ser etapa desse funil. `arrived_at` intocado.
 
-Ganho, perda, motivo e editor de funil ficam fora. Card do Kanban segue `{component.kanban-card}`: nome, valor se houver, etapa, responsável.
+**O quadro é tela de quem atende: `ATTENDANT` vê os seus, `SUPERVISOR` vê o time já atribuído.** Gestão e Direção **não têm o quadro** — não atendem, distribuem e acompanham, e fazem as duas coisas na tabela. Isso resolve a contradição em que a spec anterior tinha caído: dar "todos os leads em aberto" a Gestão dentro de uma tela chamada *Meus leads* criava justamente o Kanban global que o [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md) §4 recusou, sob um nome que mentia. O item some da barra para esses dois papéis e a rota os manda para Leads; **não é recusa de acesso** — nada no quadro está fora do que a tabela já lhes mostra, e é por isso que a matriz do ADR-0015 traz "—" e não um bloqueio.
+
+Ganho, perda, motivo e editor de funil ficam fora. Card do Kanban segue `{component.kanban-card}`: nome, etapa, responsável — sem campo monetário, que saiu da fase.
 
 ### Ingestão (efeito colateral mínimo)
 
-O plano de Oportunidade nova passa a carregar `campaign_id`, `form_id` e a coluna `amount` nasce nula. Retransmissão inerte continua sem esses campos — não tem onde guardá-los, e é assim que não rebobinam. O Seam 2 só se estende para provar que o card ingerido **tem** campanha/formulário quando o `v1` os trouxe, e que o reenvio não os apaga.
+O plano de Oportunidade nova passa a carregar `campaign_id`, `campaign_name`, `form_id` e `form_name` do lead normalizado — os quatro já saem prontos do contrato `v1` (`packages/domain/src/intake/inbound-lead.ts`, bloco `attribution`), então não há trabalho de parsing novo, só persistência. Retransmissão inerte continua sem esses campos — não tem onde guardá-los, e é assim que não rebobinam. O Seam 2 só se estende para provar que o card ingerido **tem** campanha/formulário quando o `v1` os trouxe, e que o reenvio não os apaga.
+
+Os outros seis campos de atribuição do `v1` (`adset_*`, `ad_*`, `platform`, `is_organic`) **não** entram: nenhuma tela desta fase os lê, e a Fase 7 decide o modelo de mídia com o relatório na mão. Campanha e formulário entram porque a fila e o card já os mostram e porque o duplicado os usa como discriminador.
 
 ### Provisionamento do segundo workspace
 
-`onboardingDecision`: direito presente → provisiona, **mesmo com vínculo ativo**. Sem direito e com vínculo ativo → entra como membro. Sem direito e sem vínculo ativo → login, não espera. Colaborador nunca tem o direito.
+`onboardingDecision`: direito presente → provisiona, **mesmo com vínculo ativo**. Sem direito e com vínculo ativo → entra como membro. Sem direito e sem vínculo ativo → **tela de erro terminal**, não sala de espera e não chute para o login: a conta não tem acesso a nenhum workspace, quem resolve é a Direção da empresa, e há um botão de sair. Colaborador nunca tem o direito.
 
-`provision_workspace` **deixa de devolver o vínculo existente**. Sempre cria tenant + `OWNER` + funil padrão. O gasto do direito continua **antes** da chamada: a leitura do usuário só gasta quando `can_provision_workspace` é o booleano `true`; se já é falso, a rota não provisiona. A marcação nova da marctco (direito + nome) é o que autoriza o tenant N.
+`provision_workspace` **deixa de devolver "o primeiro vínculo que houver"**. O gasto do direito continua **antes** da chamada: a leitura do usuário só gasta quando `can_provision_workspace` é o booleano `true`; se já é falso, a rota não provisiona. A marcação nova da marctco (direito + nome) é o que autoriza o tenant N.
 
-O lock consultivo na função permanece para serializar criações concorrentes. Dois POSTs com o mesmo JWT ainda vivo são corrida residual — o mesmo gênero de duas marcações. Não se inventa sexta função privada para fechá-la.
+**A idempotência do duplo clique não se perde — ela muda de chave.** O `pg_advisory_xact_lock(hashtextextended(owner_user_id::text, 0))` já existe na função e já serializa por dono (`20260806000100_provision_workspace/migration.sql:134`). O que muda é a consulta que roda dentro do lock: hoje ela procura **qualquer** vínculo daquele usuário e devolve o workspace achado; passa a procurar um vínculo `OWNER` num workspace **com este mesmo nome**. As três consequências caem no lugar sozinhas:
 
-O teste atual que exige “quem já pertence recebe o workspace antigo” **inverte o critério**: quem já pertence e tem direito novo recebe um workspace **novo**; quem já pertence e não tem direito nem chega na função.
+- Dois POSTs simultâneos com a mesma marcação carregam o mesmo `workspace_name`: o segundo entra no lock, encontra o que o primeiro acabou de criar e devolve aquele. Um tenant, como hoje.
+- A Direção da Hugs com marcação nova para "ACR" não encontra `OWNER` de nenhuma "ACR": cria. É o requisito da fase.
+- O colaborador não tem o direito e nem chega na função.
+
+Isso fecha a corrida residual **sem** sexta função `SECURITY DEFINER`, sem constraint nova e com menos código do que a versão que a spec propunha antes. O comentário atual da migration explica que índice único não expressa "este usuário não tem vínculo nenhum" — continua verdade, e é por isso que a arbitragem segue sendo o lock; o que o lock passa a comparar é o nome. Preço aceito: a mesma Direção não cria dois workspaces com nome idêntico — recebe o primeiro de volta. Dar nomes iguais a dois tenants do mesmo dono nunca é intenção; é o duplo clique.
+
+O teste atual que exige “quem já pertence recebe o workspace antigo” **inverte o critério**: quem já pertence e tem direito novo, com nome novo, recebe um workspace **novo**; quem já pertence e não tem direito nem chega na função; quem chega duas vezes com o mesmo nome recebe o mesmo tenant.
 
 ### UI
 
-`DESIGN.md` é a lei. Equipe é `{component.data-table}` no desktop e card empilhado abaixo de 480px. Kanban vira faixa com scroll-snap abaixo de 768px. A barra ganha Meus leads e Equipe (Equipe só para quem a matriz alcança na leitura; a rota recusa o resto). Integrações continuam Gestão para cima.
+`DESIGN.md` é a lei. Equipe é `{component.data-table}` no desktop e card empilhado abaixo de 480px. Kanban vira faixa com scroll-snap abaixo de 768px. Integrações continuam Gestão para cima.
 
-Valor e parcela usam numerais tabulares. Campanha e formulário na fila sem dono são colunas da tabela de Leads quando o filtro efetivo é “sem responsável” — ou colunas permanentes da tabela geral, se forem baratas; a fila mista é o requisito, não um layout extra.
+A barra ganha **Equipe** (só para quem a matriz alcança na leitura; a rota recusa o resto) e **Meus leads** (só para quem atende — `ATTENDANT` e `SUPERVISOR`). São ausências de natureza diferente e os testes devem tratá-las assim: Equipe some do Atendente **e** a rota o recusa, porque há dado que ele não pode ler; Meus leads some da Gestão porque o escopo dela ali é vazio, e a rota apenas a manda para Leads.
+
+Parcela usa numerais tabulares. Campanha e formulário são colunas da tabela de Leads — permanentes, não um layout que aparece só quando o filtro é "sem responsável": elas servem para ler a origem do lead a qualquer momento, e o filtro por responsável/equipe é que faz o recorte da fila. Esse filtro é `{component.data-table}` com controle de filtro no cabeçalho, refletido na URL para a Gestão poder voltar à mesma vista.
 
 ## Testing Decisions
 
@@ -201,14 +239,18 @@ Cobre:
 - Supervisor com tag vê time + fila sem dono na listagem; sem tag não atribui e não vê o time da Gestão.
 - Atendente não vê fila sem dono nem lead de colega.
 - Atribuir: um ganhador sob corrida; recusa Atendente; recusa Supervisor fora do time; recusa destino `DETACHED`.
-- Reatribuir: recusa se o dono atual não casa; só Gestão e Direção.
+- Reatribuir: recusa se o dono atual não casa; Gestão e Direção alcançam qualquer lead.
+- **Distribuição em dois níveis, ponta a ponta:** Gestão atribui da fila ao Supervisor; o Supervisor reatribui ao Atendente do time e o lead chega. É o caminho que a fase existe para abrir, e merece um teste que o percorra inteiro.
+- Reatribuir do Supervisor: recusa quando o **dono atual** está fora do time; recusa quando o **destino** está fora do time; recusa Supervisor sem tag; aceita quando os dois estão no time.
+- `previous_assigned_user_id` guarda o responsável que saiu, tanto na reatribuição quanto na devolução à fila.
 - Desatrelar neste tenant devolve `OPEN` à fila e preserva `WON`/`LOST`; o desatrelado deixa de resolver o slug.
 - Desligar: Direção dona de dois tenants desativa os dois vínculos; Gestão não atravessa o outro.
 - Recusa desatrelar a si e desatrelar o `OWNER` daquele workspace.
 - Cadastro atrela e-mail já existente; reativa `DETACHED`; nunca grava direito de provisionar; nunca cria papel `OWNER`.
 - `moveLeadStage` arbitra pela etapa atual; recusa fechado, mesclado e funil alheio; não mexe `arrived_at`.
 - `listUserWorkspaces` omite `DETACHED`.
-- Segundo `provisionWorkspace` do mesmo `OWNER` nasce tenant novo; o gasto do direito já falso não chama a função.
+- `provisionWorkspace` com **nome novo** para o mesmo `OWNER` nasce tenant novo; com o **mesmo nome** devolve o tenant que já existe (duplo clique); o gasto do direito já falso não chama a função.
+- A migration preenche `display_name`/`email` do vínculo que já existia antes das colunas — a Equipe não lista linha em branco para a Direção.
 
 Auth Admin fica fora desta costura: a rota resolve o `user_id` e a operação recebe o id. Testes de banco não sobem o Supabase.
 
@@ -216,7 +258,7 @@ Auth Admin fica fora desta costura: a rota resolve o `user_id` e a operação re
 
 Prior art: `intake-plan.test.ts`, `onboarding-decision.test.ts`, `markersFor`.
 
-Cobre: conjunto do time (tag compartilhada, vazio, `DETACHED` fora, várias tags); quem pode atribuir a quem; se a etapa é móvel; `onboardingDecision` com direito + vínculo existente → provisiona; sem direito e sem vínculo → não é espera.
+Cobre: conjunto do time (tag compartilhada, vazio, `DETACHED` fora, várias tags); quem pode atribuir a quem; **quem pode reatribuir de quem para quem**, que é a combinatória nova desta fase e a que sustenta o segundo nível; se a etapa é móvel; `onboardingDecision` com direito + vínculo existente → provisiona; sem direito e sem vínculo → erro terminal, não espera e não login.
 
 ### Seam 3 — RLS e schema
 
@@ -236,7 +278,11 @@ WhatsMiau, template de 1º contato, disparo na atribuição, timeline de mensage
 
 O campo `whatsapp_phone_e164` entra; o envio não.
 
-Kanban global de todos os leads não entra. Meus leads é que tem quadro.
+**Campo monetário novo não entra** (`amount`, saldo devedor, economia estimada, honorários). Item A10 do plano, Fase 7 — a grandeza que Ranking e Metas agregam é honorários, e ela deriva da análise de cabimento, que não existe ainda. Somar uma coluna que cada empresa do grupo preenche com uma grandeza diferente produz número errado com cara de certo. `installment_amount` continua sendo o sinal de tamanho.
+
+Kanban global de todos os leads não entra, e Gestão e Direção não têm quadro nenhum: quem tem é quem atende. Filtro por responsável e por equipe na tabela é o que lhes dá acompanhamento.
+
+Os campos de atribuição `adset_*`, `ad_*`, `platform` e `is_organic` do contrato `v1` não são persistidos nesta fase.
 
 ## Further Notes
 
@@ -244,6 +290,8 @@ Kanban global de todos os leads não entra. Meus leads é que tem quadro.
 
 **Matriz do ADR-0015.** As linhas da Fase 2 deixam de ser especificação futura e passam a ser critério das operações nomeadas. O restante da matriz (Agenda, handoff, Analytics) continua letra para as fases que as possuem.
 
-**Corrida residual no segundo tenant.** Dois POSTs com o mesmo JWT ainda portando o direito podem, em teoria, nascer dois workspaces depois que a função deixa de reusar o vínculo antigo. O gasto com leitura do booleano estrito fecha o caso comum (segundo clique depois do gasto). Não se abre função privada para o caso simultâneo.
+**Corrida no segundo tenant — fechada, não aceita.** Uma versão anterior desta spec deixava dois POSTs simultâneos poderem criar dois workspaces e chamava isso de risco residual. Não precisa ser: o lock consultivo por `owner_user_id` já está na função, e basta trocar o que ele consulta dentro do lock — de "qualquer vínculo deste usuário" para "vínculo `OWNER` num workspace com este nome". Custo zero em superfície nova, e o duplo clique volta a ser idempotente.
 
-**`assignLead` hoje.** A operação já recusa Atendente e já arbitra `IS NULL`. O que falta — destino ativo, time do Supervisor, reatribuição distinta, UI — é esta fase, não um rewrite da arbitragem.
+**`assignLead` hoje.** A operação já recusa Atendente e já arbitra `IS NULL`. O que falta — destino ativo, time do Supervisor, reatribuição distinta com alcance do Supervisor, filtro na tabela, UI — é esta fase, não um rewrite da arbitragem.
+
+**Por que o Supervisor reatribui.** Foi a correção mais importante desta revisão. A spec anterior punha reatribuir como exclusiva de Gestão para cima e, ao mesmo tempo, descrevia uma operação em que a Gestão entrega o lead ao Supervisor. As duas coisas juntas travam o lead no Supervisor: `assignLead` exige `IS NULL`, o lead já tem dono, e nenhuma operação o move adiante. O segundo nível da distribuição só existe porque `reassignLead` alcança o Supervisor dentro do time.

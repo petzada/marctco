@@ -97,9 +97,17 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Quarentena | `IntegrationEvent.status = QUARANTINED` | Estado do evento, não da oportunidade |
 | Marcador "sem telefone" | `Opportunity.missing_phone` | Significa uma coisa só: não dá WhatsApp nem ligação |
 | Gatilho do 1º contato | `WorkspaceSettings.first_contact_trigger: ON_ASSIGNMENT \| ON_ARRIVAL \| DISABLED` | Configuração do gestor ([ADR-0003](./0003-whatsapp-instancia-unica-gatilho-atribuicao.md)) |
-| Valor (da oportunidade) | `amount` | Opcional no card na Fase 2. `value` é genérico demais para coluna monetária; distinto de `installment_amount` |
-| Campanha (fila sem dono) | `campaign_id` | Campo do contrato `v1` ([ADR-0008](./0008-fronteira-conector-dominio.md)); a fila lê do payload canônico. Não inventa coluna paralela até a spec decidir persistência |
-| Formulário (fila sem dono) | `form_id` | Idem `campaign_id` |
+| Campanha | `Opportunity.campaign_id` | Campo do contrato `v1` ([ADR-0008](./0008-fronteira-conector-dominio.md)), persistido na ingestão. Não roteia o lead — é atribuição de mídia e discriminador de duplicado ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
+| Nome da campanha | `Opportunity.campaign_name` | Idem. É o valor legível; `campaign_id` do Meta é numérico. Gravado na ingestão porque o payload bruto expira em 90 dias ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
+| Formulário | `Opportunity.form_id` | Idem `campaign_id` |
+| Nome do formulário | `Opportunity.form_name` | Idem `campaign_name` |
+| Responsável anterior | `Opportunity.previous_assigned_user_id` | Quem tinha o lead antes da reatribuição ou do desatrelamento. Trilha mínima até a `Activity` da Fase 3 ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)); nunca decide escopo |
+| Estado do vínculo | `WorkspaceMember.status` | `ACTIVE \| DETACHED`, default `ACTIVE`. Não há terceiro valor “desligado” ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)) |
+| Nome de exibição do membro | `WorkspaceMember.display_name` | Denormalizado, para a Equipe e o nome do responsável listarem sem consultar a Auth por linha |
+| E-mail do membro | `WorkspaceMember.email` | Idem `display_name` |
+| WhatsApp do membro | `WorkspaceMember.whatsapp_phone_e164` | Opcional; mesmo leitor de telefone da ingestão. O disparo é Fase 4 ([ADR-0003](./0003-whatsapp-instancia-unica-gatilho-atribuicao.md)) |
+| Tag | `Tag` | Catálogo do workspace; unicidade por `(workspace_id, nome)` sem distinguir maiúscula |
+| Tag do membro | `MemberTag` | Aplicação da tag ao membro. É o que computa o time do Supervisor; nunca herdada pela Oportunidade ([ADR-0020](./0020-tag-no-membro-define-o-time.md)) |
 | Instituição financeira | `financial_institution` | Dado opcional do financiamento; não identifica Pessoa |
 | Valor da parcela | `installment_amount` | Decimal monetário normalizado; entrada preserva também o valor bruto |
 | Chegada | `arrived_at` | Início do relógio de SLA. Instante em que a Oportunidade passa a existir — igual ao recebimento no caminho direto, igual à liberação para lead ex-quarentena ([ADR-0007](./0007-ingestao-idempotencia.md)) |

@@ -31,7 +31,9 @@ Acrescentar valor a enum depois é aditivo e barato; remover depois, não. Se um
 
 ## Escopo por tela
 
-**eu** = apenas o que lhe é atribuído · **time** = membros que compartilham tag com o Supervisor, e as oportunidades atribuídas a eles · **tudo** = workspace inteiro. A **fila sem dono** não é “time”: aparece só nas linhas que a nomeiam (tabela de Leads e atribuição). Kanban “Meus leads”, editar card e resolver identidade do Supervisor são o time já atribuído — o lead sem dono se vê e se atribui na tabela, com `campaign_id`/`form_id` na própria fila.
+**eu** = apenas o que lhe é atribuído · **time** = membros que compartilham tag com o Supervisor, e as oportunidades atribuídas a eles · **tudo** = workspace inteiro. A **fila sem dono** não é “time”: aparece só nas linhas que a nomeiam (tabela de Leads e atribuição). Editar card e resolver identidade do Supervisor são o time já atribuído — o lead sem dono se vê e se atribui na tabela.
+
+A distribuição do lead tem **dois níveis**, e a matriz existe para sustentá-los: Gestão ou Direção tira o lead da fila sem dono e o entrega ao **Supervisor** da equipe; o Supervisor repassa ao **Atendente** do seu time. O segundo movimento é uma reatribuição — o lead já tem dono — e é por isso que a linha de reatribuir não é exclusiva de Gestão para cima ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)).
 
 | Tela | Fase | Atendente | Supervisor | Gestão | Direção |
 |---|---|---|---|---|---|
@@ -40,8 +42,10 @@ Acrescentar valor a enum depois é aditivo e barato; remover depois, não. Se um
 | Resolver identidade / duplicidade | 1 | — | time | tudo | tudo |
 | Integrações — histórico, reprocessar, quarentena | 1 | — | — | ✓ | ✓ |
 | Integrações — gerar/rotacionar segredo, ativar/desativar | 1 | — | — | — | ✓ |
-| Kanban "Meus leads" | 2 | eu | time | tudo | tudo |
-| Atribuir · reatribuir | 2 | — | fila sem dono → time | tudo | tudo |
+| Kanban "Meus leads" | 2 | eu | time | — | — |
+| Atribuir (lead **sem** dono) | 2 | — | fila sem dono → time | tudo | tudo |
+| Reatribuir (lead **com** dono) | 2 | — | dentro do time | tudo | tudo |
+| Leads (tabela) — filtrar por responsável e por equipe | 2 | — | time | tudo | tudo |
 | Equipe — ver | 2 | — | time | tudo | tudo |
 | Equipe — cadastrar membro, definir papel, gerir tags | 2 | — | — | — | ✓ |
 | Equipe — desatrelar | 2 | — | — | ✓ | ✓ |
@@ -64,6 +68,8 @@ Estas linhas não são arbitrárias:
 - **Feature flag é vazio para os quatro**, ao pé da letra do ADR-0004: a flag é invisível ao cliente — a capacidade existe ou não existe para aquele workspace. Nenhum papel do cliente a enxerga.
 - **Equipe não cria Direção** porque `OWNER` é o membro que o provisionamento cria, não um papel que se oferece num dropdown. O cadastro oferece só Atendente, Supervisor e Gestão ([ADR-0021](./0021-dois-caminhos-de-nascimento-login-fechado.md)).
 - **Supervisor vê a fila sem dono do workspace e só atribui a quem compartilha tag com ele** ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)). Sem tag, não tem time — não atribui. Atendente sem tag só é alcançado por Gestão e Direção.
+- **Supervisor reatribui dentro do time; Gestão e Direção reatribuem em qualquer lugar.** Sem isso o segundo nível da distribuição não existe: o lead que a Gestão entregou ao Supervisor já tem dono, e passá-lo ao Atendente é reatribuir. O Supervisor só o faz quando o dono atual **e** o destino estão no seu time — nunca tira lead de quem não é seu.
+- **O Kanban é tela de atendimento, e Gestão e Direção não atendem.** Eles distribuem e acompanham, e fazem as duas coisas na tabela de Leads, que é a vista de alto volume decidida no [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md) §4. O “—” nessa linha **não é recusa de acesso**: nada no quadro está fora do que a tabela já lhes mostra. O acompanhamento que eles precisam é o filtro por responsável e por equipe na própria tabela — a linha logo abaixo.
 - **Desligar é da Direção; desatrelar é da Gestão para cima.** Tirar alguém de um workspace é operação; tirar do quadro inteiro atravessa tenants e é conta ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)).
 
 ## Por que uma regra agora, e não a matriz inteira

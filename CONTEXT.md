@@ -11,8 +11,8 @@ Rótulo de UI para a Oportunidade comercial, do primeiro contato até o Ganho. N
 _Avoid_: Lead como model ou tabela, Lead para card do funil jurídico, segundo substantivo no meio do funil comercial
 
 **Workspace**:
-Tenant SaaS cuja fronteira é a fila de entrada: empresas que compartilham campanha compartilham o workspace; empresas com Pluga ou LP próprios têm workspace próprio. Isola dados, integrações, trial e feature flags. A mesma Direção pode ser dona de vários.
-_Avoid_: Conta, tenant solto, organização Clerk, workspace por filial quando a campanha é compartilhada, um workspace automático para o grupo inteiro
+Tenant SaaS cuja fronteira é a fila de entrada: empresas do mesmo grupo que compartilham campanha compartilham o workspace, e os leads caem numa fila única; campanha separada, com Pluga ou LP próprios, ganha workspace próprio. Isola dados, integrações, trial e feature flags. A mesma Direção pode ser dona de vários.
+_Avoid_: Conta, tenant solto, organização Clerk, workspace por filial quando a campanha é compartilhada, um workspace automático para o grupo inteiro, tratar a empresa que pagou o anúncio como fronteira de dados
 
 **Provisionamento**:
 Nascimento de um Workspace, em ato único e indivisível: o tenant, o vínculo do primeiro membro como dono e o funil comercial padrão com suas etapas passam a existir juntos ou não existem. Acontece no primeiro acesso de quem a marctco marcou com direito a provisionar, nunca por cadastro da Direção nem por edição manual de banco.
@@ -27,8 +27,12 @@ Ato da Gestão ou da Direção, na Equipe daquele workspace, que tira o colabora
 _Avoid_: Confundir com desligamento, excluir usuário, excluir Oportunidade
 
 **Desligamento**:
-Ato da Direção: a pessoa saiu do quadro. Todos os vínculos ativos caem, em todas as Equipes. Sem vínculo restante e sem direito de provisionar, ela não entra e não ganha workspace novo. Não apaga login, membro nem Oportunidade. Leads em aberto de cada workspace voltam à fila daquele tenant.
-_Avoid_: Excluir usuário, excluir membro, excluir Oportunidade, deixar lead aberto com o desligado, provisionar workspace novo, sala de espera após desligar, deixar Gestão da Hugs demitir da ACR
+Ato da Direção: a pessoa saiu do quadro daquela Direção. Caem os vínculos ativos em todos os workspaces em que o ator é dono, e o direito de provisionar é revogado. Sem vínculo restante e sem direito, ela não entra em nada que seja dele e não ganha workspace novo — um vínculo em workspace de outro cliente da marctco não é alcançado, e não deve ser. Não apaga login, membro nem Oportunidade. Leads em aberto de cada workspace voltam à fila daquele tenant.
+_Avoid_: Excluir usuário, excluir membro, excluir Oportunidade, deixar lead aberto com o desligado, provisionar workspace novo, sala de espera após desligar, deixar Gestão da Hugs demitir da ACR, prometer que ela não entra em workspace nenhum
+
+**Distribuição do lead**:
+Como o lead sai da fila e chega em quem atende, em dois níveis. A Gestão (na prática o analista de marketing) abre a fila sem dono e **atribui** o lead ao Supervisor da equipe; o Supervisor **reatribui** ao Atendente do seu time. Quem atende é decisão de capacidade da operação, nunca da campanha nem da empresa do grupo que pagou o anúncio.
+_Avoid_: Rotear por campanha, tag na oportunidade para dizer de quem é o lead, Supervisor tirando lead de outra equipe, Gestão precisando saber o organograma para distribuir, tratar reatribuir como se fosse atribuir
 
 **Perfil de acesso**:
 O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. São quatro, e nenhum a mais — **Atendente** responde pelos leads atribuídos a ele; **Supervisor**, pelo time (quem compartilha tag no membro) e pela fila sem dono daquele workspace; **Gestão**, pela operação inteira; **Direção**, pela operação e pela conta. O escopo é aplicado no servidor, num lugar só.

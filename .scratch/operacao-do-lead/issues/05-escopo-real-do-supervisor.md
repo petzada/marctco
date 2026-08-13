@@ -2,7 +2,7 @@
 
 **What to build:** O Supervisor deixa de enxergar o workspace inteiro. Com tag, vê o time e a fila sem dono na tabela — e só o time no que já tem dono. Sem tag, não tem time e não atribui. A herança da Gestão acaba, inclusive para quem ainda não recebeu tag.
 
-**Blocked by:** 03 — Equipe: cadastro com tag
+**Blocked by:** 03a — Equipe: schema, tags e operações
 
 **Status:** ready-for-agent
 
@@ -19,6 +19,7 @@
 - [ ] Supervisor na Equipe passa a ver só quem compartilha tag; sem tag, Equipe vazia de colegas
 - [ ] Recusa de Atendente em resolver revisão permanece; Supervisor só resolve no time
 - [ ] Fail-closed: papel desconhecido continua recusando, nunca devolvendo tudo
+- [ ] **Toda tela que fica vazia por falta de tag diz por quê.** Este ticket encolhe o Supervisor de "tudo" para "quase nada" de uma vez, e no dia 1 do piloto nenhum supervisor tem tag ainda — a tela vazia sem explicação vira chamado de suporte com diagnóstico errado. Equipe, Leads e Kanban trazem estado vazio nomeando a causa ("você ainda não tem uma tag de equipe") e quem resolve (a Direção, na Equipe). É texto de UI: a operação continua devolvendo conjunto vazio, sem exceção de escopo
 - [ ] Seam 1 cobre a combinatória do time. Costura principal cobre Supervisor com tag vs sem tag vs Gestão na listagem
 
 ## Fora deste ticket
