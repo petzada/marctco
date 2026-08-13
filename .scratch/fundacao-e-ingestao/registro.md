@@ -784,3 +784,45 @@ corrigir.
   antes desta mudança, então o caminho de tracing já rodava em produção, e o
   Dockerfile ainda copia `apps/web/node_modules` e o `node_modules` raiz
   inteiros (linhas 54 e 68).
+
+## Fatia provada em produção — 2026-08-12
+
+O caminho `POST → outbox → dispatcher → BullMQ → worker → Person/Opportunity`
+rodou no workspace real *Hugs Assessoria*. Confirmação humana na UI; os `POST`
+foram disparados daqui. **A fatia de fundação e ingestão está provada em
+produção.** O que a Pluga paga ainda gate é só o modelo De→Para de Google Lead
+Form (tickets 13 e 14), não este encanamento.
+
+- **Aceite HTTP.** `POST /v1/integrations/pluga/leads` com o token da conexão
+  `PLUGA` devolveu **200** `{"status":"accepted"}` às 23:39:23Z
+  (`external_lead_id` `teste-ponta-a-ponta-2026-08-12`, *Maria Souza*,
+  `source` declarado `LANDING_PAGE`). Um disparo anterior no mesmo minuto
+  devolveu 400 `invalid_json` porque o PowerShell quebrou o corpo do `curl`;
+  não conta.
+- **Retransmissão inerte (ticket 11).** O mesmo `POST`, mesmo
+  `external_lead_id`, devolveu 200 `accepted` de novo às 23:41:40Z. Na tela de
+  Leads continuou **uma** *Maria Souza*.
+- **Quarentena (tickets 10 e 14).** `POST` sem telefone e sem e-mail, 200
+  `accepted` às 23:45:11Z (`external_lead_id` `teste-quarentena-2026-08-12`,
+  *Joao Sem Contato*). Evento visível em Integrações; **não** nasceu card em
+  Leads. Completar e liberar conferido na tela.
+- **Conexão de landing page (ticket 18).** A Direção gerou o segredo na tela
+  `/integrations/landing-page`. `POST /v1/integrations/webhooks/leads` **sem**
+  `source` no corpo devolveu 200 `accepted` às 23:50:04Z (`external_lead_id`
+  `teste-lp-propria-2026-08-12`, *Ana Landing Page*). Na tela de Leads a origem
+  é **Landing page** — o provider da conexão decide, não o payload. A Pluga
+  continua recebendo com o token dela (Maria, minutos antes).
+- **O que a UI confirmou.** Histórico de Integrações com nome/telefone/e-mail
+  reconhecidos; *Maria Souza* e *Ana Landing Page* na tela de Leads, origem
+  Landing page, etapa de entrada do funil `Comercial`.
+- **O que não foi puxado daqui.** `railway logs` — o CLI não está nesta
+  máquina. O efeito na UI e o 200 depois do commit já são a prova do
+  encanamento; o log seria corroboração, não o critério.
+- **Segredos.** Os dois tokens em claro passaram por este chat. Rotacionar
+  Pluga e landing page quando o teste não precisar mais deles.
+- **Documentos emendados:** `a-fazer-geral.md` item 1; `acoes-manuais-pendentes.md`
+  passo 2; ticket 18, o que faltava provar em produção.
+- **O que continua aberto, e não é desta prova:** revogar o
+  `can_provision_workspace` pendurado (item 2); modelo Google Lead Form
+  (item 4, conta Pluga paga); tamanho das imagens Docker (item 5, não
+  bloqueante).

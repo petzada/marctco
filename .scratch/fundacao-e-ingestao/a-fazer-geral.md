@@ -9,9 +9,11 @@
 
 ## Estado da fatia, em uma linha
 
-Os 17 tickets estão implementados, e o **18** fechou a única lacuna de código
-que a auditoria encontrou (item 3). **Nada conhecido bloqueia o MVP no código.**
-O que falta é uma prova em produção (item 1).
+Os 17 tickets estão implementados, o **18** fechou a única lacuna de código
+que a auditoria encontrou, e o item 1 fechou a prova em produção em
+2026-08-12. **Nada conhecido bloqueia o MVP no código nem no encanamento.**
+O que resta é o modelo Google (item 4, conta Pluga paga) e o tamanho das
+imagens (item 5).
 
 ## O que já foi conferido — não reabrir
 
@@ -57,11 +59,12 @@ contra código ou contra produção em 2026-08-12, não contra memória.
 
 ---
 
-## 1. 🟡 Lead de teste ponta a ponta — **próximo passo, é seu**
+## 1. ✅ Lead de teste ponta a ponta — **provado em produção, 2026-08-12**
 
-O único item que separa a fatia de estar provada. Não depende da Pluga paga: o
-endpoint é provider-agnóstico, o token seleciona a conexão, e o conector honra o
-`source` declarado no corpo (`apps/worker/src/connector-v1.ts:67-70`).
+Evidência em `registro.md`, seção "Fatia provada em produção". Não depende da
+Pluga paga: o endpoint é provider-agnóstico, o token seleciona a conexão, e o
+conector honra o `source` declarado no corpo — ou o provider, no caso da
+conexão de landing page (`apps/worker/src/connector-v1.ts:67-70`).
 
 ### 1.1 Rotacionar o segredo (só a Direção faz)
 
@@ -72,7 +75,7 @@ configuração; invalida o anterior no instante do commit.
 1. Abra `https://web-production-33d67.up.railway.app/workspace/9c096b1a-6bcc-44cc-bb00-22a72139b26d/integrations/pluga`
 2. Rotacione o segredo e **copie o valor em claro na hora**.
 
-- [ ] Token em mãos.
+- [x] Token em mãos.
 
 ### 1.2 Disparar o `POST`
 
@@ -106,17 +109,17 @@ caminho até a Oportunidade. O `external_lead_id` fixo é intencional — repeti
 mesmo `POST` depois prova a retransmissão inerte do ticket 11 sem criar segundo
 lead.
 
-- [ ] **200** com `{"status":"accepted"}`. Um **401** significa token errado; um
-      **400**, JSON malformado.
+- [x] **200** com `{"status":"accepted"}`. Um **401** significa token errado; um
+      **400**, JSON malformado. Confirmado em 2026-08-12 23:39:23Z.
 
 ### 1.3 Conferir o resultado
 
 O dispatcher varre a outbox a cada **2 s** (`DEFAULT_DISPATCH_INTERVAL_MS`), então
 segundos, não minutos.
 
-- [ ] Histórico da tela de Integrações mostra o evento, com nome/telefone/e-mail
+- [x] Histórico da tela de Integrações mostra o evento, com nome/telefone/e-mail
       reconhecidos.
-- [ ] Tela de Leads mostra *Maria Souza*, origem **Landing page**, etapa de
+- [x] Tela de Leads mostra *Maria Souza*, origem **Landing page**, etapa de
       entrada do funil `Comercial`.
 - [ ] `railway logs --service web` traz `integration_event_received result="accepted"`
       e `railway logs --service worker` traz o processamento do evento.
@@ -127,29 +130,34 @@ contexto de tenant) — peça e eu rodo.
 
 ### 1.4 Depois que passar
 
-- [ ] Repetir o **mesmo** `POST` e confirmar que **não** nasce segundo lead
-      (ticket 11, retransmissão inerte).
-- [ ] Um `POST` sem telefone e sem e-mail, confirmando quarentena e o fluxo
-      "completar e liberar" (tickets 10 e 14).
-- [ ] **Criar a conexão de landing page** (ticket 18): abrir
+- [x] Repetir o **mesmo** `POST` e confirmar que **não** nasce segundo lead
+      (ticket 11, retransmissão inerte). Segundo `POST` aceito em 2026-08-12
+      23:41:40Z (`200` `accepted`).
+- [x] Um `POST` sem telefone e sem e-mail, confirmando quarentena e o fluxo
+      "completar e liberar" (tickets 10 e 14). `POST` aceito em 2026-08-12
+      23:45:11Z (`external_lead_id` `teste-quarentena-2026-08-12`, nome
+      *Joao Sem Contato*). 
+- [x] **Criar a conexão de landing page** (ticket 18): abrir
       `/workspace/<slug>/integrations/landing-page`, clicar em "Gerar segredo",
       copiar na hora, e disparar um `POST` para
       `/v1/integrations/webhooks/leads` com esse token. Confirmar que o lead
       entra com origem **Landing page** mesmo **sem** declarar `source` no
       corpo — é o provider da conexão que decide — e que a Pluga continua
-      recebendo normalmente com o token dela.
-- [ ] Marcar o critério da fatia como provado em produção no `registro.md`.
+      recebendo normalmente com o token dela. `POST` aceito em 2026-08-12
+      23:50:04Z (`external_lead_id` `teste-lp-propria-2026-08-12`, nome
+      *Ana Landing Page*, **sem** `source` no corpo).
+- [x] Marcar o critério da fatia como provado em produção no `registro.md`.
 
 ---
 
-## 2. 🟡 Revogar o direito de provisionar pendurado — seu, 30 segundos
+## 2. ✅ Revogar o direito de provisionar pendurado — **revogado, 2026-08-12**
 
 A re-marcação manual deixou `can_provision_workspace: true` num login que já é
 `OWNER`. Inócuo hoje (quem tem associação nunca provisiona), mas é um direito
 armado: sem a associação, esse login criaria um segundo workspace. SQL em
 `acoes-manuais-pendentes.md`, seção 1.
 
-- [ ] Direito revogado.
+- [x] Direito revogado.
 
 ---
 

@@ -20,7 +20,11 @@ Contexto em sessão é **estado ambiente**: existe uma vez por usuário, não um
 
 Neste cenário as duas camadas do ADR-0006 são **inertes**. O usuário é membro legítimo dos dois workspaces, a policy aprova, e o `SET LOCAL` seta o workspace errado com toda a correção do mundo. Não é erro de programação — é contexto ambiente errado, e não existe rede armada contra isso.
 
-Contra-argumento considerado e pesado: hoje ninguém é multi-workspace. O staff da marctco cria o **usuário** no painel do Supabase e o workspace nasce do provisionamento feito pelo próprio cliente; não há operação de rotina dentro do workspace alheio. A catástrofe das duas abas descreve uma população que ainda não existe.
+Contra-argumento considerado e pesado: na data desta ADR, o piloto ainda não era multi-workspace. O staff da marctco cria o **usuário** no painel do Supabase e o workspace nasce do provisionamento feito pelo próprio cliente; não havia operação de rotina dentro do workspace alheio. A catástrofe das duas abas descrevia uma população que ainda não existia.
+
+> **Emendado pelo [ADR-0021](./0021-dois-caminhos-de-nascimento-login-fechado.md):** na data desta ADR, o login da Direção nascia no painel do Supabase. Colaboradores passam a nascer na Equipe; o painel para atendente foi opção rejeitada.
+>
+> **Emendado pelo [ADR-0022](./0022-workspace-e-fronteira-de-captacao.md):** a Direção do piloto **é** multi-workspace (Hugs + ACR). O argumento da URL ficou mais forte, não mais fraco: o seletor deixa de ser só staff interno.
 
 Decidiu-se pela URL assim mesmo, por dois motivos:
 
@@ -53,6 +57,6 @@ O ponto de chamada é **uma função só**, no mesmo espírito dos adapters da s
 
 ## Consequences
 
-`Workspace` ganha `slug` (UUIDv4, único). Toda rota autenticada nasce sob `/workspace/:slug`. O onboarding vive **fora** do prefixo, em `/onboarding`, porque ali ainda não existe workspace — é o provisionamento que o cria. O ADR-0006 regra 7 passa a distinguir explicitamente ignorar de validar. A validação browser → `WorkspaceMember` acontece pelo resolvedor único e pela função privada estreita do ADR-0019, antes do `SET LOCAL`.
+`Workspace` ganha `slug` (UUIDv4, único). Toda rota autenticada nasce sob `/workspace/:slug`. O onboarding vive **fora** do prefixo, em `/onboarding`, porque o tenant *novo* ainda não tem slug — é o provisionamento que o cria. Também é o caminho do **segundo** provisionamento quando há direito, mesmo com memberships já existentes ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)); vínculo presente não recusa o direito. O ADR-0006 regra 7 passa a distinguir explicitamente ignorar de validar. A validação browser → `WorkspaceMember` acontece pelo resolvedor único e pela função privada estreita do ADR-0019, antes do `SET LOCAL`.
 
 Em troca, o workspace ativo deixa de ser estado de usuário e passa a ser propriedade da requisição — que é o que torna abas independentes por construção e faz todo link profundo nascer correto, inclusive os que fases futuras vão gravar em notificação e e-mail.

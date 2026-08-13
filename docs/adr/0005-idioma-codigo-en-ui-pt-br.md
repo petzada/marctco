@@ -12,12 +12,13 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 
 | Glossário (`CONTEXT.md`) | Código | Nota |
 |---|---|---|
-| Workspace | `Workspace` | — |
-| Associação ao workspace | `WorkspaceMember` | Onde vive o perfil de acesso. **Nunca** `Membership` solto nem `User` do workspace |
+| Workspace | `Workspace` | Fronteira de captação, não “uma assessoria” nem automaticamente o grupo ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
+| Associação ao workspace | `WorkspaceMember` | Onde vive o perfil de acesso e o `status` do vínculo. **Nunca** `Membership` solto nem `User` do workspace |
 | Perfil de acesso | `WorkspaceMember.role` | `ATTENDANT \| SUPERVISOR \| MANAGER \| OWNER` — quatro, e nenhum a mais ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
 | Contexto de acesso | `AccessContext` = `UserContext \| JobContext` | `UserContext`: `workspace_id` + `user_id` + `role`, construído somente por `resolveUserContextForSlug` após validar a associação. `JobContext`: `workspace_id` + `integration_event_id` — o worker não tem usuário nem papel ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md), [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). **Nunca** `Session` nem `RequestContext` |
 | Provisionamento | `private.provision_workspace` | Workspace + vínculo do dono + funil padrão, num commit ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9) |
-| Tag | `Tag` | Define o time de um `SUPERVISOR` |
+| Tag | `Tag` | Catálogo do workspace, gerido na Equipe no mesmo gesto do cadastro. Na oportunidade fica **fora da Fase 2**; se nascer depois, é o mesmo catálogo e não computa escopo ([ADR-0020](./0020-tag-no-membro-define-o-time.md)) |
+| Tag no membro | `MemberTag` | Aplicação da tag ao `WorkspaceMember`. É o que computa o time de um `SUPERVISOR`. **Nunca** `Team` nem herança para a Oportunidade |
 | Tipo de financiamento | `FinancingType` | `VEHICLE \| REAL_ESTATE \| PERSONAL_LOAN \| OTHER`; opcional na Oportunidade |
 | Funil | `Pipeline` | Sempre tipado: `type: COMMERCIAL \| LEGAL` |
 | Funil padrão do workspace | `Pipeline.is_default` | Exatamente um comercial por workspace; destino da ingestão ([ADR-0009](./0009-etapas-editaveis-papeis-e-status.md)) |
@@ -37,9 +38,13 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Oportunidade do envio | `LeadSubmission.opportunity_id` | Nula enquanto o envio não produziu card: quarentena, ou plano ainda não aplicado |
 | Payload bruto recebido | `IntegrationEvent.raw` | Cópia única. Anulável, e **nulo só pode significar expirado**: o payload é gravado no recebimento, antes do 200 ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
 | Atendente | `WorkspaceMember.role = ATTENDANT` | Enxerga apenas oportunidade atribuída a si ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
-| Supervisor | `WorkspaceMember.role = SUPERVISOR` | Escopo do time/filial, computado por tag. Até a Fase 2, escopo efetivo de `MANAGER` |
+| Supervisor | `WorkspaceMember.role = SUPERVISOR` | Com tag: time + fila sem dono. Sem tag: não atribui — não herda Gestão. O código da fundação ainda trata como `MANAGER` só porque `MemberTag` não existe; nunca fallback permanente ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md), [ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
 | Gestão | `WorkspaceMember.role = MANAGER` | Operação inteira do workspace |
 | Direção | `WorkspaceMember.role = OWNER` | Operação **e** conta: membros, papéis, segredo de integração. É o papel criado no provisionamento |
+| Cadastro de colaborador | — | Ato da Direção na Equipe: login + `WorkspaceMember` no mesmo ato, sem direito de provisionar. E-mail já existente só atrela ([ADR-0021](./0021-dois-caminhos-de-nascimento-login-fechado.md), [ADR-0023](./0023-desligamento-desativa-o-vinculo.md)). **Nunca** `SignUp` |
+| Estado do vínculo | `WorkspaceMember.status: ACTIVE \| DETACHED` | Desatrelar e desligar **desativam** o vínculo; não apagam a linha. Desligamento não é um terceiro valor — é a operação que marca `DETACHED` em todos os vínculos e tira o direito de provisionar ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)) |
+| Desatrelamento | — | Gestão ou Direção marca `DETACHED` só naquele workspace ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)) |
+| Desligamento | — | Direção marca `DETACHED` em todos os vínculos; pessoa fora do quadro ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)) |
 | Plano de ingestão | `IntakePlan` | União discriminada `Quarantine \| Retransmission \| NewOpportunity`; decidido puro, aplicado por `applyIntakePlan` ([ADR-0017](./0017-ingestao-como-decisao-e-plano.md)) |
 | Plano de ingestão aplicado | `AppliedIntakePlan` | O que `applyIntakePlan` gravou — a variante e os ids que nasceram. Nunca sai do processo: o retorno do job leva só a variante ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
 | Limite do id da origem | `MAX_EXTERNAL_LEAD_ID_LENGTH` | Largura de `LeadSubmission.external_lead_id`. Acima dela o id declarado é lido como ausente e o conector cai no `IntegrationEvent.id` — a constraint que existe para não perder lead não pode ser o que recusa um |
@@ -92,7 +97,9 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Quarentena | `IntegrationEvent.status = QUARANTINED` | Estado do evento, não da oportunidade |
 | Marcador "sem telefone" | `Opportunity.missing_phone` | Significa uma coisa só: não dá WhatsApp nem ligação |
 | Gatilho do 1º contato | `WorkspaceSettings.first_contact_trigger: ON_ASSIGNMENT \| ON_ARRIVAL \| DISABLED` | Configuração do gestor ([ADR-0003](./0003-whatsapp-instancia-unica-gatilho-atribuicao.md)) |
-| Valor (da oportunidade) | `amount` | `value` é genérico demais para coluna monetária |
+| Valor (da oportunidade) | `amount` | Opcional no card na Fase 2. `value` é genérico demais para coluna monetária; distinto de `installment_amount` |
+| Campanha (fila sem dono) | `campaign_id` | Campo do contrato `v1` ([ADR-0008](./0008-fronteira-conector-dominio.md)); a fila lê do payload canônico. Não inventa coluna paralela até a spec decidir persistência |
+| Formulário (fila sem dono) | `form_id` | Idem `campaign_id` |
 | Instituição financeira | `financial_institution` | Dado opcional do financiamento; não identifica Pessoa |
 | Valor da parcela | `installment_amount` | Decimal monetário normalizado; entrada preserva também o valor bruto |
 | Chegada | `arrived_at` | Início do relógio de SLA. Instante em que a Oportunidade passa a existir — igual ao recebimento no caminho direto, igual à liberação para lead ex-quarentena ([ADR-0007](./0007-ingestao-idempotencia.md)) |

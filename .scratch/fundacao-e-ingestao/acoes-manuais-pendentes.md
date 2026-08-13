@@ -1,9 +1,10 @@
 # Ações manuais pendentes — fundação e ingestão
 
-> Atualizado em **2026-08-12**, na auditoria do passo 1. O provisionamento está
-> **confirmado em produção** e o passo 1 saiu da fila; o passo 2 continua aberto e
-> ganhou um caminho que não depende da Pluga paga. Ver
-> [a-fazer-geral.md](./a-fazer-geral.md) para a fila completa daqui em diante.
+> Atualizado em **2026-08-12**, depois da prova ponta a ponta. O provisionamento
+> e o caminho `POST → Person/Opportunity` estão **confirmados em produção**.
+> Ver [a-fazer-geral.md](./a-fazer-geral.md) para o que ainda falta (higiene do
+> direito pendurado, modelo Google, tamanho da imagem) e [registro.md](./registro.md)
+> para a evidência da fatia.
 >
 > Antes: atualizado em 2026-08-07, na recuperação do build Docker. Production
 > migration verde com 12/12 migrations aplicadas.
@@ -112,47 +113,25 @@ set raw_app_meta_data =
 where email = 'marciopetigrosso@gmail.com';
 ```
 
-- [ ] Direito pendurado revogado (ver `a-fazer-geral.md`, item 2).
+- [x] Direito pendurado revogado (ver `a-fazer-geral.md`, item 2).
 
 **Para o próximo cliente real**, o roteiro da marcação continua válido e mora em
 "Ticket 17 — por cliente novo", mais abaixo. O `can_provision_workspace` **não**
 deve ser re-marcado neste login: ele já tem o workspace dele.
 
-### 2. Lead de teste ponta a ponta — 🟡 ABERTO, e **não depende mais da Pluga**
+### ~~2. Lead de teste ponta a ponta~~ — ✅ RESOLVIDO em 2026-08-12
 
-- [ ] `POST → outbox → dispatcher → BullMQ → worker → Person` nunca rodou em
-  produção, porque o código dos tickets 07 e 08 só chegou lá em 2026-08-07. O
-  que está provado é que o worker **conecta** no Redis e o dispatcher **sobe**;
-  o caminho de publicação só é exercitado quando existe evento pendente — numa
-  passada com zero eventos o dispatcher nem abre a conexão.
+- [x] `POST → outbox → dispatcher → BullMQ → worker → Person` rodou em
+      produção. Evidência em `registro.md`, seção "Fatia provada em produção".
+- [x] Segredo rotacionado e token em claro em mãos (Direção/`OWNER`).
+- [x] `POST` aceito com **200** e `{"status":"accepted"}`.
+- [x] Evento visível no histórico da tela de Integrações.
+- [x] Lead visível na tela de Leads, com origem e etapa `ENTRY`.
+- [x] Retransmissão inerte, quarentena com completar-e-liberar, e conexão
+      `LANDING_PAGE` sem `source` no corpo — os três conferidos na UI.
 
-**A dependência do passo 1 caiu:** o workspace, o funil default e a conexão
-`PLUGA` já existem (tabela acima). A auditoria de 2026-08-12 confirmou o outro
-lado da conta: **zero** `integration_events`, **zero** `persons`, **zero**
-`opportunities` no tenant. O caminho segue inteiramente inédito em produção.
-
-**Não é preciso plano pago da Pluga para exercitá-lo.** O endpoint é
-provider-agnóstico por desenho (`apps/web/lib/integration-lead-endpoint.ts`): o
-token seleciona a conexão e o worker interpreta depois. Um `curl`
-servidor-servidor com o token da conexão existente cobre o mesmo encanamento que
-a Pluga cobriria. O que a Pluga paga ainda gate é **só o modelo De→Para de Ads**
-(tickets 13 e 14), não a prova do caminho.
-
-Detalhe que decide o `source`: com uma conexão `PLUGA`, o conector honra o
-`source` declarado no payload e só cai em `META_LEAD_ADS` quando o payload não
-declara nada (`apps/worker/src/connector-v1.ts:67-70`). Declarar
-`"source": "LANDING_PAGE"` no corpo produz um lead de origem landing page pela
-conexão que já existe.
-
-O roteiro executável está em [a-fazer-geral.md](./a-fazer-geral.md), item 1.
-Resumo do que ele exige de você: **rotacionar o segredo** na tela (o valor em
-claro só aparece na geração, e o atual não está em lugar nenhum), disparar o
-`POST` e conferir o resultado.
-
-- [ ] Segredo rotacionado e token em claro em mãos (Direção/`OWNER`).
-- [ ] `POST` aceito com **200** e `{"status":"accepted"}`.
-- [ ] Evento visível no histórico da tela de Integrações.
-- [ ] Lead visível na tela de Leads, com origem e etapa `ENTRY`.
+O que a Pluga paga ainda gate é **só o modelo De→Para de Google Lead Form**
+(tickets 13 e 14), não este encanamento.
 
 ## Resolvido — 2026-08-07, recuperação do deploy
 

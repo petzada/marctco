@@ -16,6 +16,9 @@ Status: **travada**. Alternativas rejeitadas (NestJS split, Clerk, Better Auth, 
 > | §1 "Isolamento: RLS por `workspace_id`" | RLS **não encaixa sozinha** com Prisma: policies keiam em GUC `app.workspace_id`, exigem `FORCE ROW LEVEL SECURITY` e papéis separados — [ADR-0006](./docs/adr/0006-rls-duas-camadas-guc-worker.md) |
 > | §7 flags por workspace | Flag só onde **custa dinheiro ou chama terceiro por uso**; três entradas no catálogo. Configuração do gestor e estado de dado são outros dois mecanismos — [ADR-0004](./docs/adr/0004-fronteira-flag-configuracao-estado.md) |
 > | §9 `@supabase/supabase-js` no cliente | Supabase Auth é **autenticação e só**. O browser nunca acessa o Postgres direto — [ADR-0006](./docs/adr/0006-rls-duas-camadas-guc-worker.md) |
+> | §3 “um Workspace (tenant)” / “um workspace por grupo” | Workspace é **fronteira de captação**, não uma assessoria nem automaticamente o grupo. Quem anuncia junto compartilha; quem tem Pluga/LP próprios ganha workspace próprio. A mesma Direção pode ser dona de vários — [ADR-0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) |
+> | §3 Tag “aplica-se a membros e, se útil, a oportunidades” | Tag que define o time vive no **membro**. Tag na oportunidade, se existir, não computa escopo e não se herda; fica fora da Fase 2 — [ADR-0020](./docs/adr/0020-tag-no-membro-define-o-time.md) |
+> | §10 item 7 / §11 “tags filtram oportunidades” · “um workspace por grupo cliente” | Time filtra por tag no **membro**. Workspace = fronteira de captação — [ADR-0020](./docs/adr/0020-tag-no-membro-define-o-time.md) · [ADR-0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) |
 
 ---
 
