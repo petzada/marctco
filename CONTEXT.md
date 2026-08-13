@@ -11,15 +11,31 @@ Rótulo de UI para a Oportunidade comercial, do primeiro contato até o Ganho. N
 _Avoid_: Lead como model ou tabela, Lead para card do funil jurídico, segundo substantivo no meio do funil comercial
 
 **Workspace**:
-Tenant SaaS do cliente: a empresa mãe / grupo da consultoria. Isola dados, integrações, trial e feature flags.
-_Avoid_: Conta, tenant solto, organização Clerk, workspace por filial
+Tenant SaaS cuja fronteira é a fila de entrada: empresas do mesmo grupo que compartilham campanha compartilham o workspace, e os leads caem numa fila única; campanha separada, com Pluga ou LP próprios, ganha workspace próprio. Isola dados, integrações, trial e feature flags. A mesma Direção pode ser dona de vários.
+_Avoid_: Conta, tenant solto, organização Clerk, workspace por filial quando a campanha é compartilhada, um workspace automático para o grupo inteiro, tratar a empresa que pagou o anúncio como fronteira de dados
 
 **Provisionamento**:
-Nascimento de um Workspace, em ato único e indivisível: o tenant, o vínculo do primeiro membro como dono e o funil comercial padrão com suas etapas passam a existir juntos ou não existem. Acontece no primeiro acesso de quem tem direito a provisionar, nunca por edição manual de banco.
-_Avoid_: Criar workspace sem funil, semear funil por script de desenvolvimento em cliente real, workspace válido pela metade, provisionar quem apenas perdeu a associação
+Nascimento de um Workspace, em ato único e indivisível: o tenant, o vínculo do primeiro membro como dono e o funil comercial padrão com suas etapas passam a existir juntos ou não existem. Acontece no primeiro acesso de quem a marctco marcou com direito a provisionar, nunca por cadastro da Direção nem por edição manual de banco.
+_Avoid_: Criar workspace sem funil, semear funil por script de desenvolvimento em cliente real, workspace válido pela metade, provisionar quem apenas perdeu a associação, provisionar colaborador cadastrado na Equipe
+
+**Cadastro de colaborador**:
+Ato da Direção, na tela Equipe, que faz nascer juntos o login e o vínculo ao workspace com papel Atendente, Supervisor ou Gestão. Se o e-mail já é um login, só atrela o mesmo usuário a este workspace — não cria segundo auth. Não cria Direção. O colaborador nunca provisiona.
+_Avoid_: Cadastro autônomo, criar atendente no painel do Supabase, convite sem vínculo, segundo login para a mesma pessoa, fila de espera depois do login, segunda Direção pela Equipe
+
+**Desatrelamento**:
+Ato da Gestão ou da Direção, na Equipe daquele workspace, que tira o colaborador só dali. Ele deixa de ver os leads desse tenant e pode continuar em outros. Leads em aberto daquele workspace voltam à fila sem dono; o contexto do card permanece.
+_Avoid_: Confundir com desligamento, excluir usuário, excluir Oportunidade
+
+**Desligamento**:
+Ato da Direção: a pessoa saiu do quadro daquela Direção. Caem os vínculos ativos em todos os workspaces em que o ator é dono, e o direito de provisionar é revogado. Sem vínculo restante e sem direito, ela não entra em nada que seja dele e não ganha workspace novo — um vínculo em workspace de outro cliente da marctco não é alcançado, e não deve ser. Não apaga login, membro nem Oportunidade. Leads em aberto de cada workspace voltam à fila daquele tenant.
+_Avoid_: Excluir usuário, excluir membro, excluir Oportunidade, deixar lead aberto com o desligado, provisionar workspace novo, sala de espera após desligar, deixar Gestão da Hugs demitir da ACR, prometer que ela não entra em workspace nenhum
+
+**Distribuição do lead**:
+Como o lead sai da fila e chega em quem atende, em dois níveis. A Gestão (na prática o analista de marketing) abre a fila sem dono e **atribui** o lead ao Supervisor da equipe; o Supervisor **reatribui** ao Atendente do seu time. Quem atende é decisão de capacidade da operação, nunca da campanha nem da empresa do grupo que pagou o anúncio.
+_Avoid_: Rotear por campanha, tag na oportunidade para dizer de quem é o lead, Supervisor tirando lead de outra equipe, Gestão precisando saber o organograma para distribuir, tratar reatribuir como se fosse atribuir
 
 **Perfil de acesso**:
-O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. São quatro, e nenhum a mais — **Atendente** responde pelos leads atribuídos a ele; **Supervisor**, pelo time ou filial; **Gestão**, pela operação inteira; **Direção**, pela operação e pela conta. O escopo é aplicado no servidor, num lugar só.
+O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. São quatro, e nenhum a mais — **Atendente** responde pelos leads atribuídos a ele; **Supervisor**, pelo time (quem compartilha tag no membro) e pela fila sem dono daquele workspace; **Gestão**, pela operação inteira; **Direção**, pela operação e pela conta. O escopo é aplicado no servidor, num lugar só.
 _Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, confundir com tag de time
 
 **Contexto de acesso**:
@@ -27,8 +43,8 @@ Os fatos que decidem o que uma requisição ou um job alcança, reunidos num val
 _Avoid_: Workspace e papel viajando separados, papel como parâmetro que ninguém usa, papel inventado para o job preencher campo, contexto em singleton ou cache sem chave de workspace, montar o contexto em cada tela
 
 **Tag**:
-Rótulo configurável no workspace para identificar filial, time ou carteira; aplica-se a membros e, se útil, a oportunidades. É o que define o time de um Supervisor.
-_Avoid_: Sub-workspace, departamento como tenant, “empresa” no sentido de workspace
+Rótulo configurável no workspace, criado e aplicado na tela Equipe no mesmo ato do cadastro do colaborador. No membro, identifica marca ou time e é o que define o time de um Supervisor. Na oportunidade, se existir, é rótulo operacional (carteira, campanha) digitado à mão — nunca herdado do responsável.
+_Avoid_: Sub-workspace, departamento como tenant, “empresa” no sentido de workspace, copiar a tag do atendente para a oportunidade, computar o time do Supervisor a partir da oportunidade, tela de taxonomia fora da Equipe
 
 **Tipo de financiamento**:
 Classificação opcional do contrato de crédito que motivou o contato (veículo, imóvel, empréstimo pessoal ou outro). É dado da Oportunidade e pode ser completado depois; não escolhe nem possui funil.

@@ -125,6 +125,7 @@ Duas perguntas estavam abertas no item 3 e foram decididas:
 - **Histórico por conexão.** A tela da Pluga continua listando os eventos do
   workspace inteiro, inclusive os que chegaram pela landing page. Decidido fora
   de escopo acima; vira ticket próprio se incomodar.
-- **Provar em produção.** O workspace de produção tem uma conexão `PLUGA`. A
-  conexão de LP só existe depois que alguém abrir a tela e clicar em "Gerar
-  segredo" — está listado no item 1 de `a-fazer-geral.md`.
+- **Provar em produção.** Fechado em 2026-08-12. A Direção gerou o segredo na
+  tela; `POST /v1/integrations/webhooks/leads` sem `source` no corpo entrou
+  com origem **Landing page**. Evidência em `registro.md`, seção "Fatia
+  provada em produção".
