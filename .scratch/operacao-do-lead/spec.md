@@ -4,7 +4,7 @@ Status: ready-for-agent
 
 > Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).
-> ADRs vinculantes: 0002, 0003 (só o campo de telefone no membro; o disparo é Fase 4), 0005, 0009, 0013, 0014, 0015, 0016, 0019, 0020, 0021, 0022, 0023.
+> ADRs vinculantes: 0002, 0003 (só o campo de telefone no membro; o disparo é Fase 4), 0005, 0009, 0013, 0014, 0015, 0016, 0019, 0020, 0021, 0022, 0023, 0024, 0025, 0026.
 > Costuras: as três da [spec de fundação e ingestão](../fundacao-e-ingestao/spec.md) — nenhuma quarta numerada. A costura principal desta fase é o mesmo lugar em que `listLeads` e `assignLead` já vivem.
 
 ---
@@ -13,7 +13,7 @@ Status: ready-for-agent
 
 O lead já entra, já tem Pessoa, já tem card na tabela. Ninguém consegue trabalhar nele.
 
-A Direção não tem como cadastrar atendente, supervisor ou gestão — o workspace só tem o dono que o provisionamento criou. Sem Equipe não há responsável, e sem responsável a tabela de Leads é uma fila que ninguém puxa. Dois gestores clicam no mesmo card e os dois acham que ficou com cada um. O Supervisor, no papel, deveria ver o time e a fila sem dono; no código ainda enxerga o workspace inteiro, porque não existe tag no membro.
+A Direção não tem como cadastrar atendente, supervisor ou gestão — o workspace só tem o dono que o provisionamento criou. Sem Equipe não há responsável, e sem responsável a tabela de Leads é uma fila que ninguém puxa. Dois gestores clicam no mesmo card e os dois acham que ficou com cada um. O Supervisor, no papel, deveria ver o time; no código ainda enxerga o workspace inteiro — inclusive a fila sem dono —, porque não existe tag no membro.
 
 **E o caminho do lead até quem atende não existe.** A operação real é em dois níveis: de manhã a Gestão abre a fila única — leads de todas as campanhas do grupo, misturados de propósito — e entrega cada um ao Supervisor da equipe que vai trabalhá-lo; o Supervisor então reparte entre os atendentes do seu time. Hoje só o primeiro movimento é possível: `assignLead` exige `assigned_user_id IS NULL`, e depois disso o Supervisor não tem operação nenhuma que passe o lead adiante. O segundo nível morre na porta.
 
@@ -21,7 +21,7 @@ O atendente também não tem um quadro das próprias etapas — só a tabela ger
 
 ## Solution
 
-A Direção cadastra a Equipe no próprio CRM: login e vínculo nascem juntos, com papel e tag no mesmo gesto. Tag no membro é o time. O Supervisor passa a ver só quem compartilha tag com ele e a fila sem dono daquele workspace — e deixa de herdar o alcance da Gestão.
+A Direção cadastra a Equipe no próprio CRM: login e vínculo nascem juntos, com papel e tag no mesmo gesto. Tag no membro é o time. O Supervisor passa a ver só quem compartilha tag com ele — e deixa de herdar o alcance da Gestão, inclusive a fila sem dono, que fica com Gestão e Direção ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)).
 
 **A distribuição em dois níveis vira operação de primeira classe.** Atribuir vale só sobre lead sem dono e o banco arbitra a corrida. Reatribuir é outra operação, com o dono atual no `WHERE`: Gestão e Direção reatribuem em qualquer lugar; o **Supervisor reatribui dentro do time** — dono atual e destino compartilhando tag com ele —, e é isso que faz o segundo nível existir. A confirmação de "este lead é de fulano, tem certeza?" existe para impedir que alguém tome o lead de um colega, então não aparece quando o dono atual é o próprio ator. A tabela ganha filtro por responsável e por equipe, que é como a Gestão acompanha sem precisar de um quadro.
 
@@ -57,20 +57,22 @@ Quem atende ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 ### Perfil de acesso e escopo do Supervisor
 
 21. Como Atendente, quero ver só os leads atribuídos a mim, na tabela e no Kanban, para não navegar a carteira da empresa.
-22. Como Supervisor com tag, quero ver na tabela os leads do meu time **e** a fila sem dono deste workspace, para atribuir o que chegou misturado.
-23. Como Supervisor com tag, quero que o Kanban **Meus leads** mostre só o time já atribuído — não a fila sem dono —, porque a fila se atribui na tabela.
-24. Como Supervisor sem tag, quero não ter time e não atribuir, para o alcance não voltar a ser o da Gestão por omissão — e quero que a tela me diga **por que** está vazia, em vez de parecer defeito.
-25. Como Atendente sem tag, quero ser alcançado só pela Gestão e pela Direção na atribuição, porque não pertenço a time nenhum.
-26. Como Gestão ou Direção, quero ver e atribuir a operação inteira deste workspace.
+22. Como Supervisor com tag, quero ver na tabela só os leads do meu time — inclusive os que a Gestão atribuiu a mim —, para repartir entre os atendentes. A fila sem dono não é minha.
+23. Como Supervisor com tag, quero que o Kanban **Meus leads** mostre só o time já atribuído — não a fila sem dono —, porque a fila nem entra na minha tabela.
+24. Como Supervisor sem tag, quero não ter time e não reatribuir, para o alcance não voltar a ser o da Gestão por omissão — e quero que a tela me diga **por que** está vazia, em vez de parecer defeito. A fila sem dono não é o consolo.
+25. Como Atendente sem tag, quero ser destino só de **reatribuição** da Gestão e da Direção, porque não pertenço a time nenhum — e nunca nasço dono direto da fila.
+26. Como Gestão ou Direção, quero ver a operação inteira deste workspace, e da fila atribuir só a um Supervisor ou a mim.
 27. Como Supervisor, quero resolver identidade e duplicidade só no time, não na carteira inteira.
 28. Como Atendente, não quero atribuir, reatribuir, cadastrar, desatrelar nem desligar.
 29. Como sistema, quero que o escopo more nas operações nomeadas, não em botão escondido, para a recusa valer mesmo com a rota chamada direto.
 
 ### Atribuição e reatribuição
 
-30. Como Gestão, quero atribuir um lead sem dono a um colaborador ativo, para o atendimento ter responsável.
+30. Como Gestão, quero atribuir um lead sem dono a um Supervisor ativo **com tag**, ou assumir o card, para o atendimento ter responsável sem pular o segundo nível ([ADR-0025](../../docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md)).
 31. Como Gestão, quero entregar o lead ao **Supervisor** da equipe que vai trabalhá-lo, sem precisar saber quem são os atendentes dele — o organograma é problema do supervisor, não meu.
-32. Como Supervisor, quero atribuir um lead da fila sem dono só a quem compartilha tag comigo.
+31a. Como Gestão ou Direção, quero selecionar vários leads da tabela e atribuir o lote a **um** Supervisor (ou a mim), porque a manhã não cabe em um clique por card ([ADR-0026](../../docs/adr/0026-atribuicao-em-massa.md)).
+31b. Como Supervisor, quero repartir em massa os leads que já são meus para **um** Atendente do time, ou um a um quando o volume é pequeno.
+32. Como Supervisor, não quero ver nem atribuir a fila sem dono — isso é da Gestão de manhã ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)).
 33. Como Supervisor, quero repassar ao atendente do meu time um lead que a Gestão atribuiu a mim, porque é assim que o lead chega em quem liga.
 34. Como Supervisor, não quero alcançar lead cujo dono atual está fora do meu time, para não tirar trabalho de outra equipe.
 35. Como Supervisor, quero repassar sem confirmação um lead que já é meu — a confirmação existe para eu não tomar o lead de um colega, e este não é o caso.
@@ -95,7 +97,7 @@ Quem atende ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 
 49. Como atendente, quero um Kanban só dos meus leads em aberto, para conduzir o dia pelas etapas.
 50. Como atendente, quero alternar Kanban e tabela em Meus leads, porque às vezes preciso varrer nomes, não colunas.
-51. Como Supervisor, quero o Kanban do meu time já atribuído, para ver onde parou cada lead da equipe — não a fila sem dono, que se trabalha na tabela.
+51. Como Supervisor, quero o Kanban do meu time já atribuído, para ver onde parou cada lead da equipe — a fila sem dono não é minha, e nem entra no quadro.
 52. Como Gestão ou Direção, **não** quero o quadro: eu distribuo e acompanho, não atendo. O que preciso está na tabela, que é a vista de alto volume.
 53. Como gestor, quero que a lista geral continue sendo tabela paginada, sem Kanban global.
 54. Como atendente, quero arrastar um card em aberto para outra etapa do mesmo funil, e quero que a etapa persista.
@@ -162,9 +164,9 @@ Leads `WON`/`LOST` não voltam à fila.
 
 ### Escopo do Supervisor
 
-Enquanto não existia `MemberTag`, o código tratava `SUPERVISOR` como `MANAGER`. **Essa equivalência acaba nesta fase**, inclusive para Supervisor ainda sem tag: sem tag, time vazio, não atribui, Kanban vazio, tabela só com a fila sem dono.
+Enquanto não existia `MemberTag`, o código tratava `SUPERVISOR` como `MANAGER`. **Essa equivalência acaba nesta fase**, inclusive para Supervisor ainda sem tag: sem tag, time vazio, não reatribui, Kanban vazio, tabela vazia — a fila sem dono não é o consolo ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)).
 
-Time = membros `ACTIVE` que compartilham **ao menos uma** tag com o Supervisor, e as Oportunidades atribuídas a eles (o Supervisor está no próprio time). Fila sem dono **não** é time: só tabela de Leads e atribuição.
+Time = membros `ACTIVE` que compartilham **ao menos uma** tag com o Supervisor, e as Oportunidades atribuídas a eles (o Supervisor está no próprio time). Fila sem dono **não** é time e **não** entra no escopo do Supervisor: só Gestão e Direção a vêem e atribuem.
 
 A função pura em `packages/domain` recebe as tags do ator e o quadro de membros e devolve o conjunto de `user_id` do time — incluindo o caso vazio. As operações nomeadas aplicam esse conjunto no SQL. `ATTENDANT` continua filtrando `assigned_user_id = user_id` e **não** vê fila sem dono.
 
@@ -172,13 +174,15 @@ O time vazio é o estado normal de todo Supervisor no minuto seguinte ao cadastr
 
 ### Atribuição
 
-`assignLead` já existe e já arbitra com `assigned_user_id IS NULL`. Nesta fase ela passa a exigir destino `ACTIVE` neste workspace, a recusar `ATTENDANT`, e a recusar Supervisor cujo destino não está no time. Gestão e Direção atribuem a qualquer membro `ACTIVE` que não seja o `OWNER` de provisionamento, se o destino for colaborador da Equipe — na prática, qualquer `ACTIVE` do tenant, inclusive Gestão que assume um card.
+`assignLead` já existe e já arbitra com `assigned_user_id IS NULL`. Nesta fase ela passa a exigir destino `ACTIVE` neste workspace, a recusar `ATTENDANT` e `SUPERVISOR` como atores — só Gestão e Direção atribuem da fila ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)) — e a recusar destino que não seja um `SUPERVISOR` **com ao menos uma tag** ou o próprio ator ([ADR-0025](../../docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md)). Não atribui a Atendente, nem a Supervisor sem tag, nem a outra Gestão, nem à Direção que não seja quem clicou.
 
 `reassignLead` é operação nova: `WHERE assigned_user_id = :current`, e grava `previous_assigned_user_id` com o dono que saiu.
 
-**Ela é o segundo nível da distribuição, e por isso o Supervisor a alcança.** Gestão e Direção reatribuem qualquer lead do workspace. O Supervisor reatribui quando **o dono atual e o destino** estão no seu time — o mesmo conjunto de `user_id` que o domínio computa para a listagem, aplicado duas vezes no SQL. Sem tag não há time e não há reatribuição, pelo mesmo motivo que não há atribuição. `ATTENDANT` continua recusado nas duas.
+**Ela é o segundo nível da distribuição, e por isso o Supervisor a alcança.** Gestão e Direção reatribuem qualquer lead do workspace. O Supervisor reatribui quando **o dono atual e o destino** estão no seu time — o mesmo conjunto de `user_id` que o domínio computa para a listagem, aplicado duas vezes no SQL. Sem tag não há time e não há reatribuição. `ATTENDANT` continua recusado nas duas. `SUPERVISOR` continua recusado em `assignLead`.
 
-A confirmação da UI existe para impedir que alguém tome o lead de um colega, então ela aparece quando o dono atual **não** é o ator. Supervisor repassando lead que a Gestão entregou a ele repassa direto — é o gesto que ele faz trinta vezes numa manhã, e um diálogo por lead transforma a rotina em fricção.
+A manhã e a repartição do time aceitam **um card ou vários**, sempre para um destino ([ADR-0026](../../docs/adr/0026-atribuicao-em-massa.md)). Massa é o mesmo gesto e as mesmas condições, N linhas; não rateia entre pessoas. 1 a 1 permanece. O lote é **parcial**: linhas que ainda satisfazem a condição vão; as outras recusam com o motivo (na fila, “já tem dono”, pelo nome). Quem ganhou some da vista; quem recusou fica.
+
+A confirmação da UI existe para impedir que alguém tome o lead de um colega, então ela aparece quando o dono atual **não** é o ator. Supervisor repassando lead que a Gestão entregou a ele — um ou um lote — repassa direto. Um diálogo por lead transforma a rotina em fricção.
 
 Nenhuma das duas dispara WhatsApp.
 
@@ -236,9 +240,10 @@ Prior art: `packages/db/tests/leads.test.ts` (`assignLead`, escopo do `ATTENDANT
 
 Cobre:
 
-- Supervisor com tag vê time + fila sem dono na listagem; sem tag não atribui e não vê o time da Gestão.
+- Supervisor com tag vê o time na listagem e **não** vê a fila sem dono; sem tag não reatribui, não vê o time da Gestão e não ganha a fila como consolo.
 - Atendente não vê fila sem dono nem lead de colega.
-- Atribuir: um ganhador sob corrida; recusa Atendente; recusa Supervisor fora do time; recusa destino `DETACHED`.
+- Atribuir: um ganhador sob corrida; recusa Atendente e Supervisor como atores; recusa destino `ATTENDANT`, Supervisor sem tag, outro `MANAGER`, `OWNER` que não seja o ator, `DETACHED`; aceita `SUPERVISOR` com tag ou o próprio ator.
+- Atribuir/reatribuir em massa: um destino, N linhas, mesma condição por linha; não rateia; lote parcial (ganhadores saem, recusas pelo nome ficam).
 - Reatribuir: recusa se o dono atual não casa; Gestão e Direção alcançam qualquer lead.
 - **Distribuição em dois níveis, ponta a ponta:** Gestão atribui da fila ao Supervisor; o Supervisor reatribui ao Atendente do time e o lead chega. É o caminho que a fase existe para abrir, e merece um teste que o percorra inteiro.
 - Reatribuir do Supervisor: recusa quando o **dono atual** está fora do time; recusa quando o **destino** está fora do time; recusa Supervisor sem tag; aceita quando os dois estão no time.

@@ -4,6 +4,10 @@ Quatro perfis, e nenhum a mais: **Atendente**, **Supervisor**, **Gestão**, **Di
 
 **Status:** accepted · 2026-08-05
 
+> **Emendado pelo [ADR-0024](./0024-fila-sem-dono-e-da-gestao.md):** a fila sem dono saiu do escopo do Supervisor. Ele alcança o time e reatribui dentro dele; ver e atribuir o monte sem dono é da Gestão e da Direção.
+>
+> **Emendado pelo [ADR-0027](./0027-sem-papel-de-plataforma.md):** os quatro perfis são do cliente. Não há Super Admin do SaaS nem quinto valor no enum.
+
 ## O problema
 
 `WorkspaceMember.role` existia desde o início, com cinco valores, e a user story dizia por extenso: *"para que as permissões **possam se apoiar** nele"* — futuro. Nenhum ticket lia o campo. Na prática, quem entrasse no workspace faria tudo: qualquer atendente listaria os leads do ano inteiro, editaria CPF de qualquer pessoa, reatribuiria lead de colega e resolveria mesclagem.
@@ -23,7 +27,7 @@ Acrescentar valor a enum depois é aditivo e barato; remover depois, não. Se um
 | UI (PT-BR) | Código | Responde por |
 |---|---|---|
 | Atendente | `ATTENDANT` | Os leads atribuídos a ele |
-| Supervisor | `SUPERVISOR` | O time dele (quem compartilha tag) e a fila sem dono daquele workspace |
+| Supervisor | `SUPERVISOR` | O time dele (quem compartilha tag) — **não** a fila sem dono ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)) |
 | Gestão | `MANAGER` | A operação inteira do workspace |
 | Direção | `OWNER` | A operação **e** a conta: membros, papéis, integrações |
 
@@ -31,19 +35,19 @@ Acrescentar valor a enum depois é aditivo e barato; remover depois, não. Se um
 
 ## Escopo por tela
 
-**eu** = apenas o que lhe é atribuído · **time** = membros que compartilham tag com o Supervisor, e as oportunidades atribuídas a eles · **tudo** = workspace inteiro. A **fila sem dono** não é “time”: aparece só nas linhas que a nomeiam (tabela de Leads e atribuição). Editar card e resolver identidade do Supervisor são o time já atribuído — o lead sem dono se vê e se atribui na tabela.
+**eu** = apenas o que lhe é atribuído · **time** = membros que compartilham tag com o Supervisor, e as oportunidades atribuídas a eles · **tudo** = workspace inteiro · **Supervisor ou si** = destino da fila: um `SUPERVISOR` `ACTIVE` **com ao menos uma tag**, ou o próprio ator ([ADR-0025](./0025-destino-da-fila-e-supervisor-ou-ator.md)). A **fila sem dono** não é “time”: aparece só para Gestão e Direção, na tabela de Leads e na atribuição ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). Editar card e resolver identidade do Supervisor são o time já atribuído. Atribuir e reatribuir aceitam um card ou vários, sempre para um destino ([ADR-0026](./0026-atribuicao-em-massa.md)).
 
 A distribuição do lead tem **dois níveis**, e a matriz existe para sustentá-los: Gestão ou Direção tira o lead da fila sem dono e o entrega ao **Supervisor** da equipe; o Supervisor repassa ao **Atendente** do seu time. O segundo movimento é uma reatribuição — o lead já tem dono — e é por isso que a linha de reatribuir não é exclusiva de Gestão para cima ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)).
 
 | Tela | Fase | Atendente | Supervisor | Gestão | Direção |
 |---|---|---|---|---|---|
-| Leads (tabela) | 1 | eu | time + fila sem dono | tudo | tudo |
+| Leads (tabela) | 1 | eu | time | tudo | tudo |
 | Card do lead — editar | 1 | eu | time | tudo | tudo |
 | Resolver identidade / duplicidade | 1 | — | time | tudo | tudo |
 | Integrações — histórico, reprocessar, quarentena | 1 | — | — | ✓ | ✓ |
 | Integrações — gerar/rotacionar segredo, ativar/desativar | 1 | — | — | — | ✓ |
 | Kanban "Meus leads" | 2 | eu | time | — | — |
-| Atribuir (lead **sem** dono) | 2 | — | fila sem dono → time | tudo | tudo |
+| Atribuir (lead **sem** dono) | 2 | — | — | Supervisor ou si | Supervisor ou si |
 | Reatribuir (lead **com** dono) | 2 | — | dentro do time | tudo | tudo |
 | Leads (tabela) — filtrar por responsável e por equipe | 2 | — | time | tudo | tudo |
 | Equipe — ver | 2 | — | time | tudo | tudo |
@@ -66,8 +70,11 @@ Estas linhas não são arbitrárias:
 - **Handoff é da Gestão para cima** porque isso já estava decidido no [ADR-0009](./0009-etapas-editaveis-papeis-e-status.md): o atendente conclui o atendimento, o gestor é notificado e o gestor libera o envio ao Jurídico.
 - **O segredo da integração é só da Direção; o histórico e o reprocessamento são da Gestão.** A linha separa credencial de operação: quem toca a operação precisa ver o que falhou e mandar de novo; quem responde pela conta é que rotaciona chave.
 - **Feature flag é vazio para os quatro**, ao pé da letra do ADR-0004: a flag é invisível ao cliente — a capacidade existe ou não existe para aquele workspace. Nenhum papel do cliente a enxerga.
+- **Não há Super Admin do SaaS** ([ADR-0027](./0027-sem-papel-de-plataforma.md)). Os quatro perfis são do cliente. marctco provisiona; não navega carteira.
 - **Equipe não cria Direção** porque `OWNER` é o membro que o provisionamento cria, não um papel que se oferece num dropdown. O cadastro oferece só Atendente, Supervisor e Gestão ([ADR-0021](./0021-dois-caminhos-de-nascimento-login-fechado.md)).
-- **Supervisor vê a fila sem dono do workspace e só atribui a quem compartilha tag com ele** ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)). Sem tag, não tem time — não atribui. Atendente sem tag só é alcançado por Gestão e Direção.
+- **Supervisor não vê a fila sem dono e não atribui a partir dela** ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). Sem tag, não tem time — não reatribui.
+- **Da fila, Gestão e Direção atribuem só a um Supervisor com tag ou a si mesmas** ([ADR-0025](./0025-destino-da-fila-e-supervisor-ou-ator.md)). Atendente nunca nasce dono direto. Supervisor sem tag não é destino da fila. Atendente sem tag só é destino de **reatribuição** da Gestão e da Direção — o Supervisor do time não o alcança.
+- **Massa é o mesmo gesto, N linhas, um destino** ([ADR-0026](./0026-atribuicao-em-massa.md)). Não rateia. 1 a 1 permanece.
 - **Supervisor reatribui dentro do time; Gestão e Direção reatribuem em qualquer lugar.** Sem isso o segundo nível da distribuição não existe: o lead que a Gestão entregou ao Supervisor já tem dono, e passá-lo ao Atendente é reatribuir. O Supervisor só o faz quando o dono atual **e** o destino estão no seu time — nunca tira lead de quem não é seu.
 - **O Kanban é tela de atendimento, e Gestão e Direção não atendem.** Eles distribuem e acompanham, e fazem as duas coisas na tabela de Leads, que é a vista de alto volume decidida no [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md) §4. O “—” nessa linha **não é recusa de acesso**: nada no quadro está fora do que a tabela já lhes mostra. O acompanhamento que eles precisam é o filtro por responsável e por equipe na própria tabela — a linha logo abaixo.
 - **Desligar é da Direção; desatrelar é da Gestão para cima.** Tirar alguém de um workspace é operação; tirar do quadro inteiro atravessa tenants e é conta ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)).
@@ -90,7 +97,7 @@ O que precisa nascer com a fatia não é a matriz — é o **ponto único onde e
 
 Time neste produto **é tag no membro** ([ADR-0002](./0002-workspace-tags-times.md), [ADR-0020](./0020-tag-no-membro-define-o-time.md)). Sem essa associação não há como computar "o time dele". Tag na oportunidade, se existir, não participa do escopo.
 
-`SUPERVISOR` **nasce no enum agora**, para não haver migração de papel nem reclassificação de gente depois. **Regra de produto:** com tag, escopo = time + fila sem dono; sem tag, não atribui — não herda Gestão ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)). O código da fundação ainda trata `SUPERVISOR` como `MANAGER` porque `MemberTag` não existe; isso é estado atual, **nunca fallback permanente**. A regra estreita entra no lugar único que este ADR cria.
+`SUPERVISOR` **nasce no enum agora**, para não haver migração de papel nem reclassificação de gente depois. **Regra de produto:** com tag, escopo = time; sem tag, não reatribui — não herda Gestão ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)). A fila sem dono é da Gestão e da Direção ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). O código da fundação ainda trata `SUPERVISOR` como `MANAGER` porque `MemberTag` não existe; isso é estado atual, **nunca fallback permanente**. A regra estreita entra no lugar único que este ADR cria.
 
 ## Consequences
 
