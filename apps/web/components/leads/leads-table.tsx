@@ -46,6 +46,8 @@ export function LeadsTable({ rows, slug, hasActiveFilter }: LeadsTableProps) {
               <DataTableHeaderCell>Tipo de financiamento</DataTableHeaderCell>
               <DataTableHeaderCell>Instituição</DataTableHeaderCell>
               <DataTableHeaderCell>Origem</DataTableHeaderCell>
+              <DataTableHeaderCell>Campanha</DataTableHeaderCell>
+              <DataTableHeaderCell>Formulário</DataTableHeaderCell>
               <DataTableHeaderCell>Chegada</DataTableHeaderCell>
               <DataTableHeaderCell>
                 <span className="sr-only">Ações</span>
@@ -67,6 +69,8 @@ export function LeadsTable({ rows, slug, hasActiveFilter }: LeadsTableProps) {
                 <DataTableCell>{model.financingTypeLabel}</DataTableCell>
                 <DataTableCell>{model.institutionLabel}</DataTableCell>
                 <DataTableCell>{model.originLabel}</DataTableCell>
+                <DataTableCell>{model.campaignLabel}</DataTableCell>
+                <DataTableCell>{model.formLabel}</DataTableCell>
                 <DataTableCell numeric>{formatArrivedAt(model.arrivedAt)}</DataTableCell>
                 <DataTableCell>
                   <LeadRowActions markers={model.markers} opportunityId={opportunity_id} slug={slug} />
@@ -94,6 +98,8 @@ export function LeadsTable({ rows, slug, hasActiveFilter }: LeadsTableProps) {
               <StackedField label="Financiamento" value={model.financingTypeLabel} />
               <StackedField label="Instituição" value={model.institutionLabel} />
               <StackedField label="Origem" value={model.originLabel} />
+              <StackedField label="Campanha" value={model.campaignLabel} />
+              <StackedField label="Formulário" value={model.formLabel} />
               <StackedField label="Chegada" numeric value={formatArrivedAt(model.arrivedAt)} />
             </dl>
           </Card>

@@ -136,6 +136,16 @@ export type IntakePlan =
       readonly financing_type: FinancingType | null;
       readonly financial_institution: string | null;
       readonly installment_amount: string | null;
+      /**
+       * Media attribution from the `v1` contract. The four fields, not the
+       * other six: they are what the queue and the card read, and what a
+       * possible-duplicate comparison uses. A retransmission has no field
+       * for them, which is how they cannot be overwritten (ADR-0007, ADR-0022).
+       */
+      readonly campaign_id: string | null;
+      readonly campaign_name: string | null;
+      readonly form_id: string | null;
+      readonly form_name: string | null;
       readonly reviews: readonly IntakeReviewPlan[];
     };
 
@@ -186,6 +196,10 @@ export function decideIntake(input: DecideIntakeInput): IntakePlan {
     financing_type: normalized.financing_type,
     financial_institution: normalized.financial_institution,
     installment_amount: normalized.installment_amount,
+    campaign_id: normalized.attribution.campaign_id,
+    campaign_name: normalized.attribution.campaign_name,
+    form_id: normalized.attribution.form_id,
+    form_name: normalized.attribution.form_name,
     reviews: planReviews(person, input.open_opportunity_ids)
   };
 }

@@ -180,6 +180,47 @@ describe("decideIntake: the unambiguous lead", () => {
     expect(plan).not.toHaveProperty("assigned_user_id");
     expect(plan).not.toHaveProperty("status");
   });
+
+  it("carries campaign and form (id and name) from the normalized lead, and nothing of the other six attribution fields", () => {
+    const bare = expectPlan(decide(), "NEW_OPPORTUNITY");
+    expect(bare).toMatchObject({
+      campaign_id: null,
+      campaign_name: null,
+      form_id: null,
+      form_name: null
+    });
+    expect(bare).not.toHaveProperty("adset_id");
+    expect(bare).not.toHaveProperty("ad_id");
+    expect(bare).not.toHaveProperty("platform");
+    expect(bare).not.toHaveProperty("is_organic");
+
+    const attributed = expectPlan(
+      decide({
+        normalized: normalized({
+          phone: "11987654321",
+          campaign_id: "23851234567890123",
+          campaign_name: "Revisional veículo",
+          form_id: "form-9",
+          form_name: "Simulação revisional",
+          adset_id: "adset-1",
+          ad_id: "ad-1",
+          platform: "ig",
+          is_organic: false
+        })
+      }),
+      "NEW_OPPORTUNITY"
+    );
+    expect(attributed).toMatchObject({
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional"
+    });
+    expect(attributed).not.toHaveProperty("adset_id");
+    expect(attributed).not.toHaveProperty("ad_id");
+    expect(attributed).not.toHaveProperty("platform");
+    expect(attributed).not.toHaveProperty("is_organic");
+  });
 });
 
 describe("decideIntake: arrived_at is an argument, and the clock is never read inside", () => {
@@ -347,6 +388,26 @@ describe("decideIntake: retransmission is inert to the funnel", () => {
     const plan = expectPlan(decide({ submission: duplicate }), "RETRANSMISSION");
 
     for (const field of ["stage_id", "pipeline_id", "assigned_user_id", "status", "arrived_at"]) {
+      expect(plan).not.toHaveProperty(field);
+    }
+  });
+
+  it("has nowhere to store campaign or form — a resend cannot overwrite, erase or rewind them", () => {
+    const plan = expectPlan(
+      decide({
+        submission: duplicate,
+        normalized: normalized({
+          phone: "11987654321",
+          campaign_id: "new-campaign",
+          campaign_name: "Campanha nova",
+          form_id: "new-form",
+          form_name: "Formulário novo"
+        })
+      }),
+      "RETRANSMISSION"
+    );
+
+    for (const field of ["campaign_id", "campaign_name", "form_id", "form_name"]) {
       expect(plan).not.toHaveProperty(field);
     }
   });

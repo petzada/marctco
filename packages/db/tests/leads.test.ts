@@ -64,6 +64,10 @@ interface SeedOpportunityOptions {
   readonly financing_type?: "VEHICLE" | "REAL_ESTATE" | "PERSONAL_LOAN" | "OTHER" | null;
   readonly financial_institution?: string | null;
   readonly installment_amount?: string | null;
+  readonly campaign_id?: string | null;
+  readonly campaign_name?: string | null;
+  readonly form_id?: string | null;
+  readonly form_name?: string | null;
   readonly arrived_at?: Date;
   readonly merged_into_opportunity_id?: string | null;
   readonly source?: "META_LEAD_ADS" | "GOOGLE_LEAD_FORM" | "LANDING_PAGE";
@@ -108,6 +112,10 @@ async function seedOpportunity(options: SeedOpportunityOptions = {}): Promise<{
       financing_type: options.financing_type ?? null,
       financial_institution: options.financial_institution ?? null,
       installment_amount: options.installment_amount ?? null,
+      campaign_id: options.campaign_id ?? null,
+      campaign_name: options.campaign_name ?? null,
+      form_id: options.form_id ?? null,
+      form_name: options.form_name ?? null,
       merged_into_opportunity_id: options.merged_into_opportunity_id ?? null
     }
   });
@@ -256,6 +264,10 @@ describe("listLeads", () => {
       financing_type: "VEHICLE",
       financial_institution: "Banco X",
       installment_amount: "899.90",
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
       source: "LANDING_PAGE"
     });
     const review = await seeder.intakeReview.create({
@@ -276,6 +288,10 @@ describe("listLeads", () => {
       financing_type: "VEHICLE",
       financial_institution: "Banco X",
       installment_amount: "899.90",
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
       source: "LANDING_PAGE",
       missing_phone: false
     });
@@ -394,9 +410,24 @@ describe("getLead", () => {
     const related = await seedOpportunity({
       name: "Financiamento anterior",
       assigned_user_id: manager_user,
-      financing_type: "VEHICLE"
+      financing_type: "VEHICLE",
+      financial_institution: "Banco X",
+      installment_amount: "899.90",
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
+      source: "META_LEAD_ADS"
     });
-    const subject = await seedOpportunity({ name: "Financiamento novo", financing_type: "OTHER" });
+    const subject = await seedOpportunity({
+      name: "Financiamento novo",
+      financing_type: "OTHER",
+      campaign_id: "camp-nova",
+      campaign_name: "Campanha nova",
+      form_id: "form-nova",
+      form_name: "Formulário novo",
+      source: "LANDING_PAGE"
+    });
     const review = await seeder.intakeReview.create({
       data: {
         workspace_id: workspace,
@@ -407,6 +438,13 @@ describe("getLead", () => {
     });
 
     const lead = await getLead(manager_context, subject.opportunity_id, app);
+    expect(lead).toMatchObject({
+      campaign_id: "camp-nova",
+      campaign_name: "Campanha nova",
+      form_id: "form-nova",
+      form_name: "Formulário novo",
+      source: "LANDING_PAGE"
+    });
     expect(lead.reviews).toHaveLength(1);
     expect(lead.reviews[0]).toMatchObject({
       id: review.id,
@@ -415,6 +453,13 @@ describe("getLead", () => {
       related_opportunity: {
         opportunity_id: related.opportunity_id,
         financing_type: "VEHICLE",
+        financial_institution: "Banco X",
+        installment_amount: "899.90",
+        campaign_id: "23851234567890123",
+        campaign_name: "Revisional veículo",
+        form_id: "form-9",
+        form_name: "Simulação revisional",
+        source: "META_LEAD_ADS",
         assigned_user_id: manager_user
       }
     });

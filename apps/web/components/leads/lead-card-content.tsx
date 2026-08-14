@@ -84,6 +84,13 @@ export function LeadCardContent({ lead, slug }: LeadCardContentProps) {
             <FinancingFact label="Parcela" value={formatInstallmentAmount(lead.installment_amount)} />
           </dl>
         </Card>
+        <Card className="p-md">
+          <h4 className="text-label text-ink-secondary">Campanha e formulário</h4>
+          <dl className="mt-xs grid gap-xxs text-body-sm">
+            <FinancingFact label="Campanha" value={lead.campaign_name?.trim() || "—"} />
+            <FinancingFact label="Formulário" value={lead.form_name?.trim() || "—"} />
+          </dl>
+        </Card>
       </section>
 
       {lead.reviews.map((review) =>
@@ -167,8 +174,8 @@ function PossibleDuplicatePanel({ review, slug }: Readonly<{ review: LeadReviewD
     <Card className="p-md">
       <h4 className="text-label text-ink-secondary">Possível duplicado</h4>
       <p className="mt-xxs text-body-sm text-ink-muted">
-        Outra Oportunidade em aberto desta mesma Pessoa. O financiamento abaixo ajuda a distinguir uma da
-        outra — não é prova por si só.
+        Outra Oportunidade em aberto desta mesma Pessoa. Tipo, instituição, parcela, origem, campanha e
+        formulário ajudam a distinguir uma da outra — nenhum campo é prova por si só.
       </p>
       {related ? (
         <dl className="mt-sm grid gap-xxs rounded-md border border-hairline-soft bg-surface-inset p-sm text-body-sm">
@@ -178,6 +185,12 @@ function PossibleDuplicatePanel({ review, slug }: Readonly<{ review: LeadReviewD
           />
           <FinancingFact label="Instituição" value={related.financial_institution ?? "—"} />
           <FinancingFact label="Parcela" value={formatInstallmentAmount(related.installment_amount)} />
+          <FinancingFact
+            label="Origem"
+            value={related.source ? (SOURCE_LABELS[related.source] ?? related.source) : "—"}
+          />
+          <FinancingFact label="Campanha" value={related.campaign_name?.trim() || "—"} />
+          <FinancingFact label="Formulário" value={related.form_name?.trim() || "—"} />
           <FinancingFact label="Chegada" value={formatArrivedAt(related.arrived_at)} />
           <FinancingFact
             label="Responsável"

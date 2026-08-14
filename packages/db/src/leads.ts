@@ -55,6 +55,10 @@ export interface LeadListRow {
   readonly financial_institution: string | null;
   /** Canonical decimal string, the same shape `normalize()` produces. */
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -84,6 +88,10 @@ interface LeadListRawRow {
   readonly financing_type: string | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -152,6 +160,10 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
     financing_type: (row.financing_type as FinancingType | null) ?? null,
     financial_institution: row.financial_institution,
     installment_amount: row.installment_amount,
+    campaign_id: row.campaign_id,
+    campaign_name: row.campaign_name,
+    form_id: row.form_id,
+    form_name: row.form_name,
     arrived_at: row.arrived_at,
     missing_phone: row.missing_phone,
     assigned_user_id: row.assigned_user_id,
@@ -165,8 +177,8 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
  * `OFFSET` — a lead arrives every few minutes, and `OFFSET` would shift the
  * page under a gestor mid-triage (ADR-0013). Merged Opportunities never
  * appear. Every row carries what `markersFor` needs, the financing
- * discriminators, and the lead's origin, so the screen never issues a second
- * query per row.
+ * discriminators, campaign and form, and the lead's origin, so the screen
+ * never issues a second query per row.
  */
 export async function listLeads(
   context: UserContext,
@@ -200,6 +212,10 @@ export async function listLeads(
         opportunity.financing_type::text AS financing_type,
         opportunity.financial_institution,
         opportunity.installment_amount::text AS installment_amount,
+        opportunity.campaign_id,
+        opportunity.campaign_name,
+        opportunity.form_id,
+        opportunity.form_name,
         opportunity.arrived_at,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
@@ -367,6 +383,11 @@ export interface LeadRelatedOpportunitySummary {
   readonly financing_type: FinancingType | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
+  readonly source: LeadSource | null;
   readonly arrived_at: Date;
   readonly assigned_user_id: string | null;
 }
@@ -390,6 +411,10 @@ export interface LeadDetail {
   readonly financing_type: FinancingType | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -407,6 +432,10 @@ interface LeadCoreRawRow {
   readonly financing_type: string | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -433,6 +462,11 @@ interface RelatedOpportunityRawRow {
   readonly financing_type: string | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
+  readonly source: string | null;
   readonly arrived_at: Date;
   readonly assigned_user_id: string | null;
 }
@@ -462,6 +496,10 @@ export async function getLead(
         opportunity.financing_type::text AS financing_type,
         opportunity.financial_institution,
         opportunity.installment_amount::text AS installment_amount,
+        opportunity.campaign_id,
+        opportunity.campaign_name,
+        opportunity.form_id,
+        opportunity.form_name,
         opportunity.arrived_at,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
@@ -555,15 +593,27 @@ export async function getLead(
     if (related_opportunity_ids.length > 0) {
       const relatedRows = await transaction.$queryRaw<RelatedOpportunityRawRow[]>(Prisma.sql`
         SELECT
-          id AS opportunity_id,
-          financing_type::text AS financing_type,
-          financial_institution,
-          installment_amount::text AS installment_amount,
-          arrived_at,
-          assigned_user_id
-        FROM opportunities
-        WHERE workspace_id = ${context.workspace_id}::uuid
-          AND id = ANY(${related_opportunity_ids}::uuid[])
+          opportunity.id AS opportunity_id,
+          opportunity.financing_type::text AS financing_type,
+          opportunity.financial_institution,
+          opportunity.installment_amount::text AS installment_amount,
+          opportunity.campaign_id,
+          opportunity.campaign_name,
+          opportunity.form_id,
+          opportunity.form_name,
+          origin.source::text AS source,
+          opportunity.arrived_at,
+          opportunity.assigned_user_id
+        FROM opportunities AS opportunity
+        LEFT JOIN LATERAL (
+          SELECT source
+          FROM lead_submissions
+          WHERE workspace_id = opportunity.workspace_id AND opportunity_id = opportunity.id
+          ORDER BY received_at ASC, id ASC
+          LIMIT 1
+        ) AS origin ON true
+        WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
+          AND opportunity.id = ANY(${related_opportunity_ids}::uuid[])
       `);
       for (const row of relatedRows) {
         relatedByOpportunityId.set(row.opportunity_id, {
@@ -571,6 +621,11 @@ export async function getLead(
           financing_type: (row.financing_type as FinancingType | null) ?? null,
           financial_institution: row.financial_institution,
           installment_amount: row.installment_amount,
+          campaign_id: row.campaign_id,
+          campaign_name: row.campaign_name,
+          form_id: row.form_id,
+          form_name: row.form_name,
+          source: (row.source as LeadSource | null) ?? null,
           arrived_at: row.arrived_at,
           assigned_user_id: row.assigned_user_id
         });
@@ -599,6 +654,10 @@ export async function getLead(
       financing_type: (core.financing_type as FinancingType | null) ?? null,
       financial_institution: core.financial_institution,
       installment_amount: core.installment_amount,
+      campaign_id: core.campaign_id,
+      campaign_name: core.campaign_name,
+      form_id: core.form_id,
+      form_name: core.form_name,
       arrived_at: core.arrived_at,
       missing_phone: core.missing_phone,
       assigned_user_id: core.assigned_user_id,

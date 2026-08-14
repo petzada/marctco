@@ -428,6 +428,13 @@ model Opportunity {
   /// domain produced it, and a mis-mapped field carrying an absurd number can
   /// never overflow a column and cost the lead the whole write.
   installment_amount         Decimal?                   @db.Decimal
+  /// Media attribution from the `v1` contract. Persisted at intake because the
+  /// raw payload expires in 90 days (ADR-0014). Does not route the lead
+  /// (ADR-0022). A retransmission has nowhere to write these (ADR-0007).
+  campaign_id                String?
+  campaign_name              String?
+  form_id                    String?
+  form_name                  String?
   /// The tombstone of a `SAME_FINANCING` resolution (ticket 11). It takes the
   /// row out of active views and preserves the trail, and never redirects a
   /// read.

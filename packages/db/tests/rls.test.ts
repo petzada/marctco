@@ -504,6 +504,33 @@ describe("Seam 3: RLS and schema invariants", () => {
     ).toEqual([]);
   });
 
+  it("keeps campaign and form as nullable text on opportunities, under the existing RLS, with no extra SECURITY DEFINER", async () => {
+    const columns = await client.$queryRaw<
+      Array<{ column_name: string; data_type: string; is_nullable: string }>
+    >`
+      SELECT column_name, data_type, is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'opportunities'
+        AND column_name IN ('campaign_id', 'campaign_name', 'form_id', 'form_name')
+      ORDER BY column_name
+    `;
+    expect(columns).toEqual([
+      { column_name: "campaign_id", data_type: "text", is_nullable: "YES" },
+      { column_name: "campaign_name", data_type: "text", is_nullable: "YES" },
+      { column_name: "form_id", data_type: "text", is_nullable: "YES" },
+      { column_name: "form_name", data_type: "text", is_nullable: "YES" }
+    ]);
+
+    const policies = await client.$queryRaw<Array<{ policy_name: string }>>`
+      SELECT policyname::text AS policy_name
+      FROM pg_policies
+      WHERE schemaname = 'public' AND tablename = 'opportunities'
+      ORDER BY policyname
+    `;
+    expect(policies).toEqual([{ policy_name: "opportunities_workspace_isolation" }]);
+  });
+
   it("has an index whose leading column scopes every business table by workspace", async () => {
     const rows = await client.$queryRaw<Array<{ table_name: string; indexed: boolean }>>`
       SELECT

@@ -595,7 +595,7 @@ async function writeOpportunity(
     INSERT INTO opportunities (
       workspace_id, person_id, pipeline_id, stage_id, area, status,
       arrived_at, missing_phone, financing_type, financial_institution,
-      installment_amount, updated_at
+      installment_amount, campaign_id, campaign_name, form_id, form_name, updated_at
     )
     VALUES (
       ${workspace_id}::uuid,
@@ -609,6 +609,10 @@ async function writeOpportunity(
       ${plan.financing_type}::financing_type,
       ${plan.financial_institution},
       ${plan.installment_amount}::numeric,
+      ${plan.campaign_id},
+      ${plan.campaign_name},
+      ${plan.form_id},
+      ${plan.form_name},
       CURRENT_TIMESTAMP
     )
     RETURNING id

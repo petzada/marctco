@@ -205,6 +205,10 @@ describe("getLastSuccessfulSyncAt and requeueIntegrationEventForReprocessing", (
         financing_type: null,
         financial_institution: null,
         installment_amount: null,
+        campaign_id: null,
+        campaign_name: null,
+        form_id: null,
+        form_name: null,
         reviews: []
       },
       app

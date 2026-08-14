@@ -12,6 +12,10 @@ function row(overrides: Partial<LeadListRow> = {}): LeadListRow {
     financing_type: null,
     financial_institution: null,
     installment_amount: null,
+    campaign_id: null,
+    campaign_name: null,
+    form_id: null,
+    form_name: null,
     arrived_at: new Date("2026-08-11T12:00:00.000Z"),
     missing_phone: false,
     assigned_user_id: null,
@@ -46,6 +50,23 @@ describe("buildLeadRowViewModel", () => {
     expect(withoutData.financingTypeLabel).toBe("—");
     expect(withoutData.institutionLabel).toBe("—");
     expect(withoutData.originLabel).toBe("—");
+  });
+
+  it("labels campaign and form by the readable name, dashing what is absent", () => {
+    const withData = buildLeadRowViewModel(
+      row({
+        campaign_id: "23851234567890123",
+        campaign_name: "Revisional veículo",
+        form_id: "form-9",
+        form_name: "Simulação revisional"
+      })
+    );
+    expect(withData.campaignLabel).toBe("Revisional veículo");
+    expect(withData.formLabel).toBe("Simulação revisional");
+
+    const withoutData = buildLeadRowViewModel(row());
+    expect(withoutData.campaignLabel).toBe("—");
+    expect(withoutData.formLabel).toBe("—");
   });
 
   it("uses the same markersFor the card and comparison use — a lead with all three warnings", () => {
