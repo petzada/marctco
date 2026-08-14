@@ -35,6 +35,7 @@ describe("Equipe screen", () => {
     expect(html).toContain('value="MANAGER"');
     expect(html).not.toContain('value="OWNER"');
     expect(html).toContain('name="tags"');
+    expect(html).toContain('action="/workspace/11111111-1111-4111-8111-111111111111/team/members"');
     expect(html).toContain("Novo colaborador");
   });
 

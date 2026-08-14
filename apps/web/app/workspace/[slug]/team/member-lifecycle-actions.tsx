@@ -22,11 +22,12 @@ export function membershipActionCopy(action: MembershipAction, name: string) {
 }
 
 interface MemberLifecycleActionsProps {
+  readonly actionPath: string;
   readonly actorRole: WorkspaceRole;
   readonly member: TeamMember;
 }
 
-export function MemberLifecycleActions({ actorRole, member }: MemberLifecycleActionsProps) {
+export function MemberLifecycleActions({ actionPath, actorRole, member }: MemberLifecycleActionsProps) {
   const [action, setAction] = useState<MembershipAction | null>(null);
   const copy = action
     ? membershipActionCopy(action, member.display_name ?? member.email ?? "este colaborador")
@@ -42,7 +43,7 @@ export function MemberLifecycleActions({ actorRole, member }: MemberLifecycleAct
         footer={action && copy ? (
           <>
             <Button onClick={() => setAction(null)} variant="tertiary">Cancelar</Button>
-            <form action="" method="post">
+            <form action={actionPath} method="post">
               <input name="membership_action" type="hidden" value={action} />
               <input name="target_user_id" type="hidden" value={member.user_id} />
               <Button type="submit" variant="danger">{copy.confirm}</Button>

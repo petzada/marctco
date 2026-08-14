@@ -35,7 +35,11 @@ function phoneLabel(phone: string | null): string {
   return phone ?? "Não informado";
 }
 
-function MemberForm({ member, slug }: Readonly<{ member?: TeamMember | undefined; slug: string }>) {
+function MemberForm({ actionPath, member, slug }: Readonly<{
+  actionPath: string;
+  member?: TeamMember | undefined;
+  slug: string;
+}>) {
   const editing = Boolean(member);
   return (
     <section className="rounded-lg border border-hairline bg-canvas p-lg" id="member-form">
@@ -55,7 +59,7 @@ function MemberForm({ member, slug }: Readonly<{ member?: TeamMember | undefined
         ) : null}
       </div>
 
-      <form action={`/workspace/${slug}/team`} className="grid gap-md md:grid-cols-2" method="post">
+      <form action={actionPath} className="grid gap-md md:grid-cols-2" method="post">
         {member ? <input name="user_id" type="hidden" value={member.user_id} /> : null}
         <div>
           <FieldLabel htmlFor="display_name" required>Nome</FieldLabel>
@@ -113,6 +117,7 @@ function ResultMessage({ result }: Readonly<{ result?: string | undefined }>) {
 
 export function TeamView({ actorUserId, canManage, editingMember, members, result, role, slug }: TeamViewProps) {
   const canDetach = role === "MANAGER" || role === "OWNER";
+  const actionPath = `/workspace/${slug}/team/members`;
   const emptyState = role === "SUPERVISOR"
     ? supervisorTeamEmptyState("team")
     : {
@@ -126,7 +131,7 @@ export function TeamView({ actorUserId, canManage, editingMember, members, resul
         <p className="mt-xs max-w-prose text-body text-ink-muted">Colaboradores ativos, papéis e equipes deste workspace.</p>
       </header>
       <ResultMessage result={result} />
-      {canManage ? <MemberForm member={editingMember} slug={slug} /> : null}
+      {canManage ? <MemberForm actionPath={actionPath} member={editingMember} slug={slug} /> : null}
 
       {members.length === 0 ? (
         <EmptyState title={emptyState.title} description={emptyState.description} />
@@ -152,7 +157,7 @@ export function TeamView({ actorUserId, canManage, editingMember, members, resul
                     <DataTableCell className="text-right">
                       <div className="flex flex-wrap justify-end gap-xs">
                         {canManage && member.role !== "OWNER" ? <Link className="inline-flex min-h-10 items-center text-button text-primary hover:text-primary-hover" href={`/workspace/${slug}/team?edit=${member.user_id}#member-form`}>Editar</Link> : null}
-                        {member.user_id !== actorUserId && member.role !== "OWNER" ? <MemberLifecycleActions actorRole={role} member={member} /> : null}
+                        {member.user_id !== actorUserId && member.role !== "OWNER" ? <MemberLifecycleActions actionPath={actionPath} actorRole={role} member={member} /> : null}
                       </div>
                     </DataTableCell>
                   ) : null}
@@ -175,7 +180,7 @@ export function TeamView({ actorUserId, canManage, editingMember, members, resul
                 {canDetach ? (
                   <div className="mt-md flex flex-wrap items-center justify-end gap-xs">
                     {canManage && member.role !== "OWNER" ? <Link className="inline-flex min-h-11 items-center text-button text-primary hover:text-primary-hover" href={`/workspace/${slug}/team?edit=${member.user_id}#member-form`}>Editar colaborador</Link> : null}
-                    {member.user_id !== actorUserId && member.role !== "OWNER" ? <MemberLifecycleActions actorRole={role} member={member} /> : null}
+                    {member.user_id !== actorUserId && member.role !== "OWNER" ? <MemberLifecycleActions actionPath={actionPath} actorRole={role} member={member} /> : null}
                   </div>
                 ) : null}
               </article>

@@ -14,8 +14,8 @@ const createSupabaseAdminClient = vi.fn(() => ({
 }));
 
 vi.mock("@marctco/db", () => ({ attachWorkspaceMember, detachWorkspaceMember, listTeam, terminateWorkspaceMember }));
-vi.mock("../../../../lib/workspace-access", () => ({ resolveWorkspaceAccess }));
-vi.mock("../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient, revokeProvisioningEntitlement }));
+vi.mock("../../../../../lib/workspace-access", () => ({ resolveWorkspaceAccess }));
+vi.mock("../../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient, revokeProvisioningEntitlement }));
 
 const { POST } = await import("./route");
 const slug = randomUUID();
@@ -33,13 +33,13 @@ function accessAs(role: "ATTENDANT" | "SUPERVISOR" | "MANAGER" | "OWNER") {
 }
 
 function request(fields: Record<string, string>): Request {
-  return new Request(`https://app.marctco.test/workspace/${slug}/team`, {
+  return new Request(`https://app.marctco.test/workspace/${slug}/team/members`, {
     method: "POST",
     body: new URLSearchParams(fields)
   });
 }
 
-describe("POST /workspace/[slug]/team", () => {
+describe("POST /workspace/[slug]/team/members", () => {
   beforeEach(() => {
     attachWorkspaceMember.mockReset().mockResolvedValue({});
     detachWorkspaceMember.mockReset().mockResolvedValue({ detached: true, queued_open_opportunities: 2 });

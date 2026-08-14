@@ -9,10 +9,10 @@ import { normalizeEmail, normalizePhone } from "@marctco/domain";
 import {
   createSupabaseAdminClient,
   revokeProvisioningEntitlement
-} from "../../../../lib/supabase/admin";
-import { logger } from "../../../../lib/logger";
-import { canManageTeam, COLLABORATOR_ROLE_OPTIONS } from "../../../../lib/team-access";
-import { resolveWorkspaceAccess } from "../../../../lib/workspace-access";
+} from "../../../../../lib/supabase/admin";
+import { logger } from "../../../../../lib/logger";
+import { canManageTeam, COLLABORATOR_ROLE_OPTIONS } from "../../../../../lib/team-access";
+import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
 const AUTH_PAGE_SIZE = 1_000;
 const ALLOWED_ROLES = new Set<CollaboratorRole>(
