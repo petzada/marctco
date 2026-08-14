@@ -162,3 +162,16 @@ export {
   type ExpiringPayloadWorkspace
 } from "./payload-expiry.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 03a — Equipe catalog and named operations. Appended at the end so
+// parallel Fase 2 tickets (01/02) that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  attachWorkspaceMember,
+  listTeam,
+  type AttachWorkspaceMemberInput,
+  type AttachedWorkspaceMember,
+  type CollaboratorRole,
+  type TeamMember
+} from "./team.js";
+

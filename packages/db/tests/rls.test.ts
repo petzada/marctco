@@ -25,6 +25,9 @@ const workspace_slug_a = randomUUID();
 const workspace_slug_b = randomUUID();
 const user_a = randomUUID();
 const user_b = randomUUID();
+const tag_a = randomUUID();
+const tag_b = randomUUID();
+const tag_b_unapplied = randomUUID();
 const pipeline_a = randomUUID();
 const pipeline_b = randomUUID();
 const stage_a_entry = randomUUID();
@@ -81,6 +84,11 @@ const isolation_cases = [
     write_sql: `INSERT INTO lead_submissions (id, workspace_id, source, external_lead_id, last_integration_event_id, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'META_LEAD_ADS', 'cross-workspace', '${integration_event_b}', CURRENT_TIMESTAMP)`
   },
   {
+    table_name: "member_tags",
+    read_sql: "SELECT workspace_id AS tenant_id FROM member_tags ORDER BY workspace_id",
+    write_sql: `INSERT INTO member_tags (workspace_id, user_id, tag_id) VALUES ('${workspace_b}', '${user_b}', '${tag_b_unapplied}')`
+  },
+  {
     table_name: "opportunities",
     read_sql: "SELECT workspace_id AS tenant_id FROM opportunities ORDER BY workspace_id",
     write_sql: `INSERT INTO opportunities (id, workspace_id, person_id, pipeline_id, stage_id, area, arrived_at, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', '${pipeline_b}', '${stage_b_entry}', 'COMMERCIAL', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
@@ -115,6 +123,11 @@ const isolation_cases = [
     table_name: "stages",
     read_sql: "SELECT workspace_id AS tenant_id FROM stages ORDER BY workspace_id",
     write_sql: `INSERT INTO stages (id, workspace_id, pipeline_id, label, position, role, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${pipeline_b}', 'Cross-workspace', 3, 'NORMAL', CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "tags",
+    read_sql: "SELECT workspace_id AS tenant_id FROM tags ORDER BY workspace_id",
+    write_sql: `INSERT INTO tags (id, workspace_id, name) VALUES ('${randomUUID()}', '${workspace_b}', 'Cross-workspace')`
   },
   {
     table_name: "workspace_flags",
@@ -362,6 +375,19 @@ beforeAll(async () => {
         { workspace_id: workspace_b, key: "auto_primeiro_contato" }
       ]
     });
+    await transaction.tag.createMany({
+      data: [
+        { id: tag_a, workspace_id: workspace_a, name: "ACR" },
+        { id: tag_b, workspace_id: workspace_b, name: "REAL" },
+        { id: tag_b_unapplied, workspace_id: workspace_b, name: "Spare" }
+      ]
+    });
+    await transaction.memberTag.createMany({
+      data: [
+        { workspace_id: workspace_a, user_id: user_a, tag_id: tag_a },
+        { workspace_id: workspace_b, user_id: user_b, tag_id: tag_b }
+      ]
+    });
   });
   const context = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
   if (!context) {
@@ -405,6 +431,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       "integration_connections",
       "integration_events",
       "lead_submissions",
+      "member_tags",
       "opportunities",
       "opportunity_timeline_events",
       "person_emails",
@@ -412,6 +439,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       "persons",
       "pipelines",
       "stages",
+      "tags",
       "workspace_flags",
       "workspace_members",
       "workspaces"
