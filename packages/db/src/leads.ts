@@ -4,15 +4,19 @@ import type {
   LeadSource as PrismaLeadSource
 } from "@prisma/client";
 import {
+  decideLeadAssignment,
+  decideLeadReassignment,
   normalizeCpf,
   normalizeDecimalAmount,
   normalizeEmail,
   readPhone,
+  type AssignmentRole,
   type Marker
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { assertUuid } from "./internal/uuid.js";
+import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
 import { mergePersonsInTransaction } from "./person-merge.js";
 
@@ -55,9 +59,14 @@ export interface LeadListRow {
   readonly financial_institution: string | null;
   /** Canonical decimal string, the same shape `normalize()` produces. */
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
+  readonly assigned_user_name: string | null;
   readonly source: LeadSource | null;
   /**
    * Unresolved reviews only — everything `markersFor` needs, and nothing it
@@ -73,6 +82,9 @@ export interface ListLeadsOptions {
   readonly after?: LeadListCursor;
   /** Filters the table in place — the same question a counter answers. */
   readonly marker?: Marker;
+  readonly responsible_user_id?: string;
+  readonly unassigned?: boolean;
+  readonly team?: string;
 }
 
 interface LeadListRawRow {
@@ -84,22 +96,16 @@ interface LeadListRawRow {
   readonly financing_type: string | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
+  readonly assigned_user_name: string | null;
   readonly source: string | null;
   readonly reviews: LeadReviewMarker[] | null;
-}
-
-/**
- * `ATTENDANT` sees only what is assigned to them; every other role today
- * sees the whole workspace (ADR-0015). `alias` is always a literal from this
- * module's own SQL, never caller input, so `Prisma.raw` is safe here.
- */
-function attendantScopeSql(context: UserContext, alias: string): Prisma.Sql {
-  return context.role === "ATTENDANT"
-    ? Prisma.sql`AND ${Prisma.raw(alias)}.assigned_user_id = ${context.user_id}::uuid`
-    : Prisma.empty;
 }
 
 /**
@@ -152,9 +158,14 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
     financing_type: (row.financing_type as FinancingType | null) ?? null,
     financial_institution: row.financial_institution,
     installment_amount: row.installment_amount,
+    campaign_id: row.campaign_id,
+    campaign_name: row.campaign_name,
+    form_id: row.form_id,
+    form_name: row.form_name,
     arrived_at: row.arrived_at,
     missing_phone: row.missing_phone,
     assigned_user_id: row.assigned_user_id,
+    assigned_user_name: row.assigned_user_name,
     source: (row.source as LeadSource | null) ?? null,
     reviews: row.reviews ?? []
   };
@@ -165,8 +176,8 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
  * `OFFSET` — a lead arrives every few minutes, and `OFFSET` would shift the
  * page under a gestor mid-triage (ADR-0013). Merged Opportunities never
  * appear. Every row carries what `markersFor` needs, the financing
- * discriminators, and the lead's origin, so the screen never issues a second
- * query per row.
+ * discriminators, campaign and form, and the lead's origin, so the screen
+ * never issues a second query per row.
  */
 export async function listLeads(
   context: UserContext,
@@ -183,6 +194,30 @@ export async function listLeads(
       throw new Error("after.arrived_at must be a valid instant");
     }
   }
+  if (options.responsible_user_id) {
+    assertUuid(options.responsible_user_id, "responsible_user_id");
+  }
+
+  const responsibleFilter = options.unassigned
+    ? Prisma.sql`AND opportunity.assigned_user_id IS NULL`
+    : options.responsible_user_id
+      ? Prisma.sql`AND opportunity.assigned_user_id = ${options.responsible_user_id}::uuid`
+      : Prisma.empty;
+  const team = options.team?.trim();
+  const teamFilter = team
+    ? Prisma.sql`
+        AND EXISTS (
+          SELECT 1
+          FROM member_tags AS filtered_member_tag
+          JOIN tags AS filtered_tag
+            ON filtered_tag.workspace_id = filtered_member_tag.workspace_id
+           AND filtered_tag.id = filtered_member_tag.tag_id
+          WHERE filtered_member_tag.workspace_id = opportunity.workspace_id
+            AND filtered_member_tag.user_id = opportunity.assigned_user_id
+            AND lower(filtered_tag.name) = lower(${team})
+        )
+      `
+    : Prisma.empty;
 
   const after = options.after;
   const cursorClause = after
@@ -200,14 +235,22 @@ export async function listLeads(
         opportunity.financing_type::text AS financing_type,
         opportunity.financial_institution,
         opportunity.installment_amount::text AS installment_amount,
+        opportunity.campaign_id,
+        opportunity.campaign_name,
+        opportunity.form_id,
+        opportunity.form_name,
         opportunity.arrived_at,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
+        assignee.display_name AS assigned_user_name,
         origin.source::text AS source,
         COALESCE(reviews.items, '[]'::jsonb) AS reviews
       FROM opportunities AS opportunity
       JOIN persons AS person
         ON person.workspace_id = opportunity.workspace_id AND person.id = opportunity.person_id
+      LEFT JOIN workspace_members AS assignee
+        ON assignee.workspace_id = opportunity.workspace_id
+       AND assignee.user_id = opportunity.assigned_user_id
       LEFT JOIN LATERAL (
         SELECT array_agg(phone_e164 ORDER BY created_at) AS values
         FROM person_phones
@@ -234,9 +277,11 @@ export async function listLeads(
           AND identity_conflict_resolution IS NULL
       ) AS reviews ON true
       WHERE opportunity.merged_into_opportunity_id IS NULL
-        ${attendantScopeSql(context, "opportunity")}
+        ${opportunityScopeSql(context, "opportunity")}
         ${cursorClause}
         ${markerFilterSql(options.marker)}
+        ${responsibleFilter}
+        ${teamFilter}
       ORDER BY opportunity.arrived_at DESC, opportunity.id DESC
       LIMIT ${limit}::integer
     `)
@@ -270,7 +315,7 @@ export async function countLeadsByMarker(
   context: UserContext,
   prisma: PrismaClient = sharedPrisma
 ): Promise<LeadMarkerCounts> {
-  const attendant = attendantScopeSql(context, "opportunity");
+  const scope = opportunityScopeSql(context, "opportunity");
 
   const rows = await withAccessContext(prisma, context, async (transaction) =>
     transaction.$queryRaw<LeadMarkerCountsRawRow[]>(Prisma.sql`
@@ -280,7 +325,7 @@ export async function countLeadsByMarker(
           WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
             AND opportunity.merged_into_opportunity_id IS NULL
             AND opportunity.missing_phone = true
-            ${attendant}
+            ${scope}
         ) AS missing_phone,
         (
           SELECT COUNT(DISTINCT review.opportunity_id)
@@ -292,7 +337,7 @@ export async function countLeadsByMarker(
             AND review.resolution IS NULL
             AND review.identity_conflict_resolution IS NULL
             AND opportunity.merged_into_opportunity_id IS NULL
-            ${attendant}
+            ${scope}
         ) AS identity_conflict,
         (
           SELECT COUNT(DISTINCT review.opportunity_id)
@@ -303,7 +348,7 @@ export async function countLeadsByMarker(
             AND review.type = 'POSSIBLE_DUPLICATE'
             AND review.resolution IS NULL
             AND opportunity.merged_into_opportunity_id IS NULL
-            ${attendant}
+            ${scope}
         ) AS possible_duplicate
     `)
   );
@@ -335,7 +380,7 @@ export async function countNewLeads(
   if (Number.isNaN(since.arrived_at.getTime())) {
     throw new Error("since.arrived_at must be a valid instant");
   }
-  const attendant = attendantScopeSql(context, "opportunity");
+  const scope = opportunityScopeSql(context, "opportunity");
 
   const rows = await withAccessContext(prisma, context, async (transaction) =>
     transaction.$queryRaw<Array<{ new_count: bigint }>>(Prisma.sql`
@@ -344,7 +389,7 @@ export async function countNewLeads(
       WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
         AND opportunity.merged_into_opportunity_id IS NULL
         AND (opportunity.arrived_at, opportunity.id) > (${since.arrived_at}::timestamptz, ${since.id}::uuid)
-        ${attendant}
+        ${scope}
     `)
   );
   return Number(rows[0]?.new_count ?? 0n);
@@ -367,8 +412,14 @@ export interface LeadRelatedOpportunitySummary {
   readonly financing_type: FinancingType | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
+  readonly source: LeadSource | null;
   readonly arrived_at: Date;
   readonly assigned_user_id: string | null;
+  readonly assigned_user_name: string | null;
 }
 
 export interface LeadReviewDetail {
@@ -390,6 +441,10 @@ export interface LeadDetail {
   readonly financing_type: FinancingType | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -407,6 +462,10 @@ interface LeadCoreRawRow {
   readonly financing_type: string | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -433,8 +492,14 @@ interface RelatedOpportunityRawRow {
   readonly financing_type: string | null;
   readonly financial_institution: string | null;
   readonly installment_amount: string | null;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
+  readonly source: string | null;
   readonly arrived_at: Date;
   readonly assigned_user_id: string | null;
+  readonly assigned_user_name: string | null;
 }
 
 /**
@@ -462,6 +527,10 @@ export async function getLead(
         opportunity.financing_type::text AS financing_type,
         opportunity.financial_institution,
         opportunity.installment_amount::text AS installment_amount,
+        opportunity.campaign_id,
+        opportunity.campaign_name,
+        opportunity.form_id,
+        opportunity.form_name,
         opportunity.arrived_at,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
@@ -489,7 +558,7 @@ export async function getLead(
       WHERE opportunity.id = ${opportunity_id}::uuid
         AND opportunity.workspace_id = ${context.workspace_id}::uuid
         AND opportunity.merged_into_opportunity_id IS NULL
-        ${attendantScopeSql(context, "opportunity")}
+        ${opportunityScopeSql(context, "opportunity")}
     `);
     const core = coreRows[0];
     if (!core) {
@@ -555,15 +624,31 @@ export async function getLead(
     if (related_opportunity_ids.length > 0) {
       const relatedRows = await transaction.$queryRaw<RelatedOpportunityRawRow[]>(Prisma.sql`
         SELECT
-          id AS opportunity_id,
-          financing_type::text AS financing_type,
-          financial_institution,
-          installment_amount::text AS installment_amount,
-          arrived_at,
-          assigned_user_id
-        FROM opportunities
-        WHERE workspace_id = ${context.workspace_id}::uuid
-          AND id = ANY(${related_opportunity_ids}::uuid[])
+          opportunity.id AS opportunity_id,
+          opportunity.financing_type::text AS financing_type,
+          opportunity.financial_institution,
+          opportunity.installment_amount::text AS installment_amount,
+          opportunity.campaign_id,
+          opportunity.campaign_name,
+          opportunity.form_id,
+          opportunity.form_name,
+          origin.source::text AS source,
+          opportunity.arrived_at,
+          opportunity.assigned_user_id,
+          assignee.display_name AS assigned_user_name
+        FROM opportunities AS opportunity
+        LEFT JOIN workspace_members AS assignee
+          ON assignee.workspace_id = opportunity.workspace_id
+         AND assignee.user_id = opportunity.assigned_user_id
+        LEFT JOIN LATERAL (
+          SELECT source
+          FROM lead_submissions
+          WHERE workspace_id = opportunity.workspace_id AND opportunity_id = opportunity.id
+          ORDER BY received_at ASC, id ASC
+          LIMIT 1
+        ) AS origin ON true
+        WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
+          AND opportunity.id = ANY(${related_opportunity_ids}::uuid[])
       `);
       for (const row of relatedRows) {
         relatedByOpportunityId.set(row.opportunity_id, {
@@ -571,8 +656,14 @@ export async function getLead(
           financing_type: (row.financing_type as FinancingType | null) ?? null,
           financial_institution: row.financial_institution,
           installment_amount: row.installment_amount,
+          campaign_id: row.campaign_id,
+          campaign_name: row.campaign_name,
+          form_id: row.form_id,
+          form_name: row.form_name,
+          source: (row.source as LeadSource | null) ?? null,
           arrived_at: row.arrived_at,
-          assigned_user_id: row.assigned_user_id
+          assigned_user_id: row.assigned_user_id,
+          assigned_user_name: row.assigned_user_name
         });
       }
     }
@@ -599,6 +690,10 @@ export async function getLead(
       financing_type: (core.financing_type as FinancingType | null) ?? null,
       financial_institution: core.financial_institution,
       installment_amount: core.installment_amount,
+      campaign_id: core.campaign_id,
+      campaign_name: core.campaign_name,
+      form_id: core.form_id,
+      form_name: core.form_name,
       arrived_at: core.arrived_at,
       missing_phone: core.missing_phone,
       assigned_user_id: core.assigned_user_id,
@@ -622,6 +717,69 @@ export interface AssignedLead {
   readonly assigned_user_id: string;
 }
 
+export interface ReassignLeadInput {
+  readonly opportunity_id: string;
+  readonly current_user_id: string;
+  readonly user_id: string;
+}
+
+export interface LeadAssignmentDestination {
+  readonly user_id: string;
+  readonly display_name: string;
+  readonly role: AssignmentRole;
+}
+
+export interface LeadAssignmentRefusal {
+  readonly opportunity_id: string;
+  readonly reason: "ALREADY_ASSIGNED" | "CURRENT_OWNER_CHANGED" | "NOT_VISIBLE" | "NOT_ALLOWED";
+  readonly current_assigned_user_id: string | null;
+  readonly current_assigned_user_name: string | null;
+}
+
+export interface LeadAssignmentBatchResult {
+  readonly assigned: readonly AssignedLead[];
+  readonly refused: readonly LeadAssignmentRefusal[];
+}
+
+interface AssignmentMemberRow {
+  readonly user_id: string;
+  readonly display_name: string | null;
+  readonly role: AssignmentRole;
+  readonly status: "ACTIVE" | "DETACHED";
+  readonly tag_ids: string[];
+}
+
+export class LeadAssignmentError extends Error {
+  constructor(readonly refusal: LeadAssignmentRefusal) {
+    super("LEAD_ASSIGNMENT_CONFLICT");
+    this.name = "LeadAssignmentError";
+  }
+}
+
+async function loadAssignmentMembers(
+  transaction: ScopedTransactionClient,
+  workspace_id: string,
+  user_ids: readonly string[]
+): Promise<Map<string, AssignmentMemberRow>> {
+  const unique = [...new Set(user_ids)];
+  if (unique.length === 0) return new Map();
+  const rows = await transaction.$queryRaw<AssignmentMemberRow[]>(Prisma.sql`
+    SELECT member.user_id, member.display_name, member.role, member.status,
+      COALESCE(array_agg(applied.tag_id::text) FILTER (WHERE applied.tag_id IS NOT NULL), ARRAY[]::text[]) AS tag_ids
+    FROM workspace_members AS member
+    LEFT JOIN member_tags AS applied
+      ON applied.workspace_id = member.workspace_id AND applied.user_id = member.user_id
+    WHERE member.workspace_id = ${workspace_id}::uuid
+      AND member.user_id IN (${Prisma.join(unique.map((id) => Prisma.sql`${id}::uuid`))})
+    GROUP BY member.user_id, member.display_name, member.role, member.status
+  `);
+  return new Map(rows.map((row) => [row.user_id, row]));
+}
+
+function assignmentDenial(decision: { readonly allowed: boolean; readonly reason?: string }): never {
+  throw new Error(decision.reason ?? "Lead assignment is not allowed");
+}
+
 /**
  * The condition arbitrates, never a prior read (ADR-0013): the `WHERE
  * assigned_user_id IS NULL` is what makes two gestores clicking the same
@@ -635,26 +793,238 @@ export async function assignLead(
   input: AssignLeadInput,
   prisma: PrismaClient = sharedPrisma
 ): Promise<AssignedLead> {
-  assertUuid(input.opportunity_id, "opportunity_id");
+  const result = await assignLeads(context, { opportunity_ids: [input.opportunity_id], user_id: input.user_id }, prisma);
+  const assigned = result.assigned[0];
+  if (assigned) return assigned;
+  throw new LeadAssignmentError(result.refused[0] as LeadAssignmentRefusal);
+}
+
+export async function assignLeads(
+  context: UserContext,
+  input: Readonly<{ opportunity_ids: readonly string[]; user_id: string }>,
+  prisma: PrismaClient = sharedPrisma
+): Promise<LeadAssignmentBatchResult> {
   assertUuid(input.user_id, "user_id");
-  if (context.role === "ATTENDANT") {
-    throw new Error("ATTENDANT cannot assign leads");
-  }
+  const opportunity_ids = [...new Set(input.opportunity_ids)];
+  opportunity_ids.forEach((id) => assertUuid(id, "opportunity_id"));
+  if (opportunity_ids.length === 0) return { assigned: [], refused: [] };
 
   return withAccessContext(prisma, context, async (transaction) => {
-    const claimed = await transaction.$executeRaw`
-      UPDATE opportunities
-      SET assigned_user_id = ${input.user_id}::uuid,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${input.opportunity_id}::uuid
-        AND workspace_id = ${context.workspace_id}::uuid
-        AND assigned_user_id IS NULL
-        AND merged_into_opportunity_id IS NULL
-    `;
-    if (claimed === 0) {
-      throw new Error("The lead is already assigned, merged, or not visible in this workspace");
+    const members = await loadAssignmentMembers(transaction, context.workspace_id, [context.user_id, input.user_id]);
+    const actor = members.get(context.user_id);
+    const destination = members.get(input.user_id);
+    if (!actor || !destination) throw new Error("Assignment actor and destination must be workspace members");
+    const decision = decideLeadAssignment({ actor, destination });
+    if (!decision.allowed) assignmentDenial(decision);
+
+    const claimed = await transaction.$queryRaw<Array<{ opportunity_id: string }>>(Prisma.sql`
+      UPDATE opportunities AS opportunity
+      SET assigned_user_id = ${input.user_id}::uuid, updated_at = CURRENT_TIMESTAMP
+      FROM (VALUES ${Prisma.join(opportunity_ids.map((id) => Prisma.sql`(${id}::uuid)`))}) AS requested(opportunity_id)
+      WHERE opportunity.id = requested.opportunity_id
+        AND opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.assigned_user_id IS NULL
+        AND opportunity.merged_into_opportunity_id IS NULL
+        AND EXISTS (
+          SELECT 1 FROM workspace_members AS destination
+          WHERE destination.workspace_id = opportunity.workspace_id
+            AND destination.user_id = ${input.user_id}::uuid
+            AND destination.status = 'ACTIVE'
+            AND (
+              destination.user_id = ${context.user_id}::uuid
+              OR (
+                destination.role = 'SUPERVISOR'
+                AND EXISTS (
+                  SELECT 1 FROM member_tags AS destination_tag
+                  WHERE destination_tag.workspace_id = destination.workspace_id
+                    AND destination_tag.user_id = destination.user_id
+                )
+              )
+            )
+        )
+      RETURNING opportunity.id AS opportunity_id
+    `);
+    const claimedIds = new Set(claimed.map((row) => row.opportunity_id));
+    const refusedIds = opportunity_ids.filter((id) => !claimedIds.has(id));
+    const current = refusedIds.length === 0 ? [] : await transaction.$queryRaw<Array<{
+      opportunity_id: string; assigned_user_id: string | null; assigned_user_name: string | null;
+    }>>(Prisma.sql`
+      SELECT opportunity.id AS opportunity_id, opportunity.assigned_user_id,
+             member.display_name AS assigned_user_name
+      FROM opportunities AS opportunity
+      LEFT JOIN workspace_members AS member
+        ON member.workspace_id = opportunity.workspace_id AND member.user_id = opportunity.assigned_user_id
+      WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.id IN (${Prisma.join(refusedIds.map((id) => Prisma.sql`${id}::uuid`))})
+    `);
+    const currentById = new Map(current.map((row) => [row.opportunity_id, row]));
+    return {
+      assigned: claimed.map((row) => ({ opportunity_id: row.opportunity_id, assigned_user_id: input.user_id })),
+      refused: refusedIds.map((opportunity_id) => {
+        const row = currentById.get(opportunity_id);
+        return {
+          opportunity_id,
+          reason: row?.assigned_user_id ? "ALREADY_ASSIGNED" as const : "NOT_VISIBLE" as const,
+          current_assigned_user_id: row?.assigned_user_id ?? null,
+          current_assigned_user_name: row?.assigned_user_name ?? null
+        };
+      })
+    };
+  });
+}
+
+export async function reassignLead(
+  context: UserContext,
+  input: ReassignLeadInput,
+  prisma: PrismaClient = sharedPrisma
+): Promise<AssignedLead> {
+  const result = await reassignLeads(context, {
+    assignments: [{ opportunity_id: input.opportunity_id, current_user_id: input.current_user_id }],
+    user_id: input.user_id
+  }, prisma);
+  const assigned = result.assigned[0];
+  if (assigned) return assigned;
+  throw new LeadAssignmentError(result.refused[0] as LeadAssignmentRefusal);
+}
+
+export async function reassignLeads(
+  context: UserContext,
+  input: Readonly<{
+    assignments: readonly Readonly<{ opportunity_id: string; current_user_id: string }>[];
+    user_id: string;
+  }>,
+  prisma: PrismaClient = sharedPrisma
+): Promise<LeadAssignmentBatchResult> {
+  assertUuid(input.user_id, "user_id");
+  const assignments = [...new Map(input.assignments.map((item) => [item.opportunity_id, item])).values()];
+  for (const item of assignments) {
+    assertUuid(item.opportunity_id, "opportunity_id");
+    assertUuid(item.current_user_id, "current_user_id");
+  }
+  if (assignments.length === 0) return { assigned: [], refused: [] };
+
+  return withAccessContext(prisma, context, async (transaction) => {
+    const members = await loadAssignmentMembers(transaction, context.workspace_id, [
+      context.user_id, input.user_id, ...assignments.map((item) => item.current_user_id)
+    ]);
+    const actor = members.get(context.user_id);
+    const destination = members.get(input.user_id);
+    if (!actor || !destination) throw new Error("Reassignment actor and destination must be workspace members");
+    const eligible: typeof assignments = [];
+    const denied: LeadAssignmentRefusal[] = [];
+    for (const item of assignments) {
+      const currentOwner = members.get(item.current_user_id);
+      if (!currentOwner) {
+        denied.push({ opportunity_id: item.opportunity_id, reason: "NOT_ALLOWED", current_assigned_user_id: item.current_user_id, current_assigned_user_name: null });
+        continue;
+      }
+    const decision = decideLeadReassignment({ actor, currentOwner, destination });
+      if (decision.allowed) eligible.push(item);
+      else denied.push({ opportunity_id: item.opportunity_id, reason: "NOT_ALLOWED", current_assigned_user_id: item.current_user_id, current_assigned_user_name: currentOwner.display_name });
     }
-    return { opportunity_id: input.opportunity_id, assigned_user_id: input.user_id };
+
+    const supervisorScope = context.role === "SUPERVISOR" ? Prisma.sql`
+      AND EXISTS (
+        SELECT 1
+        FROM workspace_members AS current_member
+        JOIN member_tags AS current_tag
+          ON current_tag.workspace_id = current_member.workspace_id
+         AND current_tag.user_id = current_member.user_id
+        JOIN member_tags AS actor_tag
+          ON actor_tag.workspace_id = current_tag.workspace_id
+         AND actor_tag.tag_id = current_tag.tag_id
+        WHERE current_member.workspace_id = opportunity.workspace_id
+          AND current_member.user_id = opportunity.assigned_user_id
+          AND current_member.status = 'ACTIVE'
+          AND actor_tag.user_id = ${context.user_id}::uuid
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM workspace_members AS destination_member
+        JOIN member_tags AS destination_tag
+          ON destination_tag.workspace_id = destination_member.workspace_id
+         AND destination_tag.user_id = destination_member.user_id
+        JOIN member_tags AS actor_tag
+          ON actor_tag.workspace_id = destination_tag.workspace_id
+         AND actor_tag.tag_id = destination_tag.tag_id
+        WHERE destination_member.workspace_id = opportunity.workspace_id
+          AND destination_member.user_id = ${input.user_id}::uuid
+          AND destination_member.status = 'ACTIVE'
+          AND actor_tag.user_id = ${context.user_id}::uuid
+      )
+    ` : Prisma.sql`
+      AND EXISTS (
+        SELECT 1 FROM workspace_members AS destination_member
+        WHERE destination_member.workspace_id = opportunity.workspace_id
+          AND destination_member.user_id = ${input.user_id}::uuid
+          AND destination_member.status = 'ACTIVE'
+      )
+    `;
+
+    const claimed = eligible.length === 0 ? [] : await transaction.$queryRaw<Array<{ opportunity_id: string }>>(Prisma.sql`
+      UPDATE opportunities AS opportunity
+      SET previous_assigned_user_id = opportunity.assigned_user_id,
+          assigned_user_id = ${input.user_id}::uuid,
+          updated_at = CURRENT_TIMESTAMP
+      FROM (VALUES ${Prisma.join(eligible.map((item) => Prisma.sql`(${item.opportunity_id}::uuid, ${item.current_user_id}::uuid)`))})
+        AS requested(opportunity_id, current_user_id)
+      WHERE opportunity.id = requested.opportunity_id
+        AND opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.assigned_user_id = requested.current_user_id
+        AND opportunity.merged_into_opportunity_id IS NULL
+        ${supervisorScope}
+      RETURNING opportunity.id AS opportunity_id
+    `);
+    const claimedIds = new Set(claimed.map((row) => row.opportunity_id));
+    const conflicted = eligible.filter((item) => !claimedIds.has(item.opportunity_id));
+    const current = conflicted.length === 0 ? [] : await transaction.$queryRaw<Array<{
+      opportunity_id: string; assigned_user_id: string | null; assigned_user_name: string | null;
+    }>>(Prisma.sql`
+      SELECT opportunity.id AS opportunity_id, opportunity.assigned_user_id,
+             member.display_name AS assigned_user_name
+      FROM opportunities AS opportunity
+      LEFT JOIN workspace_members AS member
+        ON member.workspace_id = opportunity.workspace_id AND member.user_id = opportunity.assigned_user_id
+      WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.id IN (${Prisma.join(conflicted.map((item) => Prisma.sql`${item.opportunity_id}::uuid`))})
+    `);
+    const currentById = new Map(current.map((row) => [row.opportunity_id, row]));
+    return {
+      assigned: claimed.map((row) => ({ opportunity_id: row.opportunity_id, assigned_user_id: input.user_id })),
+      refused: [...denied, ...conflicted.map((item) => {
+        const row = currentById.get(item.opportunity_id);
+        return {
+          opportunity_id: item.opportunity_id,
+          reason: row ? "CURRENT_OWNER_CHANGED" as const : "NOT_VISIBLE" as const,
+          current_assigned_user_id: row?.assigned_user_id ?? null,
+          current_assigned_user_name: row?.assigned_user_name ?? null
+        };
+      })]
+    };
+  });
+}
+
+export async function listLeadAssignmentDestinations(
+  context: UserContext,
+  mode: "ASSIGN" | "REASSIGN",
+  prisma: PrismaClient = sharedPrisma
+): Promise<LeadAssignmentDestination[]> {
+  if (context.role === "ATTENDANT" || (mode === "ASSIGN" && context.role === "SUPERVISOR")) return [];
+  return withAccessContext(prisma, context, async (transaction) => {
+    const scope = mode === "ASSIGN"
+      ? Prisma.sql`AND (member.user_id = ${context.user_id}::uuid OR (member.role = 'SUPERVISOR' AND EXISTS (SELECT 1 FROM member_tags mt WHERE mt.workspace_id = member.workspace_id AND mt.user_id = member.user_id)))`
+      : context.role === "SUPERVISOR"
+        ? Prisma.sql`AND EXISTS (SELECT 1 FROM member_tags candidate JOIN member_tags actor ON actor.workspace_id = candidate.workspace_id AND actor.tag_id = candidate.tag_id WHERE candidate.workspace_id = member.workspace_id AND candidate.user_id = member.user_id AND actor.user_id = ${context.user_id}::uuid)`
+        : Prisma.empty;
+    const rows = await transaction.$queryRaw<LeadAssignmentDestination[]>(Prisma.sql`
+      SELECT member.user_id, COALESCE(member.display_name, member.email, 'Sem nome') AS display_name, member.role
+      FROM workspace_members member
+      WHERE member.workspace_id = ${context.workspace_id}::uuid
+        AND member.status = 'ACTIVE'
+        ${scope}
+      ORDER BY lower(COALESCE(member.display_name, member.email, '')), member.user_id
+    `);
+    return rows;
   });
 }
 
@@ -723,14 +1093,15 @@ export async function updateLeadDetails(
       WHERE opportunity.id = ${input.opportunity_id}::uuid
         AND opportunity.workspace_id = ${context.workspace_id}::uuid
         AND opportunity.merged_into_opportunity_id IS NULL
+        ${opportunityScopeSql(context, "opportunity")}
       FOR UPDATE OF opportunity
     `;
     const current = currentRows[0];
     if (!current) {
-      throw new Error("Lead not found in this workspace");
-    }
-    if (context.role === "ATTENDANT" && current.assigned_user_id !== context.user_id) {
-      throw new Error("ATTENDANT can only edit a lead assigned to them");
+      if (context.role === "ATTENDANT") {
+        throw new Error("ATTENDANT can only edit a lead assigned to them");
+      }
+      throw new Error(`${context.role} cannot edit a lead outside their scope`);
     }
 
     const rejected_fields: string[] = [];
@@ -909,12 +1280,16 @@ export async function resolveIdentityConflict(
     // `resolveIntakeReview` uses. Filtering it out here too would collapse
     // "not found" and "already resolved" into one message.
     const rows = await transaction.$queryRaw<PendingIdentityConflictRow[]>`
-      SELECT id, opportunity_id, candidate_person_ids
-      FROM intake_reviews
-      WHERE id = ${input.review_id}::uuid
-        AND workspace_id = ${context.workspace_id}::uuid
-        AND type = 'IDENTITY_CONFLICT'
-      FOR UPDATE
+      SELECT review.id, review.opportunity_id, review.candidate_person_ids
+      FROM intake_reviews AS review
+      JOIN opportunities AS opportunity
+        ON opportunity.workspace_id = review.workspace_id
+       AND opportunity.id = review.opportunity_id
+      WHERE review.id = ${input.review_id}::uuid
+        AND review.workspace_id = ${context.workspace_id}::uuid
+        AND review.type = 'IDENTITY_CONFLICT'
+        ${opportunityScopeSql(context, "opportunity")}
+      FOR UPDATE OF review, opportunity
     `;
     const review = rows[0];
     if (!review) {

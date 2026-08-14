@@ -20,16 +20,22 @@ describe("onboardingDecision", () => {
     });
   });
 
-  it("leaves an unmarked user without an association waiting, never provisioning", () => {
-    // O colaborador cuja associação foi removida cai exatamente aqui: sem o
-    // direito em app_metadata, o login não cria workspace nenhum.
-    expect(onboardingDecision(null, [])).toEqual({ kind: "wait" });
+  it("provisions for a marked owner who already belongs to a workspace", () => {
+    expect(onboardingDecision({ workspace_name: "ACR" }, [workspace()])).toEqual({
+      kind: "provision",
+      workspace_name: "ACR"
+    });
   });
 
-  it("never provisions for someone who already belongs to a workspace", () => {
-    expect(onboardingDecision({ workspace_name: "Segunda casa" }, [workspace()])).toEqual({
-      kind: "member"
-    });
+  it("lets an unmarked collaborator enter as a member, never provisioning", () => {
+    expect(onboardingDecision(null, [workspace()])).toEqual({ kind: "member" });
     expect(onboardingDecision(null, [workspace(), workspace()])).toEqual({ kind: "member" });
+  });
+
+  it("treats no right and no association as a terminal error, never a wait and never a login redirect", () => {
+    const decision = onboardingDecision(null, []);
+    expect(decision).toEqual({ kind: "denied" });
+    expect(decision.kind).not.toBe("wait");
+    expect(decision.kind).not.toBe("login");
   });
 });

@@ -15,6 +15,7 @@ interface WorkspaceShellProps {
   readonly workspaceName: string;
   readonly roleLabel: string;
   readonly canManageIntegrations: boolean;
+  readonly canReadTeam: boolean;
 }
 
 interface NavigationProps {
@@ -29,6 +30,7 @@ export function WorkspaceShell({
   slug,
   workspaceName,
   roleLabel,
+  canReadTeam,
   canManageIntegrations
 }: WorkspaceShellProps) {
   const pathname = usePathname();
@@ -44,6 +46,15 @@ export function WorkspaceShell({
       icon: <UsersIcon aria-hidden="true" size={20} weight="regular" />,
       label: "Leads"
     },
+    ...(canReadTeam
+      ? [
+          {
+            href: `/workspace/${slug}/team`,
+            icon: <UsersIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Equipe"
+          }
+        ]
+      : []),
     ...(canManageIntegrations
       ? [
           {

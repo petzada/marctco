@@ -36,14 +36,22 @@ const person_id = randomUUID();
 const candidate_person_id = randomUUID();
 const connection_id = randomUUID();
 const resolved_at = new Date("2026-08-10T18:00:00.000Z");
+const supervisor_user_id = randomUUID();
+const teammate_user_id = randomUUID();
+const outside_user_id = randomUUID();
 
 const context = createUserContextFromResolvedMembership({
   workspace_id,
   user_id: owner_user_id,
   role: "OWNER"
 });
+const supervisor_context = createUserContextFromResolvedMembership({
+  workspace_id,
+  user_id: supervisor_user_id,
+  role: "SUPERVISOR"
+});
 
-async function seedPossibleDuplicate(): Promise<{
+async function seedPossibleDuplicate(assigned_user_id?: string): Promise<{
   review_id: string;
   canonical_opportunity_id: string;
   reviewed_opportunity_id: string;
@@ -74,7 +82,8 @@ async function seedPossibleDuplicate(): Promise<{
         stage_id,
         area: "COMMERCIAL",
         status: "OPEN",
-        arrived_at: new Date("2026-08-10T10:00:00.000Z")
+        arrived_at: new Date("2026-08-10T10:00:00.000Z"),
+        assigned_user_id: assigned_user_id ?? null
       }
     ]
   });
@@ -152,6 +161,24 @@ beforeAll(async () => {
       }
     }
   });
+  await seeder.workspaceMember.createMany({
+    data: [
+      { workspace_id, user_id: supervisor_user_id, role: "SUPERVISOR" },
+      { workspace_id, user_id: teammate_user_id, role: "ATTENDANT" },
+      { workspace_id, user_id: outside_user_id, role: "ATTENDANT" }
+    ]
+  });
+  const [teamTag, outsideTag] = await Promise.all([
+    seeder.tag.create({ data: { workspace_id, name: "ACR" } }),
+    seeder.tag.create({ data: { workspace_id, name: "REAL" } })
+  ]);
+  await seeder.memberTag.createMany({
+    data: [
+      { workspace_id, user_id: supervisor_user_id, tag_id: teamTag.id },
+      { workspace_id, user_id: teammate_user_id, tag_id: teamTag.id },
+      { workspace_id, user_id: outside_user_id, tag_id: outsideTag.id }
+    ]
+  });
 });
 
 afterAll(async () => {
@@ -161,6 +188,44 @@ afterAll(async () => {
 });
 
 describe("resolveIntakeReview", () => {
+  it("refuses an unscoped Pessoa merge from Supervisor", async () => {
+    await expect(
+      mergePersons(
+        supervisor_context,
+        { absorbed_person_id: candidate_person_id, canonical_person_id: person_id },
+        app
+      )
+    ).rejects.toThrow(/SUPERVISOR.*scoped review/i);
+  });
+  it("lets a Supervisor resolve only a review carried by their tagged team", async () => {
+    const team = await seedPossibleDuplicate(teammate_user_id);
+    await expect(
+      resolveIntakeReview(
+        supervisor_context,
+        {
+          review_id: team.review_id,
+          resolution: "NEW_FINANCING",
+          reason: "Conferido pelo time",
+          resolved_at
+        },
+        app
+      )
+    ).resolves.toMatchObject({ review_id: team.review_id });
+
+    const outside = await seedPossibleDuplicate(outside_user_id);
+    await expect(
+      resolveIntakeReview(
+        supervisor_context,
+        {
+          review_id: outside.review_id,
+          resolution: "NEW_FINANCING",
+          reason: "Tentativa fora do time",
+          resolved_at
+        },
+        app
+      )
+    ).rejects.toThrow(/not found/i);
+  });
   it("records NEW_FINANCING once and leaves both Opportunities independent", async () => {
     const fixture = await seedPossibleDuplicate();
 

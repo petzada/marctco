@@ -139,6 +139,10 @@ function newOpportunityPlan(
     financing_type: null,
     financial_institution: null,
     installment_amount: null,
+    campaign_id: null,
+    campaign_name: null,
+    form_id: null,
+    form_name: null,
     reviews: [],
     ...overrides
   };
@@ -436,6 +440,39 @@ describe("transactional intake and applyIntakePlan: NEW_OPPORTUNITY", () => {
     await expect(
       seeder.integrationEvent.findUniqueOrThrow({ where: { id: submitted.event_id } })
     ).resolves.toMatchObject({ status: "PROCESSED" });
+  });
+
+  it("persists campaign and form (id and name) from the plan onto the new Opportunity", async () => {
+    const submitted = await submit(`campaign-${randomUUID()}`);
+    const applied = await applyNewOpportunity(submitted, {
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional"
+    });
+
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: applied.opportunity_id } })
+    ).resolves.toMatchObject({
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional"
+    });
+  });
+
+  it("leaves campaign and form null when the v1 contract did not bring them", async () => {
+    const submitted = await submit(`no-campaign-${randomUUID()}`);
+    const applied = await applyNewOpportunity(submitted);
+
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: applied.opportunity_id } })
+    ).resolves.toMatchObject({
+      campaign_id: null,
+      campaign_name: null,
+      form_id: null,
+      form_name: null
+    });
   });
 
   it("adds contacts to a reused Pessoa without overwriting or duplicating any", async () => {
@@ -964,6 +1001,40 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
         occurred_at: RECEIVED_AT
       }
     ]);
+  });
+
+  it("does not erase or replace campaign and form on a retransmission", async () => {
+    const key = `campaign-inert-${randomUUID()}`;
+    const first = await submit(key);
+    const applied = await applyNewOpportunity(first, {
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional"
+    });
+
+    const resent = await submit(key);
+    await applyIntakePlan(
+      resent.job,
+      {
+        kind: "RETRANSMISSION",
+        lead_submission_id: first.lead_submission_id,
+        opportunity_id: applied.opportunity_id,
+        integration_event_id: resent.event_id
+      },
+      app
+    );
+
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: applied.opportunity_id } })
+    ).resolves.toMatchObject({
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
+      stage_id: default_entry_stage,
+      assigned_user_id: null
+    });
   });
 
   it("marks the event quarantined and creates no Pessoa and no card", async () => {

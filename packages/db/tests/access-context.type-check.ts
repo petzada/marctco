@@ -17,6 +17,7 @@
 import { createJobContext, type UserContext } from "../src/access-context.js";
 import { resolveIntakeReview } from "../src/intake-review.js";
 import { listLeads } from "../src/leads.js";
+import { attachWorkspaceMember, listTeam } from "../src/team.js";
 
 function representativeUserOnlyOperation(context: UserContext): void {
   // A real operation would open a scoped transaction here. The type shape
@@ -51,6 +52,18 @@ void resolveIntakeReview(jobContext, {
 // registro §Ticket 03 "Pendências carregadas"): the worker never reads the
 // Leads screen, so there is no runtime path where a job could see it.
 void listLeads(jobContext);
+
+// @ts-expect-error - Equipe is a person acting in a workspace, never a job.
+void listTeam(jobContext);
+
+// @ts-expect-error - attaching a collaborator is Direção, never the worker.
+void attachWorkspaceMember(jobContext, {
+  user_id: "55555555-5555-5555-8555-555555555555",
+  display_name: "Ana",
+  email: "ana@hugs.test",
+  role: "ATTENDANT",
+  tags: []
+});
 
 // @ts-expect-error - AccessContext has "two constructors and no literal"
 // (ADR-0016): the branded field that makes UserContext/JobContext nominal

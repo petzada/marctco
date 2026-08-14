@@ -4,10 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createUserContextFromResolvedMembership } from "../src/access-context.js";
 import {
   assignLead,
+  assignLeads,
+  LeadAssignmentError,
   countLeadsByMarker,
   countNewLeads,
   getLead,
   listLeads,
+  reassignLead,
+  reassignLeads,
   resolveIdentityConflict,
   updateLeadDetails
 } from "../src/leads.js";
@@ -35,6 +39,12 @@ const neighbour_entry_stage = randomUUID();
 const attendant_user = randomUUID();
 const other_attendant_user = randomUUID();
 const manager_user = randomUUID();
+const supervisor_user = randomUUID();
+const untagged_supervisor_user = randomUUID();
+const same_team_user = randomUUID();
+const other_team_user = randomUUID();
+const other_manager_user = randomUUID();
+const detached_user = randomUUID();
 
 const manager_context = createUserContextFromResolvedMembership({
   workspace_id: workspace,
@@ -45,6 +55,16 @@ const attendant_context = createUserContextFromResolvedMembership({
   workspace_id: workspace,
   user_id: attendant_user,
   role: "ATTENDANT"
+});
+const supervisor_context = createUserContextFromResolvedMembership({
+  workspace_id: workspace,
+  user_id: supervisor_user,
+  role: "SUPERVISOR"
+});
+const untagged_supervisor_context = createUserContextFromResolvedMembership({
+  workspace_id: workspace,
+  user_id: untagged_supervisor_user,
+  role: "SUPERVISOR"
 });
 
 let arrival_clock = new Date("2026-08-11T12:00:00.000Z").getTime();
@@ -64,6 +84,10 @@ interface SeedOpportunityOptions {
   readonly financing_type?: "VEHICLE" | "REAL_ESTATE" | "PERSONAL_LOAN" | "OTHER" | null;
   readonly financial_institution?: string | null;
   readonly installment_amount?: string | null;
+  readonly campaign_id?: string | null;
+  readonly campaign_name?: string | null;
+  readonly form_id?: string | null;
+  readonly form_name?: string | null;
   readonly arrived_at?: Date;
   readonly merged_into_opportunity_id?: string | null;
   readonly source?: "META_LEAD_ADS" | "GOOGLE_LEAD_FORM" | "LANDING_PAGE";
@@ -108,6 +132,10 @@ async function seedOpportunity(options: SeedOpportunityOptions = {}): Promise<{
       financing_type: options.financing_type ?? null,
       financial_institution: options.financial_institution ?? null,
       installment_amount: options.installment_amount ?? null,
+      campaign_id: options.campaign_id ?? null,
+      campaign_name: options.campaign_name ?? null,
+      form_id: options.form_id ?? null,
+      form_name: options.form_name ?? null,
       merged_into_opportunity_id: options.merged_into_opportunity_id ?? null
     }
   });
@@ -166,6 +194,30 @@ beforeAll(async () => {
         token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
         token_last4: "aaaa"
       }
+    });
+    await transaction.workspaceMember.createMany({
+      data: [
+        { workspace_id: workspace, user_id: manager_user, role: "MANAGER", display_name: "Marina Gestão" },
+        { workspace_id: workspace, user_id: attendant_user, role: "ATTENDANT", display_name: "Ana Atendente" },
+        { workspace_id: workspace, user_id: other_attendant_user, role: "ATTENDANT", display_name: "Bia Atendente" },
+        { workspace_id: workspace, user_id: other_manager_user, role: "MANAGER", display_name: "Outro Gestor" },
+        { workspace_id: workspace, user_id: detached_user, role: "SUPERVISOR", status: "DETACHED", display_name: "Supervisor desligado" },
+        { workspace_id: workspace, user_id: supervisor_user, role: "SUPERVISOR", display_name: "Sofia Supervisora" },
+        { workspace_id: workspace, user_id: untagged_supervisor_user, role: "SUPERVISOR" },
+        { workspace_id: workspace, user_id: same_team_user, role: "ATTENDANT" },
+        { workspace_id: workspace, user_id: other_team_user, role: "ATTENDANT" }
+      ]
+    });
+    const [sharedTag, otherTag] = await Promise.all([
+      transaction.tag.create({ data: { workspace_id: workspace, name: "ACR" } }),
+      transaction.tag.create({ data: { workspace_id: workspace, name: "REAL" } })
+    ]);
+    await transaction.memberTag.createMany({
+      data: [
+        { workspace_id: workspace, user_id: supervisor_user, tag_id: sharedTag.id },
+        { workspace_id: workspace, user_id: same_team_user, tag_id: sharedTag.id },
+        { workspace_id: workspace, user_id: other_team_user, tag_id: otherTag.id }
+      ]
     });
     await transaction.pipeline.create({
       data: {
@@ -256,6 +308,10 @@ describe("listLeads", () => {
       financing_type: "VEHICLE",
       financial_institution: "Banco X",
       installment_amount: "899.90",
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
       source: "LANDING_PAGE"
     });
     const review = await seeder.intakeReview.create({
@@ -276,6 +332,10 @@ describe("listLeads", () => {
       financing_type: "VEHICLE",
       financial_institution: "Banco X",
       installment_amount: "899.90",
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
       source: "LANDING_PAGE",
       missing_phone: false
     });
@@ -325,6 +385,32 @@ describe("listLeads", () => {
     expect(ids).toContain(mine.opportunity_id);
     expect(ids).not.toContain(colleagues.opportunity_id);
     expect(ids).not.toContain(unassigned.opportunity_id);
+  });
+
+  it("scopes Supervisor to tagged ACTIVE members and never includes the unassigned queue", async () => {
+    const mine = await seedOpportunity({ name: "Lead do supervisor", assigned_user_id: supervisor_user });
+    const team = await seedOpportunity({ name: "Lead do time", assigned_user_id: same_team_user });
+    const other = await seedOpportunity({ name: "Lead de outro time", assigned_user_id: other_team_user });
+    const unassigned = await seedOpportunity({ name: "Fila sem dono" });
+
+    const taggedRows = await listLeads(supervisor_context, { limit: 200 }, app);
+    const taggedIds = taggedRows.map((row) => row.opportunity_id);
+    expect(taggedIds).toContain(mine.opportunity_id);
+    expect(taggedIds).toContain(team.opportunity_id);
+    expect(taggedIds).not.toContain(other.opportunity_id);
+    expect(taggedIds).not.toContain(unassigned.opportunity_id);
+
+    await expect(listLeads(untagged_supervisor_context, { limit: 200 }, app)).resolves.toEqual([]);
+
+    const managerIds = (await listLeads(manager_context, { limit: 200 }, app)).map(
+      (row) => row.opportunity_id
+    );
+    expect(managerIds).toEqual(expect.arrayContaining([
+      mine.opportunity_id,
+      team.opportunity_id,
+      other.opportunity_id,
+      unassigned.opportunity_id
+    ]));
   });
 
   it("never returns another workspace's leads", async () => {
@@ -394,9 +480,24 @@ describe("getLead", () => {
     const related = await seedOpportunity({
       name: "Financiamento anterior",
       assigned_user_id: manager_user,
-      financing_type: "VEHICLE"
+      financing_type: "VEHICLE",
+      financial_institution: "Banco X",
+      installment_amount: "899.90",
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
+      source: "META_LEAD_ADS"
     });
-    const subject = await seedOpportunity({ name: "Financiamento novo", financing_type: "OTHER" });
+    const subject = await seedOpportunity({
+      name: "Financiamento novo",
+      financing_type: "OTHER",
+      campaign_id: "camp-nova",
+      campaign_name: "Campanha nova",
+      form_id: "form-nova",
+      form_name: "Formulário novo",
+      source: "LANDING_PAGE"
+    });
     const review = await seeder.intakeReview.create({
       data: {
         workspace_id: workspace,
@@ -407,6 +508,13 @@ describe("getLead", () => {
     });
 
     const lead = await getLead(manager_context, subject.opportunity_id, app);
+    expect(lead).toMatchObject({
+      campaign_id: "camp-nova",
+      campaign_name: "Campanha nova",
+      form_id: "form-nova",
+      form_name: "Formulário novo",
+      source: "LANDING_PAGE"
+    });
     expect(lead.reviews).toHaveLength(1);
     expect(lead.reviews[0]).toMatchObject({
       id: review.id,
@@ -415,6 +523,13 @@ describe("getLead", () => {
       related_opportunity: {
         opportunity_id: related.opportunity_id,
         financing_type: "VEHICLE",
+        financial_institution: "Banco X",
+        installment_amount: "899.90",
+        campaign_id: "23851234567890123",
+        campaign_name: "Revisional veículo",
+        form_id: "form-9",
+        form_name: "Simulação revisional",
+        source: "META_LEAD_ADS",
         assigned_user_id: manager_user
       }
     });
@@ -466,15 +581,21 @@ describe("assignLead", () => {
     const seeded = await seedOpportunity({ name: "A ser atribuido" });
 
     const settled = await Promise.allSettled([
-      assignLead(manager_context, { opportunity_id: seeded.opportunity_id, user_id: attendant_user }, app),
+      assignLead(manager_context, { opportunity_id: seeded.opportunity_id, user_id: supervisor_user }, app),
       assignLead(
         manager_context,
-        { opportunity_id: seeded.opportunity_id, user_id: other_attendant_user },
+        { opportunity_id: seeded.opportunity_id, user_id: supervisor_user },
         app
       )
     ]);
     const fulfilled = settled.filter((result) => result.status === "fulfilled");
     expect(fulfilled).toHaveLength(1);
+    const rejected = settled.find((result) => result.status === "rejected");
+    expect(rejected?.status).toBe("rejected");
+    if (rejected?.status === "rejected") {
+      expect(rejected.reason).toBeInstanceOf(LeadAssignmentError);
+      expect((rejected.reason as LeadAssignmentError).refusal.current_assigned_user_name).toBe("Sofia Supervisora");
+    }
 
     const stored = await seeder.opportunity.findUniqueOrThrow({
       where: { id: seeded.opportunity_id }
@@ -486,7 +607,115 @@ describe("assignLead", () => {
     const seeded = await seedOpportunity({ name: "Tentativa de atendente" });
     await expect(
       assignLead(attendant_context, { opportunity_id: seeded.opportunity_id, user_id: attendant_user }, app)
-    ).rejects.toThrow(/ATTENDANT/);
+    ).rejects.toThrow(/ACTOR_CANNOT_ASSIGN/);
+  });
+
+  it("lets a Supervisor open only a lead assigned inside their tagged team", async () => {
+    const team = await seedOpportunity({ name: "Card do time", assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ name: "Card de outro time", assigned_user_id: other_team_user });
+    const unassigned = await seedOpportunity({ name: "Card sem dono" });
+
+    await expect(getLead(supervisor_context, team.opportunity_id, app)).resolves.toMatchObject({
+      opportunity_id: team.opportunity_id
+    });
+    await expect(getLead(supervisor_context, outside.opportunity_id, app)).rejects.toThrow(/not found/i);
+    await expect(getLead(supervisor_context, unassigned.opportunity_id, app)).rejects.toThrow(/not found/i);
+  });
+
+  it("refuses SUPERVISOR because the unassigned queue belongs to GestÃ£o and DireÃ§Ã£o", async () => {
+    const seeded = await seedOpportunity({ name: "Fila da GestÃ£o" });
+    await expect(
+      assignLead(supervisor_context, { opportunity_id: seeded.opportunity_id, user_id: supervisor_user }, app)
+    ).rejects.toThrow(/ACTOR_CANNOT_ASSIGN/);
+  });
+
+  it("refuses an Attendant destination and an untagged Supervisor", async () => {
+    const first = await seedOpportunity({ name: "Não pula o segundo nível" });
+    const second = await seedOpportunity({ name: "Supervisor precisa de time" });
+    await expect(assignLead(manager_context, { opportunity_id: first.opportunity_id, user_id: attendant_user }, app)).rejects.toThrow(/DESTINATION_MUST/);
+    await expect(assignLead(manager_context, { opportunity_id: second.opportunity_id, user_id: untagged_supervisor_user }, app)).rejects.toThrow(/SUPERVISOR_REQUIRES_TAG/);
+  });
+
+  it("refuses another Manager and a detached destination from the queue", async () => {
+    const first = await seedOpportunity();
+    const second = await seedOpportunity();
+    await expect(assignLead(manager_context, { opportunity_id: first.opportunity_id, user_id: other_manager_user }, app)).rejects.toThrow(/DESTINATION_MUST/);
+    await expect(assignLead(manager_context, { opportunity_id: second.opportunity_id, user_id: detached_user }, app)).rejects.toThrow(/DESTINATION_INACTIVE/);
+  });
+
+  it("completes Gestão → Supervisor → Atendente and preserves the previous owner", async () => {
+    const lead = await seedOpportunity({ name: "Caminho completo" });
+    await assignLead(manager_context, { opportunity_id: lead.opportunity_id, user_id: supervisor_user }, app);
+    await reassignLead(supervisor_context, {
+      opportunity_id: lead.opportunity_id,
+      current_user_id: supervisor_user,
+      user_id: same_team_user
+    }, app);
+    await expect(seeder.opportunity.findUniqueOrThrow({ where: { id: lead.opportunity_id } })).resolves.toMatchObject({
+      assigned_user_id: same_team_user,
+      previous_assigned_user_id: supervisor_user
+    });
+  });
+
+  it("requires the current owner in the reassignment WHERE and enforces both team ends", async () => {
+    const team = await seedOpportunity({ assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ assigned_user_id: other_team_user });
+    await expect(reassignLead(supervisor_context, { opportunity_id: team.opportunity_id, current_user_id: other_team_user, user_id: supervisor_user }, app)).rejects.toThrow();
+    await expect(reassignLead(supervisor_context, { opportunity_id: outside.opportunity_id, current_user_id: other_team_user, user_id: same_team_user }, app)).rejects.toThrow();
+    await expect(reassignLead(supervisor_context, { opportunity_id: team.opportunity_id, current_user_id: same_team_user, user_id: other_team_user }, app)).rejects.toThrow();
+  });
+
+  it("does not let an untagged Supervisor reassign", async () => {
+    const lead = await seedOpportunity({ assigned_user_id: same_team_user });
+    await expect(reassignLead(untagged_supervisor_context, {
+      opportunity_id: lead.opportunity_id,
+      current_user_id: same_team_user,
+      user_id: same_team_user
+    }, app)).rejects.toThrow(/LEAD_ASSIGNMENT_CONFLICT/);
+  });
+
+  it("assigns a batch partially and names the current owner in the refusal", async () => {
+    const free = await seedOpportunity({ name: "Livre" });
+    const occupied = await seedOpportunity({ name: "Ocupado", assigned_user_id: supervisor_user });
+    const result = await assignLeads(manager_context, {
+      opportunity_ids: [free.opportunity_id, occupied.opportunity_id],
+      user_id: manager_user
+    }, app);
+    expect(result.assigned).toEqual([{ opportunity_id: free.opportunity_id, assigned_user_id: manager_user }]);
+    expect(result.refused).toEqual([expect.objectContaining({
+      opportunity_id: occupied.opportunity_id,
+      reason: "ALREADY_ASSIGNED",
+      current_assigned_user_name: "Sofia Supervisora"
+    })]);
+  });
+
+  it("reassigns N rows to one destination without rateio", async () => {
+    const first = await seedOpportunity({ assigned_user_id: supervisor_user });
+    const second = await seedOpportunity({ assigned_user_id: supervisor_user });
+    const result = await reassignLeads(supervisor_context, {
+      assignments: [first, second].map(({ opportunity_id }) => ({ opportunity_id, current_user_id: supervisor_user })),
+      user_id: same_team_user
+    }, app);
+    expect(result.assigned).toHaveLength(2);
+    expect(new Set(result.assigned.map((item) => item.assigned_user_id))).toEqual(new Set([same_team_user]));
+  });
+});
+
+describe("assignment filters", () => {
+  it("filters by responsible and team inside listLeads", async () => {
+    const acr = await seedOpportunity({ name: "Filtro ACR", assigned_user_id: same_team_user });
+    await seedOpportunity({ name: "Filtro REAL", assigned_user_id: other_team_user });
+    const byResponsible = await listLeads(manager_context, { responsible_user_id: same_team_user, limit: 200 }, app);
+    const byTeam = await listLeads(manager_context, { team: "ACR", limit: 200 }, app);
+    expect(byResponsible.some((row) => row.opportunity_id === acr.opportunity_id)).toBe(true);
+    expect(byResponsible.every((row) => row.assigned_user_id === same_team_user)).toBe(true);
+    expect(byTeam.some((row) => row.opportunity_id === acr.opportunity_id)).toBe(true);
+    expect(byTeam.every((row) => row.assigned_user_id !== other_team_user)).toBe(true);
+  });
+
+  it("a Supervisor filtering another team gets an empty narrowing, never broader scope", async () => {
+    await seedOpportunity({ name: "Só REAL", assigned_user_id: other_team_user });
+    await expect(listLeads(supervisor_context, { team: "REAL", limit: 200 }, app)).resolves.toEqual([]);
   });
 });
 
@@ -554,9 +783,45 @@ describe("updateLeadDetails", () => {
       )
     ).rejects.toThrow(/assigned to them/);
   });
+
+  it("lets a Supervisor edit a team lead but refuses another team", async () => {
+    const team = await seedOpportunity({ name: "EditÃ¡vel pelo supervisor", assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ name: "Fora do time", assigned_user_id: other_team_user });
+
+    await expect(
+      updateLeadDetails(supervisor_context, { opportunity_id: team.opportunity_id, name: "Editado pelo supervisor" }, app)
+    ).resolves.toMatchObject({ opportunity_id: team.opportunity_id });
+    await expect(
+      updateLeadDetails(supervisor_context, { opportunity_id: outside.opportunity_id, name: "NÃ£o pode" }, app)
+    ).rejects.toThrow(/outside their scope/i);
+  });
 });
 
 describe("resolveIdentityConflict", () => {
+  it("lets a Supervisor resolve identity only for their tagged team", async () => {
+    const candidate = await seeder.person.create({ data: { workspace_id: workspace, name: "Candidata" } });
+    const team = await seedOpportunity({ name: "Revisao do time", assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ name: "Revisao externa", assigned_user_id: other_team_user });
+    const teamReview = await seeder.intakeReview.create({
+      data: { workspace_id: workspace, opportunity_id: team.opportunity_id, type: "IDENTITY_CONFLICT", candidate_person_ids: [candidate.id] }
+    });
+    const outsideReview = await seeder.intakeReview.create({
+      data: { workspace_id: workspace, opportunity_id: outside.opportunity_id, type: "IDENTITY_CONFLICT", candidate_person_ids: [candidate.id] }
+    });
+
+    await expect(resolveIdentityConflict(supervisor_context, {
+      review_id: teamReview.id,
+      resolution: "CONFIRMED_DISTINCT",
+      reason: "Conferido pelo time",
+      resolved_at: new Date()
+    }, app)).resolves.toMatchObject({ review_id: teamReview.id });
+    await expect(resolveIdentityConflict(supervisor_context, {
+      review_id: outsideReview.id,
+      resolution: "CONFIRMED_DISTINCT",
+      reason: "Tentativa fora do time",
+      resolved_at: new Date()
+    }, app)).rejects.toThrow(/not found/i);
+  });
   it("confirms distinct people without touching either Pessoa", async () => {
     const candidate = await seeder.person.create({
       data: { workspace_id: workspace, name: "Candidata" }

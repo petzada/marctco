@@ -43,7 +43,7 @@ describe("POST /onboarding/provision", () => {
     provisionWorkspace
       .mockReset()
       .mockResolvedValue({ workspace_id: randomUUID(), slug });
-    consumeProvisioningEntitlement.mockReset().mockResolvedValue(undefined);
+    consumeProvisioningEntitlement.mockReset().mockResolvedValue(true);
   });
 
   it("sends the marked user to the slug it just provisioned", async () => {
@@ -61,7 +61,7 @@ describe("POST /onboarding/provision", () => {
     const order: string[] = [];
     consumeProvisioningEntitlement.mockImplementation(() => {
       order.push("consume");
-      return Promise.resolve();
+      return Promise.resolve(true);
     });
     provisionWorkspace.mockImplementation(() => {
       order.push("provision");
@@ -73,7 +73,22 @@ describe("POST /onboarding/provision", () => {
     expect(order).toEqual(["consume", "provision"]);
   });
 
-  it("creates nothing for a login without the right", async () => {
+  it("provisions a second workspace when the marked owner already belongs somewhere", async () => {
+    listUserWorkspaces.mockResolvedValue([
+      { workspace_id: randomUUID(), slug: randomUUID(), name: "Hugs", role: "OWNER" }
+    ]);
+
+    const response = await POST(provisionRequest());
+
+    expect(consumeProvisioningEntitlement).toHaveBeenCalledWith(owner);
+    expect(provisionWorkspace).toHaveBeenCalledWith({
+      owner_user_id: owner,
+      workspace_name: "Assessoria Horizonte"
+    });
+    expect(response.headers.get("location")).toBe(`/workspace/${slug}`);
+  });
+
+  it("creates nothing for a login without the right, and does not send them to login", async () => {
     getAuthenticatedSession.mockResolvedValue({ user_id: owner, claims: { app_metadata: {} } });
 
     const response = await POST(provisionRequest());
@@ -81,11 +96,26 @@ describe("POST /onboarding/provision", () => {
     expect(provisionWorkspace).not.toHaveBeenCalled();
     expect(consumeProvisioningEntitlement).not.toHaveBeenCalled();
     expect(response.headers.get("location")).toBe("/onboarding");
+    expect(response.headers.get("location")).not.toBe("/login");
   });
 
-  it("creates nothing for a login that already belongs to a workspace", async () => {
+  it("sends an unmarked active member to the workspace entry flow", async () => {
+    getAuthenticatedSession.mockResolvedValue({ user_id: owner, claims: { app_metadata: {} } });
     listUserWorkspaces.mockResolvedValue([
-      { workspace_id: randomUUID(), slug: randomUUID(), name: "Assessoria", role: "OWNER" }
+      { workspace_id: randomUUID(), slug: randomUUID(), name: "Hugs", role: "OWNER" }
+    ]);
+
+    const response = await POST(provisionRequest());
+
+    expect(consumeProvisioningEntitlement).not.toHaveBeenCalled();
+    expect(provisionWorkspace).not.toHaveBeenCalled();
+    expect(response.headers.get("location")).toBe("/access");
+  });
+
+  it("does not provision when the right is already spent", async () => {
+    consumeProvisioningEntitlement.mockResolvedValue(false);
+    listUserWorkspaces.mockResolvedValue([
+      { workspace_id: randomUUID(), slug: randomUUID(), name: "Hugs", role: "OWNER" }
     ]);
 
     const response = await POST(provisionRequest());

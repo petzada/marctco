@@ -17,6 +17,15 @@ enum WorkspaceRole {
   @@map("workspace_role")
 }
 
+/// Status of the WorkspaceMember association. Detaching and dismissing both
+/// write DETACHED; there is no third "dismissed" value (ADR-0023).
+enum WorkspaceMemberStatus {
+  ACTIVE
+  DETACHED
+
+  @@map("workspace_member_status")
+}
+
 enum FinancingType {
   VEHICLE
   REAL_ESTATE
@@ -162,6 +171,7 @@ model Workspace {
   intake_reviews              IntakeReview[]
   opportunity_timeline_events OpportunityTimelineEvent[]
   feature_flags               WorkspaceFlag[]
+  tags                        Tag[]
 
   @@map("workspaces")
 }
@@ -179,15 +189,54 @@ model WorkspaceFlag {
 }
 
 model WorkspaceMember {
-  workspace_id String        @db.Uuid
-  user_id      String        @db.Uuid
-  role         WorkspaceRole
-  created_at   DateTime      @default(now()) @db.Timestamptz(6)
-  workspace    Workspace     @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  workspace_id          String                 @db.Uuid
+  user_id               String                 @db.Uuid
+  role                  WorkspaceRole
+  status                WorkspaceMemberStatus  @default(ACTIVE)
+  /// Denormalized so Equipe and the assignee name list without Auth per row.
+  display_name          String?
+  email                 String?
+  /// Optional. Same phone reader as ingestion. WhatsApp dispatch is Fase 4.
+  whatsapp_phone_e164   String?
+  created_at            DateTime               @default(now()) @db.Timestamptz(6)
+  workspace             Workspace              @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  member_tags           MemberTag[]
 
   @@id([workspace_id, user_id])
   @@index([user_id])
   @@map("workspace_members")
+}
+
+/// Catalog of the workspace, managed in Equipe in the same gesture as
+/// attaching a collaborator. Uniqueness is (workspace_id, lower(name)) and
+/// lives only in the migration: the schema DSL cannot express an expression
+/// unique index (ADR-0005, ADR-0020).
+model Tag {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String      @db.Uuid
+  name         String
+  created_at   DateTime    @default(now()) @db.Timestamptz(6)
+  workspace    Workspace   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  members      MemberTag[]
+
+  @@unique([workspace_id, id])
+  @@index([workspace_id])
+  @@map("tags")
+}
+
+/// Application of a Tag to a WorkspaceMember. This is what computes a
+/// Supervisor's team. Never inherited by Opportunity (ADR-0020).
+model MemberTag {
+  workspace_id String          @db.Uuid
+  user_id      String          @db.Uuid
+  tag_id       String          @db.Uuid
+  created_at   DateTime        @default(now()) @db.Timestamptz(6)
+  member       WorkspaceMember @relation(fields: [workspace_id, user_id], references: [workspace_id, user_id], onDelete: Cascade)
+  tag          Tag             @relation(fields: [workspace_id, tag_id], references: [workspace_id, id], onDelete: Cascade)
+
+  @@id([workspace_id, user_id, tag_id])
+  @@index([workspace_id, tag_id])
+  @@map("member_tags")
 }
 
 model Pipeline {
@@ -417,6 +466,9 @@ model Opportunity {
   arrived_at                 DateTime                   @db.Timestamptz(6)
   /// Born null — assignment is Fase 2.
   assigned_user_id           String?                    @db.Uuid
+  /// The assignee displaced by a reassignment or by membership detachment.
+  /// This is historical context only and never participates in access scope.
+  previous_assigned_user_id  String?                    @db.Uuid
   /// Means one thing only: no WhatsApp and no phone call. Not a generic
   /// "something is missing" label (ADR-0007 §Quarentena).
   missing_phone              Boolean                    @default(false)
@@ -428,6 +480,13 @@ model Opportunity {
   /// domain produced it, and a mis-mapped field carrying an absurd number can
   /// never overflow a column and cost the lead the whole write.
   installment_amount         Decimal?                   @db.Decimal
+  /// Media attribution from the `v1` contract. Persisted at intake because the
+  /// raw payload expires in 90 days (ADR-0014). Does not route the lead
+  /// (ADR-0022). A retransmission has nowhere to write these (ADR-0007).
+  campaign_id                String?
+  campaign_name              String?
+  form_id                    String?
+  form_name                  String?
   /// The tombstone of a `SAME_FINANCING` resolution (ticket 11). It takes the
   /// row out of active views and preserves the trail, and never redirects a
   /// read.
@@ -455,6 +514,9 @@ model Opportunity {
   // below has never appeared here either (ticket 11) — writing one anyway
   // would declare a full, unpartitioned index that does not match migration
   // history, not the partial one actually created.
+  // Ticket 04 adds another migration-only partial index on
+  // `(workspace_id, assigned_user_id) WHERE status = 'OPEN' AND assigned_user_id
+  // IS NOT NULL` for returning a departing member's active work to the queue.
   @@unique([workspace_id, id])
   @@index([workspace_id])
   @@index([workspace_id, person_id])

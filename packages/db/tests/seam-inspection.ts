@@ -59,6 +59,10 @@ export interface InspectedCard {
   readonly arrived_at: Date;
   readonly assigned_user_id: string | null;
   readonly missing_phone: boolean;
+  readonly campaign_id: string | null;
+  readonly campaign_name: string | null;
+  readonly form_id: string | null;
+  readonly form_name: string | null;
   readonly merged_into_opportunity_id: string | null;
   readonly reviews: readonly InspectedReview[];
   readonly person: {
@@ -91,6 +95,10 @@ export async function inspectCards(workspace_id: string): Promise<InspectedCard[
     arrived_at: row.arrived_at,
     assigned_user_id: row.assigned_user_id,
     missing_phone: row.missing_phone,
+    campaign_id: row.campaign_id,
+    campaign_name: row.campaign_name,
+    form_id: row.form_id,
+    form_name: row.form_name,
     merged_into_opportunity_id: row.merged_into_opportunity_id,
     reviews: [...row.reviews, ...row.related_reviews].map((review) => ({
       type: review.type,

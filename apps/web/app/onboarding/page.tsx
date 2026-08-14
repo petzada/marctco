@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { onboardingDecision } from "../../lib/onboarding-decision";
 import { provisioningEntitlement } from "../../lib/provisioning-entitlement";
 import { getAuthenticatedSession } from "../../lib/supabase/server";
-import { EntryShell, primaryActionClassName } from "../entry-shell";
+import { EntryShell, primaryActionClassName, secondaryActionClassName } from "../entry-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -23,14 +23,20 @@ export default async function OnboardingPage({ searchParams }: OnboardingPagePro
     redirect("/access");
   }
 
-  if (decision.kind === "wait") {
+  if (decision.kind === "denied") {
     return (
       <EntryShell>
-        <h1 className="text-title text-ink md:text-headline">Seu acesso está sendo preparado</h1>
+        <h1 className="text-title text-ink md:text-headline">
+          Sua conta não tem acesso a nenhum workspace
+        </h1>
         <p className="mt-sm text-body text-ink-secondary">
-          Você ainda não está associado a um workspace. Assim que a equipe da marctco liberar seu
-          acesso, ele aparecerá aqui.
+          A Direção da sua empresa faz o cadastro.
         </p>
+        <form action="/auth/logout" className="mt-xl" method="post">
+          <button className={`${secondaryActionClassName} w-full`} type="submit">
+            Sair
+          </button>
+        </form>
       </EntryShell>
     );
   }

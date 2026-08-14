@@ -515,6 +515,97 @@ describe("Seam 2: the tracer bullet closes — a submission becomes a Pessoa and
   });
 });
 
+describe("Seam 2: campaign and form persist on the Opportunity", () => {
+  let attributed: SeededWorkspace;
+
+  async function deliver(body: Record<string, unknown>): Promise<void> {
+    const response = await POST(leadRequest(attributed.token, JSON.stringify(body)));
+    expect(response.status).toBe(200);
+    await dispatchPendingIntegrationEvents(queue.publisher, 100);
+    const worker = new Worker(
+      INTEGRATION_EVENT_QUEUE,
+      async (job: Job) => processIntegrationEventJob(job.data),
+      { connection: new IORedis(redis_url, { maxRetriesPerRequest: null }) }
+    );
+    try {
+      await vi.waitFor(
+        async () => {
+          const events = await listIntegrationEvents(attributed.context, { limit: 500 });
+          expect(events.filter((event) => event.status === "RECEIVED")).toHaveLength(0);
+        },
+        { timeout: 30_000, interval: 250 }
+      );
+    } finally {
+      await worker.close();
+    }
+  }
+
+  beforeAll(async () => {
+    attributed = await seedWorkspace(randomUUID(), `Seam 2 campaign ${randomUUID()}`);
+  });
+
+  it("persists campaign and form (id and name) when the v1 contract brought them", async () => {
+    await deliver({
+      external_lead_id: "campaign-1",
+      name: "Ana Costa",
+      phone: "11987654321",
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional",
+      adset_id: "must-not-persist",
+      ad_id: "must-not-persist",
+      platform: "ig",
+      is_organic: false
+    });
+
+    const [card] = await inspectCards(attributed.workspace_id);
+    expect(card).toMatchObject({
+      campaign_id: "23851234567890123",
+      campaign_name: "Revisional veículo",
+      form_id: "form-9",
+      form_name: "Simulação revisional"
+    });
+    expect(card).not.toHaveProperty("adset_id");
+    expect(card).not.toHaveProperty("ad_id");
+    expect(card).not.toHaveProperty("platform");
+    expect(card).not.toHaveProperty("is_organic");
+  });
+
+  it("does not erase or replace campaign and form when the same lead is resent", async () => {
+    await deliver({
+      external_lead_id: "campaign-inert-1",
+      name: "Bruno Lima",
+      phone: "11912345678",
+      campaign_id: "original-campaign",
+      campaign_name: "Campanha original",
+      form_id: "original-form",
+      form_name: "Formulário original"
+    });
+
+    await deliver({
+      external_lead_id: "campaign-inert-1",
+      name: "Bruno Lima",
+      phone: "11912345678",
+      campaign_id: "should-not-overwrite",
+      campaign_name: "Campanha diferente",
+      form_id: "other-form",
+      form_name: "Outro formulário"
+    });
+
+    const cards = await inspectCards(attributed.workspace_id);
+    const card = cards.find((candidate) => candidate.person.name === "Bruno Lima");
+    expect(card).toMatchObject({
+      campaign_id: "original-campaign",
+      campaign_name: "Campanha original",
+      form_id: "original-form",
+      form_name: "Formulário original"
+    });
+    const [submission] = await inspectSubmissions(attributed.workspace_id, "campaign-inert-1");
+    expect(submission?.transmission_count).toBe(2);
+  });
+});
+
 /**
  * Ticket 15. The two claims the outbox exists to make, proven end to end: a
  * lead accepted while Redis was down reaches the funnel as soon as Redis

@@ -19,6 +19,7 @@ describe("createUserContextFromResolvedMembership", () => {
       expect(context.user_id).toBe(user_id);
       expect(context.role).toBe(role);
       expect("feature_flags" in context).toBe(false);
+      expect("tags" in context).toBe(false);
       expect(isUserContext(context)).toBe(true);
       expect(isJobContext(context)).toBe(false);
     }

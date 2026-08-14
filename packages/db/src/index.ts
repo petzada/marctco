@@ -91,13 +91,21 @@ export {
 export { mergePersons, type MergedPersons, type MergePersonsInput } from "./person-merge.js";
 export {
   assignLead,
+  assignLeads,
   countLeadsByMarker,
   countNewLeads,
   getLead,
   listLeads,
+  listLeadAssignmentDestinations,
+  reassignLead,
+  reassignLeads,
   resolveIdentityConflict,
   updateLeadDetails,
   type AssignedLead,
+  LeadAssignmentError,
+  type LeadAssignmentBatchResult,
+  type LeadAssignmentDestination,
+  type LeadAssignmentRefusal,
   type AssignLeadInput,
   type FinancingType,
   type IdentityConflictResolution,
@@ -111,6 +119,7 @@ export {
   type LeadReviewMarker,
   type LeadSource,
   type ListLeadsOptions,
+  type ReassignLeadInput,
   type ResolvedIdentityConflict,
   type ResolveIdentityConflictInput,
   type UpdateLeadDetailsInput,
@@ -161,4 +170,21 @@ export {
   type ExpirePayloadsInput,
   type ExpiringPayloadWorkspace
 } from "./payload-expiry.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 03a — Equipe catalog and named operations. Appended at the end so
+// parallel Fase 2 tickets (01/02) that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  attachWorkspaceMember,
+  detachWorkspaceMember,
+  listTeam,
+  terminateWorkspaceMember,
+  type AttachWorkspaceMemberInput,
+  type AttachedWorkspaceMember,
+  type DetachedWorkspaceMember,
+  type TerminatedWorkspaceMembership,
+  type CollaboratorRole,
+  type TeamMember
+} from "./team.js";
 

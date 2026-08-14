@@ -14,6 +14,8 @@ export interface LeadRowViewModel {
   readonly financingTypeLabel: string;
   readonly institutionLabel: string;
   readonly originLabel: string;
+  readonly campaignLabel: string;
+  readonly formLabel: string;
   readonly arrivedAt: Date;
   readonly markers: readonly Marker[];
 }
@@ -41,6 +43,8 @@ export function buildLeadRowViewModel(row: LeadListRow): LeadRowViewModel {
     financingTypeLabel: row.financing_type ? FINANCING_TYPE_LABELS[row.financing_type] : EMPTY,
     institutionLabel: row.financial_institution?.trim() || EMPTY,
     originLabel: row.source ? SOURCE_LABELS[row.source] : EMPTY,
+    campaignLabel: row.campaign_name?.trim() || EMPTY,
+    formLabel: row.form_name?.trim() || EMPTY,
     arrivedAt: row.arrived_at,
     markers: markersFor({ missing_phone: row.missing_phone }, row.reviews)
   };
