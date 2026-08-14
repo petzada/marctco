@@ -35,6 +35,10 @@ const neighbour_entry_stage = randomUUID();
 const attendant_user = randomUUID();
 const other_attendant_user = randomUUID();
 const manager_user = randomUUID();
+const supervisor_user = randomUUID();
+const untagged_supervisor_user = randomUUID();
+const same_team_user = randomUUID();
+const other_team_user = randomUUID();
 
 const manager_context = createUserContextFromResolvedMembership({
   workspace_id: workspace,
@@ -45,6 +49,16 @@ const attendant_context = createUserContextFromResolvedMembership({
   workspace_id: workspace,
   user_id: attendant_user,
   role: "ATTENDANT"
+});
+const supervisor_context = createUserContextFromResolvedMembership({
+  workspace_id: workspace,
+  user_id: supervisor_user,
+  role: "SUPERVISOR"
+});
+const untagged_supervisor_context = createUserContextFromResolvedMembership({
+  workspace_id: workspace,
+  user_id: untagged_supervisor_user,
+  role: "SUPERVISOR"
 });
 
 let arrival_clock = new Date("2026-08-11T12:00:00.000Z").getTime();
@@ -174,6 +188,26 @@ beforeAll(async () => {
         token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
         token_last4: "aaaa"
       }
+    });
+    await transaction.workspaceMember.createMany({
+      data: [
+        { workspace_id: workspace, user_id: manager_user, role: "MANAGER" },
+        { workspace_id: workspace, user_id: supervisor_user, role: "SUPERVISOR" },
+        { workspace_id: workspace, user_id: untagged_supervisor_user, role: "SUPERVISOR" },
+        { workspace_id: workspace, user_id: same_team_user, role: "ATTENDANT" },
+        { workspace_id: workspace, user_id: other_team_user, role: "ATTENDANT" }
+      ]
+    });
+    const [sharedTag, otherTag] = await Promise.all([
+      transaction.tag.create({ data: { workspace_id: workspace, name: "ACR" } }),
+      transaction.tag.create({ data: { workspace_id: workspace, name: "REAL" } })
+    ]);
+    await transaction.memberTag.createMany({
+      data: [
+        { workspace_id: workspace, user_id: supervisor_user, tag_id: sharedTag.id },
+        { workspace_id: workspace, user_id: same_team_user, tag_id: sharedTag.id },
+        { workspace_id: workspace, user_id: other_team_user, tag_id: otherTag.id }
+      ]
     });
     await transaction.pipeline.create({
       data: {
@@ -341,6 +375,32 @@ describe("listLeads", () => {
     expect(ids).toContain(mine.opportunity_id);
     expect(ids).not.toContain(colleagues.opportunity_id);
     expect(ids).not.toContain(unassigned.opportunity_id);
+  });
+
+  it("scopes Supervisor to tagged ACTIVE members and never includes the unassigned queue", async () => {
+    const mine = await seedOpportunity({ name: "Lead do supervisor", assigned_user_id: supervisor_user });
+    const team = await seedOpportunity({ name: "Lead do time", assigned_user_id: same_team_user });
+    const other = await seedOpportunity({ name: "Lead de outro time", assigned_user_id: other_team_user });
+    const unassigned = await seedOpportunity({ name: "Fila sem dono" });
+
+    const taggedRows = await listLeads(supervisor_context, { limit: 200 }, app);
+    const taggedIds = taggedRows.map((row) => row.opportunity_id);
+    expect(taggedIds).toContain(mine.opportunity_id);
+    expect(taggedIds).toContain(team.opportunity_id);
+    expect(taggedIds).not.toContain(other.opportunity_id);
+    expect(taggedIds).not.toContain(unassigned.opportunity_id);
+
+    await expect(listLeads(untagged_supervisor_context, { limit: 200 }, app)).resolves.toEqual([]);
+
+    const managerIds = (await listLeads(manager_context, { limit: 200 }, app)).map(
+      (row) => row.opportunity_id
+    );
+    expect(managerIds).toEqual(expect.arrayContaining([
+      mine.opportunity_id,
+      team.opportunity_id,
+      other.opportunity_id,
+      unassigned.opportunity_id
+    ]));
   });
 
   it("never returns another workspace's leads", async () => {
@@ -533,6 +593,25 @@ describe("assignLead", () => {
       assignLead(attendant_context, { opportunity_id: seeded.opportunity_id, user_id: attendant_user }, app)
     ).rejects.toThrow(/ATTENDANT/);
   });
+
+  it("lets a Supervisor open only a lead assigned inside their tagged team", async () => {
+    const team = await seedOpportunity({ name: "Card do time", assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ name: "Card de outro time", assigned_user_id: other_team_user });
+    const unassigned = await seedOpportunity({ name: "Card sem dono" });
+
+    await expect(getLead(supervisor_context, team.opportunity_id, app)).resolves.toMatchObject({
+      opportunity_id: team.opportunity_id
+    });
+    await expect(getLead(supervisor_context, outside.opportunity_id, app)).rejects.toThrow(/not found/i);
+    await expect(getLead(supervisor_context, unassigned.opportunity_id, app)).rejects.toThrow(/not found/i);
+  });
+
+  it("refuses SUPERVISOR because the unassigned queue belongs to GestÃ£o and DireÃ§Ã£o", async () => {
+    const seeded = await seedOpportunity({ name: "Fila da GestÃ£o" });
+    await expect(
+      assignLead(supervisor_context, { opportunity_id: seeded.opportunity_id, user_id: supervisor_user }, app)
+    ).rejects.toThrow(/SUPERVISOR.*unassigned queue/i);
+  });
 });
 
 describe("updateLeadDetails", () => {
@@ -599,9 +678,45 @@ describe("updateLeadDetails", () => {
       )
     ).rejects.toThrow(/assigned to them/);
   });
+
+  it("lets a Supervisor edit a team lead but refuses another team", async () => {
+    const team = await seedOpportunity({ name: "EditÃ¡vel pelo supervisor", assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ name: "Fora do time", assigned_user_id: other_team_user });
+
+    await expect(
+      updateLeadDetails(supervisor_context, { opportunity_id: team.opportunity_id, name: "Editado pelo supervisor" }, app)
+    ).resolves.toMatchObject({ opportunity_id: team.opportunity_id });
+    await expect(
+      updateLeadDetails(supervisor_context, { opportunity_id: outside.opportunity_id, name: "NÃ£o pode" }, app)
+    ).rejects.toThrow(/outside their scope/i);
+  });
 });
 
 describe("resolveIdentityConflict", () => {
+  it("lets a Supervisor resolve identity only for their tagged team", async () => {
+    const candidate = await seeder.person.create({ data: { workspace_id: workspace, name: "Candidata" } });
+    const team = await seedOpportunity({ name: "Revisao do time", assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ name: "Revisao externa", assigned_user_id: other_team_user });
+    const teamReview = await seeder.intakeReview.create({
+      data: { workspace_id: workspace, opportunity_id: team.opportunity_id, type: "IDENTITY_CONFLICT", candidate_person_ids: [candidate.id] }
+    });
+    const outsideReview = await seeder.intakeReview.create({
+      data: { workspace_id: workspace, opportunity_id: outside.opportunity_id, type: "IDENTITY_CONFLICT", candidate_person_ids: [candidate.id] }
+    });
+
+    await expect(resolveIdentityConflict(supervisor_context, {
+      review_id: teamReview.id,
+      resolution: "CONFIRMED_DISTINCT",
+      reason: "Conferido pelo time",
+      resolved_at: new Date()
+    }, app)).resolves.toMatchObject({ review_id: teamReview.id });
+    await expect(resolveIdentityConflict(supervisor_context, {
+      review_id: outsideReview.id,
+      resolution: "CONFIRMED_DISTINCT",
+      reason: "Tentativa fora do time",
+      resolved_at: new Date()
+    }, app)).rejects.toThrow(/not found/i);
+  });
   it("confirms distinct people without touching either Pessoa", async () => {
     const candidate = await seeder.person.create({
       data: { workspace_id: workspace, name: "Candidata" }

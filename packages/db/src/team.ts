@@ -1,5 +1,5 @@
 import { normalizeEmail, normalizePhone } from "@marctco/domain";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { UserContext, WorkspaceRole } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import {
@@ -256,8 +256,8 @@ export async function attachWorkspaceMember(
 
 /**
  * Reads the Equipe of this workspace. Role scope is applied here, not in the
- * caller: ATTENDANT is refused; SUPERVISOR still sees the whole roster in
- * this ticket — the team cut is ticket 05, which needs this catalog first.
+ * caller: ATTENDANT is refused; SUPERVISOR sees only ACTIVE members sharing
+ * at least one member tag. An untagged Supervisor receives an empty list.
  */
 export async function listTeam(
   context: UserContext,
@@ -268,6 +268,20 @@ export async function listTeam(
   }
 
   return withAccessContext(prisma, context, async (transaction) => {
+    const supervisorScope = context.role === "SUPERVISOR"
+      ? Prisma.sql`
+          AND EXISTS (
+            SELECT 1
+            FROM member_tags AS candidate_tag
+            JOIN member_tags AS actor_tag
+              ON actor_tag.workspace_id = candidate_tag.workspace_id
+             AND actor_tag.tag_id = candidate_tag.tag_id
+            WHERE candidate_tag.workspace_id = member.workspace_id
+              AND candidate_tag.user_id = member.user_id
+              AND actor_tag.user_id = ${context.user_id}::uuid
+          )
+        `
+      : Prisma.empty;
     const rows = await transaction.$queryRaw<TeamMemberRow[]>`
       SELECT
         member.user_id,
@@ -289,6 +303,7 @@ export async function listTeam(
         ON tag.workspace_id = applied.workspace_id
        AND tag.id = applied.tag_id
       WHERE member.status = 'ACTIVE'::workspace_member_status
+        ${supervisorScope}
       GROUP BY
         member.user_id,
         member.display_name,

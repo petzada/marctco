@@ -13,6 +13,7 @@ import {
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { assertUuid } from "./internal/uuid.js";
+import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
 import { mergePersonsInTransaction } from "./person-merge.js";
 
@@ -97,17 +98,6 @@ interface LeadListRawRow {
   readonly assigned_user_id: string | null;
   readonly source: string | null;
   readonly reviews: LeadReviewMarker[] | null;
-}
-
-/**
- * `ATTENDANT` sees only what is assigned to them; every other role today
- * sees the whole workspace (ADR-0015). `alias` is always a literal from this
- * module's own SQL, never caller input, so `Prisma.raw` is safe here.
- */
-function attendantScopeSql(context: UserContext, alias: string): Prisma.Sql {
-  return context.role === "ATTENDANT"
-    ? Prisma.sql`AND ${Prisma.raw(alias)}.assigned_user_id = ${context.user_id}::uuid`
-    : Prisma.empty;
 }
 
 /**
@@ -250,7 +240,7 @@ export async function listLeads(
           AND identity_conflict_resolution IS NULL
       ) AS reviews ON true
       WHERE opportunity.merged_into_opportunity_id IS NULL
-        ${attendantScopeSql(context, "opportunity")}
+        ${opportunityScopeSql(context, "opportunity")}
         ${cursorClause}
         ${markerFilterSql(options.marker)}
       ORDER BY opportunity.arrived_at DESC, opportunity.id DESC
@@ -286,7 +276,7 @@ export async function countLeadsByMarker(
   context: UserContext,
   prisma: PrismaClient = sharedPrisma
 ): Promise<LeadMarkerCounts> {
-  const attendant = attendantScopeSql(context, "opportunity");
+  const scope = opportunityScopeSql(context, "opportunity");
 
   const rows = await withAccessContext(prisma, context, async (transaction) =>
     transaction.$queryRaw<LeadMarkerCountsRawRow[]>(Prisma.sql`
@@ -296,7 +286,7 @@ export async function countLeadsByMarker(
           WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
             AND opportunity.merged_into_opportunity_id IS NULL
             AND opportunity.missing_phone = true
-            ${attendant}
+            ${scope}
         ) AS missing_phone,
         (
           SELECT COUNT(DISTINCT review.opportunity_id)
@@ -308,7 +298,7 @@ export async function countLeadsByMarker(
             AND review.resolution IS NULL
             AND review.identity_conflict_resolution IS NULL
             AND opportunity.merged_into_opportunity_id IS NULL
-            ${attendant}
+            ${scope}
         ) AS identity_conflict,
         (
           SELECT COUNT(DISTINCT review.opportunity_id)
@@ -319,7 +309,7 @@ export async function countLeadsByMarker(
             AND review.type = 'POSSIBLE_DUPLICATE'
             AND review.resolution IS NULL
             AND opportunity.merged_into_opportunity_id IS NULL
-            ${attendant}
+            ${scope}
         ) AS possible_duplicate
     `)
   );
@@ -351,7 +341,7 @@ export async function countNewLeads(
   if (Number.isNaN(since.arrived_at.getTime())) {
     throw new Error("since.arrived_at must be a valid instant");
   }
-  const attendant = attendantScopeSql(context, "opportunity");
+  const scope = opportunityScopeSql(context, "opportunity");
 
   const rows = await withAccessContext(prisma, context, async (transaction) =>
     transaction.$queryRaw<Array<{ new_count: bigint }>>(Prisma.sql`
@@ -360,7 +350,7 @@ export async function countNewLeads(
       WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
         AND opportunity.merged_into_opportunity_id IS NULL
         AND (opportunity.arrived_at, opportunity.id) > (${since.arrived_at}::timestamptz, ${since.id}::uuid)
-        ${attendant}
+        ${scope}
     `)
   );
   return Number(rows[0]?.new_count ?? 0n);
@@ -527,7 +517,7 @@ export async function getLead(
       WHERE opportunity.id = ${opportunity_id}::uuid
         AND opportunity.workspace_id = ${context.workspace_id}::uuid
         AND opportunity.merged_into_opportunity_id IS NULL
-        ${attendantScopeSql(context, "opportunity")}
+        ${opportunityScopeSql(context, "opportunity")}
     `);
     const core = coreRows[0];
     if (!core) {
@@ -696,8 +686,8 @@ export async function assignLead(
 ): Promise<AssignedLead> {
   assertUuid(input.opportunity_id, "opportunity_id");
   assertUuid(input.user_id, "user_id");
-  if (context.role === "ATTENDANT") {
-    throw new Error("ATTENDANT cannot assign leads");
+  if (context.role === "ATTENDANT" || context.role === "SUPERVISOR") {
+    throw new Error(`${context.role} cannot assign leads from the unassigned queue`);
   }
 
   return withAccessContext(prisma, context, async (transaction) => {
@@ -782,14 +772,15 @@ export async function updateLeadDetails(
       WHERE opportunity.id = ${input.opportunity_id}::uuid
         AND opportunity.workspace_id = ${context.workspace_id}::uuid
         AND opportunity.merged_into_opportunity_id IS NULL
+        ${opportunityScopeSql(context, "opportunity")}
       FOR UPDATE OF opportunity
     `;
     const current = currentRows[0];
     if (!current) {
-      throw new Error("Lead not found in this workspace");
-    }
-    if (context.role === "ATTENDANT" && current.assigned_user_id !== context.user_id) {
-      throw new Error("ATTENDANT can only edit a lead assigned to them");
+      if (context.role === "ATTENDANT") {
+        throw new Error("ATTENDANT can only edit a lead assigned to them");
+      }
+      throw new Error(`${context.role} cannot edit a lead outside their scope`);
     }
 
     const rejected_fields: string[] = [];
@@ -968,12 +959,16 @@ export async function resolveIdentityConflict(
     // `resolveIntakeReview` uses. Filtering it out here too would collapse
     // "not found" and "already resolved" into one message.
     const rows = await transaction.$queryRaw<PendingIdentityConflictRow[]>`
-      SELECT id, opportunity_id, candidate_person_ids
-      FROM intake_reviews
-      WHERE id = ${input.review_id}::uuid
-        AND workspace_id = ${context.workspace_id}::uuid
-        AND type = 'IDENTITY_CONFLICT'
-      FOR UPDATE
+      SELECT review.id, review.opportunity_id, review.candidate_person_ids
+      FROM intake_reviews AS review
+      JOIN opportunities AS opportunity
+        ON opportunity.workspace_id = review.workspace_id
+       AND opportunity.id = review.opportunity_id
+      WHERE review.id = ${input.review_id}::uuid
+        AND review.workspace_id = ${context.workspace_id}::uuid
+        AND review.type = 'IDENTITY_CONFLICT'
+        ${opportunityScopeSql(context, "opportunity")}
+      FOR UPDATE OF review, opportunity
     `;
     const review = rows[0];
     if (!review) {

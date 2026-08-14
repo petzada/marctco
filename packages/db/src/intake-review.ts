@@ -7,6 +7,7 @@ import {
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { assertUuid } from "./internal/uuid.js";
+import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
 
 const sharedPrisma = createPrismaClient();
@@ -30,8 +31,8 @@ interface PossibleDuplicateRow {
 
 /**
  * Resolves a marker under the browser's validated tenant context. ATTENDANT is
- * deliberately excluded; SUPERVISOR has MANAGER scope until tags arrive in
- * Fase 2 (ADR-0015).
+ * deliberately excluded; SUPERVISOR resolves only reviews carried by a lead
+ * already assigned inside their tagged team (ADR-0015, ADR-0024).
  */
 export async function resolveIntakeReview(
   context: UserContext,
@@ -49,7 +50,7 @@ export async function resolveIntakeReview(
   return withAccessContext(prisma, context, async (transaction) => {
     const row = await loadLockedPossibleDuplicate(
       transaction,
-      context.workspace_id,
+      context,
       input.review_id
     );
 
@@ -89,10 +90,11 @@ export async function resolveIntakeReview(
 
 async function loadLockedPossibleDuplicate(
   transaction: ScopedTransactionClient,
-  workspace_id: string,
+  context: UserContext,
   review_id: string
 ): Promise<PossibleDuplicateRow> {
-  const initial = await readNormalizedPossibleDuplicate(transaction, workspace_id, review_id, false);
+  const { workspace_id } = context;
+  const initial = await readNormalizedPossibleDuplicate(transaction, context, review_id, false);
   if (!initial) {
     throw new Error("The pending possible-duplicate review was not found");
   }
@@ -112,7 +114,7 @@ async function loadLockedPossibleDuplicate(
     throw new Error("Both possible-duplicate Opportunities must exist in this workspace");
   }
 
-  const locked = await readNormalizedPossibleDuplicate(transaction, workspace_id, review_id, true);
+  const locked = await readNormalizedPossibleDuplicate(transaction, context, review_id, true);
   if (!locked) {
     throw new Error("The pending possible-duplicate review was not found");
   }
@@ -185,10 +187,11 @@ async function deleteRedundantPendingPair(
 
 async function readNormalizedPossibleDuplicate(
   transaction: ScopedTransactionClient,
-  workspace_id: string,
+  context: UserContext,
   review_id: string,
   lock: boolean
 ): Promise<PossibleDuplicateRow | undefined> {
+  const { workspace_id } = context;
   const lock_clause = lock ? Prisma.sql`FOR UPDATE OF review` : Prisma.empty;
   const rows = await transaction.$queryRaw<PossibleDuplicateRow[]>(Prisma.sql`
       SELECT
@@ -212,6 +215,7 @@ async function readNormalizedPossibleDuplicate(
       WHERE review.id = ${review_id}::uuid
         AND review.workspace_id = ${workspace_id}::uuid
         AND review.type = 'POSSIBLE_DUPLICATE'
+        ${opportunityScopeSql(context, "opportunity")}
       ${lock_clause}
   `);
   return rows[0];

@@ -32,8 +32,8 @@ export async function mergePersons(
   input: MergePersonsInput,
   prisma: PrismaClient = sharedPrisma
 ): Promise<MergedPersons> {
-  if (context.role === "ATTENDANT") {
-    throw new Error("ATTENDANT cannot merge Pessoas");
+  if (context.role === "ATTENDANT" || context.role === "SUPERVISOR") {
+    throw new Error(`${context.role} cannot merge Pessoas outside a scoped review`);
   }
 
   return withAccessContext(prisma, context, (transaction) =>

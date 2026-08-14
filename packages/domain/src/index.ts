@@ -99,3 +99,4 @@ export {
   type StageDefinition,
   type StageRole
 } from "./pipelines.js";
+export { teamUserIds, type TeamScopeMember } from "./team-scope.js";

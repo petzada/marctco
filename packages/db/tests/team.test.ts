@@ -206,7 +206,12 @@ describe("Equipe named operations", () => {
       )
     );
 
-    expect(attached.map((member) => member.tags)).toEqual([[tag_name], [tag_name]]);
+    const stored_tag_name = attached[0]?.tags[0];
+    expect(stored_tag_name?.toLowerCase()).toBe(tag_name.toLowerCase());
+    expect(attached.map((member) => member.tags)).toEqual([
+      [stored_tag_name],
+      [stored_tag_name]
+    ]);
     await expect(
       seeder.tag.count({
         where: { workspace_id: workspace, name: { equals: tag_name, mode: "insensitive" } }
@@ -320,16 +325,36 @@ describe("Equipe named operations", () => {
     ).rejects.toThrow(/only owner/i);
   });
 
-  it("lists the whole roster for Supervisor in this ticket, and refuses Atendente", async () => {
+  it("lists only members sharing a tag for Supervisor, and refuses Atendente", async () => {
+    const shared = await seeder.tag.create({ data: { workspace_id: workspace, name: `Time-${randomUUID()}` } });
+    await seeder.memberTag.createMany({
+      data: [
+        { workspace_id: workspace, user_id: supervisor_user, tag_id: shared.id },
+        { workspace_id: workspace, user_id: attendant_user, tag_id: shared.id }
+      ]
+    });
     const as_supervisor = await listTeam(supervisor_context, app);
     const as_manager = await listTeam(manager_context, app);
     expect(as_supervisor.map((row) => row.user_id).sort()).toEqual(
-      as_manager.map((row) => row.user_id).sort()
+      [supervisor_user, attendant_user].sort()
     );
-    expect(as_supervisor.some((row) => row.role === "OWNER")).toBe(true);
+    expect(as_manager.some((row) => row.role === "OWNER")).toBe(true);
     expect(as_supervisor.every((row) => row.status === "ACTIVE")).toBe(true);
 
     await expect(listTeam(attendant_context, app)).rejects.toThrow(/cannot list the team/i);
+  });
+
+  it("returns an empty Equipe for a Supervisor without tags", async () => {
+    const user_id = randomUUID();
+    await seeder.workspaceMember.create({
+      data: { workspace_id: workspace, user_id, role: "SUPERVISOR" }
+    });
+    const context = createUserContextFromResolvedMembership({
+      workspace_id: workspace,
+      user_id,
+      role: "SUPERVISOR"
+    });
+    await expect(listTeam(context, app)).resolves.toEqual([]);
   });
 
   it("omits DETACHED from listUserWorkspaces and from Equipe", async () => {

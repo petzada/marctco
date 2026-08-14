@@ -1,15 +1,17 @@
 import Link from "next/link";
 import type { LeadListRow } from "@marctco/db";
+import { buildLeadRowViewModel, formatArrivedAt } from "../../lib/leads/row-view-model";
+import { supervisorTeamEmptyState } from "../../lib/supervisor-team-empty-state";
 import { Card } from "../ui/card";
 import { DataTable, DataTableCell, DataTableHeaderCell, DataTableRow } from "../ui/data-table";
 import { EmptyState } from "../ui/empty-state";
-import { buildLeadRowViewModel, formatArrivedAt } from "../../lib/leads/row-view-model";
 import { LeadRowActions } from "./lead-row-actions";
 
 export interface LeadsTableProps {
   readonly rows: readonly LeadListRow[];
   readonly slug: string;
   readonly hasActiveFilter: boolean;
+  readonly isSupervisorWithoutTeam?: boolean;
 }
 
 /**
@@ -19,8 +21,17 @@ export interface LeadsTableProps {
  * `LeadRowViewModel`, so a filter or the marker icon behave identically at
  * every width.
  */
-export function LeadsTable({ rows, slug, hasActiveFilter }: LeadsTableProps) {
+export function LeadsTable({
+  rows,
+  slug,
+  hasActiveFilter,
+  isSupervisorWithoutTeam = false
+}: LeadsTableProps) {
   if (rows.length === 0) {
+    if (isSupervisorWithoutTeam) {
+      const missingTeam = supervisorTeamEmptyState("leads");
+      return <EmptyState description={missingTeam.description} title={missingTeam.title} />;
+    }
     return (
       <EmptyState
         description={

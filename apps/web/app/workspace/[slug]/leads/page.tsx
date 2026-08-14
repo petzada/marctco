@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import {
   countLeadsByMarker,
+  listTeam,
   listLeads,
   type LeadListRow,
   type LeadMarkerCounts
@@ -54,6 +55,9 @@ export default async function LeadsPage({
     limit: PAGE_SIZE
   });
   const countsPromise = countLeadsByMarker(access.workspace.context);
+  const hasSupervisorTeamPromise = access.workspace.role === "SUPERVISOR"
+    ? listTeam(access.workspace.context).then((members) => members.length > 0)
+    : Promise.resolve(true);
 
   return (
     <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
@@ -74,6 +78,7 @@ export default async function LeadsPage({
             <TableSection
               hasActiveFilter={Boolean(marker)}
               isFirstPage={cursor === undefined}
+              hasSupervisorTeamPromise={hasSupervisorTeamPromise}
               rowsPromise={rowsPromise}
               slug={slug}
             />
@@ -97,14 +102,16 @@ async function TableSection({
   rowsPromise,
   slug,
   hasActiveFilter,
-  isFirstPage
+  isFirstPage,
+  hasSupervisorTeamPromise
 }: Readonly<{
   rowsPromise: Promise<LeadListRow[]>;
   slug: string;
   hasActiveFilter: boolean;
   isFirstPage: boolean;
+  hasSupervisorTeamPromise: Promise<boolean>;
 }>) {
-  const rows = await rowsPromise;
+  const [rows, hasSupervisorTeam] = await Promise.all([rowsPromise, hasSupervisorTeamPromise]);
   const first = rows[0];
   const last = rows[rows.length - 1];
   const anchor =
@@ -114,7 +121,12 @@ async function TableSection({
   return (
     <div className="grid gap-md">
       <NewLeadsBanner anchor={anchor} slug={slug} />
-      <LeadsTable hasActiveFilter={hasActiveFilter} rows={rows} slug={slug} />
+      <LeadsTable
+        hasActiveFilter={hasActiveFilter}
+        isSupervisorWithoutTeam={!hasSupervisorTeam}
+        rows={rows}
+        slug={slug}
+      />
       {nextCursor || !isFirstPage ? (
         <nav aria-label="Paginação de leads" className="flex items-center justify-between">
           {!isFirstPage ? (
