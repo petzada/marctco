@@ -21,6 +21,7 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
     : undefined;
   return (
     <TeamView
+      actorUserId={access.workspace.context.user_id}
       canManage={canManageTeam(access.workspace.role)}
       editingMember={editingMember}
       members={members}

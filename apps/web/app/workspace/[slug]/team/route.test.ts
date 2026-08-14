@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const attachWorkspaceMember = vi.fn();
+const detachWorkspaceMember = vi.fn();
 const listTeam = vi.fn();
+const terminateWorkspaceMember = vi.fn();
+const revokeProvisioningEntitlement = vi.fn();
 const resolveWorkspaceAccess = vi.fn();
 const listUsers = vi.fn();
 const inviteUserByEmail = vi.fn();
@@ -10,9 +13,9 @@ const createSupabaseAdminClient = vi.fn(() => ({
   auth: { admin: { inviteUserByEmail, listUsers } }
 }));
 
-vi.mock("@marctco/db", () => ({ attachWorkspaceMember, listTeam }));
+vi.mock("@marctco/db", () => ({ attachWorkspaceMember, detachWorkspaceMember, listTeam, terminateWorkspaceMember }));
 vi.mock("../../../../lib/workspace-access", () => ({ resolveWorkspaceAccess }));
-vi.mock("../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient }));
+vi.mock("../../../../lib/supabase/admin", () => ({ createSupabaseAdminClient, revokeProvisioningEntitlement }));
 
 const { POST } = await import("./route");
 const slug = randomUUID();
@@ -39,6 +42,11 @@ function request(fields: Record<string, string>): Request {
 describe("POST /workspace/[slug]/team", () => {
   beforeEach(() => {
     attachWorkspaceMember.mockReset().mockResolvedValue({});
+    detachWorkspaceMember.mockReset().mockResolvedValue({ detached: true, queued_open_opportunities: 2 });
+    terminateWorkspaceMember.mockReset().mockResolvedValue([
+      { workspace_id, detached: true, queued_open_opportunities: 0 }
+    ]);
+    revokeProvisioningEntitlement.mockReset().mockResolvedValue(undefined);
     listTeam.mockReset().mockResolvedValue([]);
     resolveWorkspaceAccess.mockReset().mockResolvedValue(accessAs("OWNER"));
     listUsers.mockReset().mockResolvedValue({ data: { users: [] }, error: null });
@@ -196,5 +204,39 @@ describe("POST /workspace/[slug]/team", () => {
     expect(response.headers.get("location")).toContain("error=invalid");
     expect(createSupabaseAdminClient).not.toHaveBeenCalled();
     expect(attachWorkspaceMember).not.toHaveBeenCalled();
+  });
+
+  it("lets MANAGER detach only in the current workspace", async () => {
+    const target_user_id = randomUUID();
+    resolveWorkspaceAccess.mockResolvedValue(accessAs("MANAGER"));
+    const response = await POST(request({ membership_action: "detach", target_user_id }), { params: Promise.resolve({ slug }) });
+    expect(detachWorkspaceMember).toHaveBeenCalledWith(expect.objectContaining({ role: "MANAGER", workspace_id }), target_user_id);
+    expect(terminateWorkspaceMember).not.toHaveBeenCalled();
+    expect(revokeProvisioningEntitlement).not.toHaveBeenCalled();
+    expect(response.headers.get("location")).toContain("result=detached");
+  });
+
+  it("lets OWNER terminate in owned workspaces and revokes Auth provisioning", async () => {
+    const target_user_id = randomUUID();
+    listTeam.mockResolvedValue([{ user_id: target_user_id, role: "ATTENDANT", status: "ACTIVE" }]);
+    const response = await POST(request({ membership_action: "terminate", target_user_id }), { params: Promise.resolve({ slug }) });
+    expect(terminateWorkspaceMember).toHaveBeenCalledWith(expect.objectContaining({ role: "OWNER", workspace_id }), target_user_id);
+    expect(revokeProvisioningEntitlement).toHaveBeenCalledWith(target_user_id);
+    expect(response.headers.get("location")).toContain("result=terminated");
+  });
+
+  it("does not let a forged target id revoke another Auth user's provisioning right", async () => {
+    const response = await POST(request({ membership_action: "terminate", target_user_id: randomUUID() }), { params: Promise.resolve({ slug }) });
+    expect(response.headers.get("location")).toContain("error=failed");
+    expect(revokeProvisioningEntitlement).not.toHaveBeenCalled();
+    expect(terminateWorkspaceMember).not.toHaveBeenCalled();
+  });
+
+  it("refuses terminate from MANAGER before DB and Auth writes", async () => {
+    resolveWorkspaceAccess.mockResolvedValue(accessAs("MANAGER"));
+    const response = await POST(request({ membership_action: "terminate", target_user_id: randomUUID() }), { params: Promise.resolve({ slug }) });
+    expect(response.status).toBe(404);
+    expect(terminateWorkspaceMember).not.toHaveBeenCalled();
+    expect(revokeProvisioningEntitlement).not.toHaveBeenCalled();
   });
 });

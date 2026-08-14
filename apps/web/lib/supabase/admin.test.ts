@@ -7,7 +7,7 @@ const createClient = vi.fn(() => ({ auth: { admin: { getUserById, updateUserById
 
 vi.mock("@supabase/supabase-js", () => ({ createClient }));
 
-const { consumeProvisioningEntitlement, createSupabaseAdminClient } = await import("./admin");
+const { consumeProvisioningEntitlement, createSupabaseAdminClient, revokeProvisioningEntitlement } = await import("./admin");
 
 function entitledUser(user_id: string) {
   return {
@@ -85,5 +85,23 @@ describe("consumeProvisioningEntitlement", () => {
   it("refuses to build the admin client without the server-only service role key", () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     expect(() => createSupabaseAdminClient()).toThrow(/SUPABASE_SERVICE_ROLE_KEY/);
+  });
+});
+
+describe("revokeProvisioningEntitlement", () => {
+  beforeEach(() => {
+    updateUserById.mockReset().mockResolvedValue({ error: null });
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+  });
+
+  afterEach(() => delete process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  it("revokes future workspace provisioning without deleting the Auth login", async () => {
+    const user_id = randomUUID();
+    await expect(revokeProvisioningEntitlement(user_id)).resolves.toBeUndefined();
+    expect(updateUserById).toHaveBeenCalledWith(user_id, {
+      app_metadata: { can_provision_workspace: false, workspace_name: null }
+    });
   });
 });

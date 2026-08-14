@@ -168,9 +168,13 @@ export {
 // ---------------------------------------------------------------------------
 export {
   attachWorkspaceMember,
+  detachWorkspaceMember,
   listTeam,
+  terminateWorkspaceMember,
   type AttachWorkspaceMemberInput,
   type AttachedWorkspaceMember,
+  type DetachedWorkspaceMember,
+  type TerminatedWorkspaceMembership,
   type CollaboratorRole,
   type TeamMember
 } from "./team.js";

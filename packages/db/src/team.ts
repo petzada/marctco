@@ -1,12 +1,17 @@
 import { normalizeEmail, normalizePhone } from "@marctco/domain";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { UserContext, WorkspaceRole } from "./access-context.js";
+import {
+  createUserContextFromResolvedMembership,
+  type UserContext,
+  type WorkspaceRole
+} from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import {
   type ScopedTransactionClient,
   withAccessContext
 } from "./internal/scoped-transaction.js";
 import { assertUuid } from "./internal/uuid.js";
+import { listUserWorkspaces } from "./workspace-context.js";
 
 const sharedPrisma = createPrismaClient();
 
@@ -61,6 +66,15 @@ interface TeamMemberRow {
   readonly status: "ACTIVE";
   readonly whatsapp_phone_e164: string | null;
   readonly tags: string[];
+}
+
+export interface DetachedWorkspaceMember {
+  readonly detached: boolean;
+  readonly queued_open_opportunities: number;
+}
+
+export interface TerminatedWorkspaceMembership extends DetachedWorkspaceMember {
+  readonly workspace_id: string;
 }
 
 function assertOwner(context: UserContext): void {
@@ -324,4 +338,96 @@ export async function listTeam(
       tags: row.tags
     }));
   });
+}
+
+/**
+ * Deactivates one association in the current workspace. This is intentionally
+ * a normal tenant-scoped write: it neither deletes history nor creates a new
+ * pre-context/SECURITY DEFINER escape (ADR-0023).
+ */
+export async function detachWorkspaceMember(
+  context: UserContext,
+  target_user_id: string,
+  prisma: PrismaClient = sharedPrisma
+): Promise<DetachedWorkspaceMember> {
+  if (context.role !== "MANAGER" && context.role !== "OWNER") {
+    throw new Error("Only MANAGER or OWNER can detach a workspace member");
+  }
+  assertUuid(target_user_id, "target_user_id");
+  if (context.user_id === target_user_id) {
+    throw new Error("A member cannot detach self");
+  }
+
+  return withAccessContext(prisma, context, async (transaction) => {
+    const rows = await transaction.$queryRaw<LockedMemberRow[]>`
+      SELECT role, status::text AS status
+      FROM workspace_members
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND user_id = ${target_user_id}::uuid
+      FOR UPDATE
+    `;
+    const member = rows[0];
+    if (!member || member.status !== "ACTIVE") {
+      return { detached: false, queued_open_opportunities: 0 };
+    }
+    if (member.role === "OWNER") {
+      throw new Error("The workspace OWNER cannot be detached");
+    }
+
+    const queued_open_opportunities = await transaction.$executeRaw`
+      UPDATE opportunities
+      SET
+        previous_assigned_user_id = assigned_user_id,
+        assigned_user_id = NULL
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND status = 'OPEN'::opportunity_status
+        AND assigned_user_id = ${target_user_id}::uuid
+    `;
+    await transaction.$executeRaw`
+      UPDATE workspace_members
+      SET status = 'DETACHED'::workspace_member_status
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND user_id = ${target_user_id}::uuid
+        AND status = 'ACTIVE'::workspace_member_status
+    `;
+    return { detached: true, queued_open_opportunities };
+  });
+}
+
+/**
+ * Removes a person from every ACTIVE workspace owned by the actor. Each item
+ * deliberately opens its own tenant context; another owner's workspace is
+ * outside both the query result and the mutation (ADR-0023).
+ */
+export async function terminateWorkspaceMember(
+  context: UserContext,
+  target_user_id: string,
+  prisma: PrismaClient = sharedPrisma
+): Promise<TerminatedWorkspaceMembership[]> {
+  if (context.role !== "OWNER") {
+    throw new Error("Only OWNER can terminate a workspace member");
+  }
+  assertUuid(target_user_id, "target_user_id");
+  if (context.user_id === target_user_id) {
+    throw new Error("An OWNER cannot terminate self");
+  }
+
+  const owned_workspaces = (await listUserWorkspaces(
+    { authenticated_user_id: context.user_id },
+    prisma
+  )).filter((workspace) => workspace.role === "OWNER");
+
+  const results: TerminatedWorkspaceMembership[] = [];
+  for (const workspace of owned_workspaces) {
+    const workspace_context = createUserContextFromResolvedMembership({
+      workspace_id: workspace.workspace_id,
+      user_id: context.user_id,
+      role: workspace.role
+    });
+    const result = await detachWorkspaceMember(workspace_context, target_user_id, prisma);
+    if (result.detached) {
+      results.push({ workspace_id: workspace.workspace_id, ...result });
+    }
+  }
+  return results;
 }

@@ -1,6 +1,15 @@
-import { attachWorkspaceMember, listTeam, type CollaboratorRole } from "@marctco/db";
+import {
+  attachWorkspaceMember,
+  detachWorkspaceMember,
+  listTeam,
+  terminateWorkspaceMember,
+  type CollaboratorRole
+} from "@marctco/db";
 import { normalizeEmail, normalizePhone } from "@marctco/domain";
-import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
+import {
+  createSupabaseAdminClient,
+  revokeProvisioningEntitlement
+} from "../../../../lib/supabase/admin";
 import { logger } from "../../../../lib/logger";
 import { canManageTeam, COLLABORATOR_ROLE_OPTIONS } from "../../../../lib/team-access";
 import { resolveWorkspaceAccess } from "../../../../lib/workspace-access";
@@ -16,7 +25,7 @@ interface RouteContext {
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
-function resultRedirect(slug: string, result: "created" | "updated" | "invalid" | "failed") {
+function resultRedirect(slug: string, result: "created" | "updated" | "detached" | "terminated" | "invalid" | "failed") {
   const parameter = result === "invalid" || result === "failed" ? "error" : "result";
   return new Response(null, {
     status: 303,
@@ -84,11 +93,47 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
   if (access.status === "unauthenticated") {
     return new Response(null, { status: 303, headers: { location: "/login" } });
   }
-  if (access.status === "not-found" || !canManageTeam(access.workspace.role)) {
+  if (access.status === "not-found") {
     return new Response(null, { status: 404 });
   }
 
   const form = await request.formData();
+  const membership_action = stringField(form, "membership_action");
+  if (membership_action === "detach" || membership_action === "terminate") {
+    const target_user_id = stringField(form, "target_user_id");
+    const can_detach = access.workspace.role === "MANAGER" || access.workspace.role === "OWNER";
+    const can_terminate = access.workspace.role === "OWNER";
+    if (!target_user_id || !can_detach || (membership_action === "terminate" && !can_terminate)) {
+      return new Response(null, { status: 404 });
+    }
+    try {
+      if (membership_action === "detach") {
+        const result = await detachWorkspaceMember(access.workspace.context, target_user_id);
+        if (!result.detached) return resultRedirect(slug, "failed");
+        return resultRedirect(slug, "detached");
+      }
+      const target = (await listTeam(access.workspace.context)).find(
+        (member) => member.user_id === target_user_id
+      );
+      if (!target || target.role === "OWNER" || target.user_id === access.workspace.context.user_id) {
+        return resultRedirect(slug, "failed");
+      }
+      // Revoke first: if a tenant write fails, the member remains visible for
+      // a safe retry and cannot retain a provisioning right in between.
+      await revokeProvisioningEntitlement(target_user_id);
+      const results = await terminateWorkspaceMember(access.workspace.context, target_user_id);
+      if (results.length === 0) return resultRedirect(slug, "failed");
+      return resultRedirect(slug, "terminated");
+    } catch {
+      logger.error({ event: `team_member_${membership_action}`, result: "failed" });
+      return resultRedirect(slug, "failed");
+    }
+  }
+
+  if (!canManageTeam(access.workspace.role)) {
+    return new Response(null, { status: 404 });
+  }
+
   const user_id_field = stringField(form, "user_id");
   const display_name = stringField(form, "display_name");
   const submitted_email = normalizeEmail(stringField(form, "email"));

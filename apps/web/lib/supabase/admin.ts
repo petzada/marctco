@@ -55,3 +55,17 @@ export async function consumeProvisioningEntitlement(user_id: string): Promise<b
   }
   return true;
 }
+
+/** Revokes future provisioning while deliberately preserving the Auth user. */
+export async function revokeProvisioningEntitlement(user_id: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(user_id, {
+    app_metadata: {
+      [PROVISIONING_CLAIM]: false,
+      [PROVISIONING_WORKSPACE_NAME_CLAIM]: null
+    }
+  });
+  if (error) {
+    throw new Error(`Could not revoke the provisioning right: ${error.message}`);
+  }
+}

@@ -12,8 +12,10 @@ import { FieldLabel, TextInput } from "../../../../components/ui/field";
 import { COLLABORATOR_ROLE_OPTIONS } from "../../../../lib/team-access";
 import { supervisorTeamEmptyState } from "../../../../lib/supervisor-team-empty-state";
 import { workspaceRoleLabel } from "../../../../lib/workspace-role";
+import { MemberLifecycleActions } from "./member-lifecycle-actions";
 
 interface TeamViewProps {
+  readonly actorUserId: string;
   readonly canManage: boolean;
   readonly editingMember?: TeamMember | undefined;
   readonly members: readonly TeamMember[];
@@ -95,6 +97,10 @@ function ResultMessage({ result }: Readonly<{ result?: string | undefined }>) {
     ? "Colaborador cadastrado."
     : result === "updated"
       ? "Colaborador atualizado."
+      : result === "detached"
+        ? "Colaborador desatrelado deste workspace."
+        : result === "terminated"
+          ? "Colaborador desligado dos workspaces em que você é Direção."
       : result === "invalid"
         ? "Revise os campos informados."
       : "Não foi possível salvar o colaborador. Tente novamente.";
@@ -105,7 +111,8 @@ function ResultMessage({ result }: Readonly<{ result?: string | undefined }>) {
   );
 }
 
-export function TeamView({ canManage, editingMember, members, result, role, slug }: TeamViewProps) {
+export function TeamView({ actorUserId, canManage, editingMember, members, result, role, slug }: TeamViewProps) {
+  const canDetach = role === "MANAGER" || role === "OWNER";
   const emptyState = role === "SUPERVISOR"
     ? supervisorTeamEmptyState("team")
     : {
@@ -132,7 +139,7 @@ export function TeamView({ canManage, editingMember, members, result, role, slug
               <DataTableHeaderCell>Papel</DataTableHeaderCell>
               <DataTableHeaderCell>Equipes</DataTableHeaderCell>
               <DataTableHeaderCell>WhatsApp</DataTableHeaderCell>
-              {canManage ? <DataTableHeaderCell><span className="sr-only">Ações</span></DataTableHeaderCell> : null}
+              {canDetach ? <DataTableHeaderCell><span className="sr-only">Ações</span></DataTableHeaderCell> : null}
             </tr></thead>
             <tbody>
               {members.map((member) => (
@@ -141,7 +148,14 @@ export function TeamView({ canManage, editingMember, members, result, role, slug
                   <DataTableCell>{workspaceRoleLabel(member.role)}</DataTableCell>
                   <DataTableCell>{tagsLabel(member.tags)}</DataTableCell>
                   <DataTableCell>{phoneLabel(member.whatsapp_phone_e164)}</DataTableCell>
-                  {canManage ? <DataTableCell className="text-right"><Link className="text-button text-primary hover:text-primary-hover" href={`/workspace/${slug}/team?edit=${member.user_id}#member-form`}>Editar</Link></DataTableCell> : null}
+                  {canDetach ? (
+                    <DataTableCell className="text-right">
+                      <div className="flex flex-wrap justify-end gap-xs">
+                        {canManage && member.role !== "OWNER" ? <Link className="inline-flex min-h-10 items-center text-button text-primary hover:text-primary-hover" href={`/workspace/${slug}/team?edit=${member.user_id}#member-form`}>Editar</Link> : null}
+                        {member.user_id !== actorUserId && member.role !== "OWNER" ? <MemberLifecycleActions actorRole={role} member={member} /> : null}
+                      </div>
+                    </DataTableCell>
+                  ) : null}
                 </DataTableRow>
               ))}
             </tbody>
@@ -158,7 +172,12 @@ export function TeamView({ canManage, editingMember, members, result, role, slug
                   <div><dt className="text-label text-ink-secondary">Equipes</dt><dd className="mt-xxs text-ink">{tagsLabel(member.tags)}</dd></div>
                   <div><dt className="text-label text-ink-secondary">WhatsApp</dt><dd className="mt-xxs text-ink">{phoneLabel(member.whatsapp_phone_e164)}</dd></div>
                 </dl>
-                {canManage ? <Link className="mt-md inline-flex min-h-11 items-center text-button text-primary hover:text-primary-hover" href={`/workspace/${slug}/team?edit=${member.user_id}#member-form`}>Editar colaborador</Link> : null}
+                {canDetach ? (
+                  <div className="mt-md flex flex-wrap items-center justify-end gap-xs">
+                    {canManage && member.role !== "OWNER" ? <Link className="inline-flex min-h-11 items-center text-button text-primary hover:text-primary-hover" href={`/workspace/${slug}/team?edit=${member.user_id}#member-form`}>Editar colaborador</Link> : null}
+                    {member.user_id !== actorUserId && member.role !== "OWNER" ? <MemberLifecycleActions actorRole={role} member={member} /> : null}
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>

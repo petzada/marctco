@@ -466,6 +466,9 @@ model Opportunity {
   arrived_at                 DateTime                   @db.Timestamptz(6)
   /// Born null — assignment is Fase 2.
   assigned_user_id           String?                    @db.Uuid
+  /// The assignee displaced by a reassignment or by membership detachment.
+  /// This is historical context only and never participates in access scope.
+  previous_assigned_user_id  String?                    @db.Uuid
   /// Means one thing only: no WhatsApp and no phone call. Not a generic
   /// "something is missing" label (ADR-0007 §Quarentena).
   missing_phone              Boolean                    @default(false)
@@ -511,6 +514,9 @@ model Opportunity {
   // below has never appeared here either (ticket 11) — writing one anyway
   // would declare a full, unpartitioned index that does not match migration
   // history, not the partial one actually created.
+  // Ticket 04 adds another migration-only partial index on
+  // `(workspace_id, assigned_user_id) WHERE status = 'OPEN' AND assigned_user_id
+  // IS NOT NULL` for returning a departing member's active work to the queue.
   @@unique([workspace_id, id])
   @@index([workspace_id])
   @@index([workspace_id, person_id])
