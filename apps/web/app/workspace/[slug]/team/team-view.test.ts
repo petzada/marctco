@@ -23,6 +23,7 @@ describe("Equipe screen", () => {
       React.createElement(TeamView, {
         canManage: true,
         members,
+        role: "OWNER",
         slug: "11111111-1111-4111-8111-111111111111"
       })
     );
@@ -40,6 +41,7 @@ describe("Equipe screen", () => {
       React.createElement(TeamView, {
         canManage: true,
         members,
+        role: "OWNER",
         slug: "11111111-1111-4111-8111-111111111111"
       })
     );
@@ -55,6 +57,7 @@ describe("Equipe screen", () => {
       React.createElement(TeamView, {
         canManage: false,
         members,
+        role: "MANAGER",
         slug: "11111111-1111-4111-8111-111111111111"
       })
     );
@@ -62,5 +65,35 @@ describe("Equipe screen", () => {
     expect(html).toContain("Ana Costa");
     expect(html).not.toContain("Novo colaborador");
     expect(html).not.toContain("Editar colaborador");
+  });
+
+  it("explains the missing team tag when a Supervisor has an empty roster", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(TeamView, {
+        canManage: false,
+        members: [],
+        role: "SUPERVISOR",
+        slug: "11111111-1111-4111-8111-111111111111"
+      })
+    );
+
+    expect(html).toContain("Seu time ainda não aparece na Equipe");
+    expect(html).toContain("tag de equipe");
+    expect(html).toContain("A Direção resolve isso na tela Equipe");
+    expect(html).not.toContain("Nenhum colaborador ativo");
+  });
+
+  it("preserves the regular empty state for Gestao", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(TeamView, {
+        canManage: false,
+        members: [],
+        role: "MANAGER",
+        slug: "11111111-1111-4111-8111-111111111111"
+      })
+    );
+
+    expect(html).toContain("Nenhum colaborador ativo");
+    expect(html).not.toContain("Seu time ainda não aparece na Equipe");
   });
 });

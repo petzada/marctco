@@ -1,4 +1,4 @@
-import type { TeamMember } from "@marctco/db";
+import type { TeamMember, WorkspaceRole } from "@marctco/db";
 import Link from "next/link";
 import { Button } from "../../../../components/ui/button";
 import {
@@ -10,12 +10,14 @@ import {
 import { EmptyState } from "../../../../components/ui/empty-state";
 import { FieldLabel, TextInput } from "../../../../components/ui/field";
 import { COLLABORATOR_ROLE_OPTIONS } from "../../../../lib/team-access";
+import { supervisorTeamEmptyState } from "../../../../lib/supervisor-team-empty-state";
 import { workspaceRoleLabel } from "../../../../lib/workspace-role";
 
 interface TeamViewProps {
   readonly canManage: boolean;
   readonly editingMember?: TeamMember | undefined;
   readonly members: readonly TeamMember[];
+  readonly role: WorkspaceRole;
   readonly result?: string | undefined;
   readonly slug: string;
 }
@@ -103,7 +105,13 @@ function ResultMessage({ result }: Readonly<{ result?: string | undefined }>) {
   );
 }
 
-export function TeamView({ canManage, editingMember, members, result, slug }: TeamViewProps) {
+export function TeamView({ canManage, editingMember, members, result, role, slug }: TeamViewProps) {
+  const emptyState = role === "SUPERVISOR"
+    ? supervisorTeamEmptyState("team")
+    : {
+        title: "Nenhum colaborador ativo",
+        description: "A Direção pode cadastrar o primeiro colaborador acima."
+      };
   return (
     <main className="mx-auto grid max-w-content-wide gap-lg p-md sm:p-lg">
       <header>
@@ -114,7 +122,7 @@ export function TeamView({ canManage, editingMember, members, result, slug }: Te
       {canManage ? <MemberForm member={editingMember} slug={slug} /> : null}
 
       {members.length === 0 ? (
-        <EmptyState title="Nenhum colaborador ativo" description="A Direção pode cadastrar o primeiro colaborador acima." />
+        <EmptyState title={emptyState.title} description={emptyState.description} />
       ) : (
         <section aria-labelledby="active-team-title">
           <h2 className="mb-sm text-title text-ink" id="active-team-title">Colaboradores ativos</h2>

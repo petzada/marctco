@@ -25,6 +25,7 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
       editingMember={editingMember}
       members={members}
       result={query.result ?? query.error}
+      role={access.workspace.role}
       slug={slug}
     />
   );
