@@ -100,3 +100,10 @@ export {
   type StageRole
 } from "./pipelines.js";
 export { teamUserIds, type TeamScopeMember } from "./team-scope.js";
+export {
+  decideLeadAssignment,
+  decideLeadReassignment,
+  type AssignmentDecision,
+  type AssignmentMember,
+  type AssignmentRole
+} from "./lead-assignment.js";

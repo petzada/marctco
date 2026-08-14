@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import {
   countLeadsByMarker,
+  listLeadAssignmentDestinations,
   listTeam,
   listLeads,
   type LeadListRow,
@@ -11,6 +12,7 @@ import {
 import type { Marker } from "@marctco/domain";
 import { LeadsTable } from "../../../../components/leads/leads-table";
 import { MarkerCounters } from "../../../../components/leads/marker-counters";
+import { LeadsFilters } from "../../../../components/leads/leads-filters";
 import { NewLeadsBanner } from "../../../../components/leads/new-leads-banner";
 import { decodeLeadCursor, encodeLeadCursor } from "../../../../lib/leads/cursor";
 import { leadsSearchParamsCache } from "../../../../lib/leads/search-params";
@@ -46,18 +48,32 @@ export default async function LeadsPage({
     return null;
   }
 
-  const { cursor: cursorParam, marker } = await leadsSearchParamsCache.parse(searchParams);
+  const { cursor: cursorParam, marker, responsible, team } = await leadsSearchParamsCache.parse(searchParams);
   const cursor = decodeLeadCursor(cursorParam);
+  const isUnassignedView = responsible === "unassigned";
+  const responsibleUserId = responsible && !isUnassignedView && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(responsible)
+    ? responsible
+    : undefined;
+  const teamName = team?.trim().slice(0, 100) || undefined;
+  const filterParams = new URLSearchParams();
+  if (marker) filterParams.set("marker", marker);
+  if (responsibleUserId || isUnassignedView) filterParams.set("responsible", responsibleUserId ?? "unassigned");
+  if (teamName) filterParams.set("team", teamName);
 
   const rowsPromise = listLeads(access.workspace.context, {
     ...(cursor !== undefined ? { after: cursor } : {}),
     ...(marker ? { marker } : {}),
+    ...(responsibleUserId ? { responsible_user_id: responsibleUserId } : {}),
+    ...(isUnassignedView ? { unassigned: true } : {}),
+    ...(teamName ? { team: teamName } : {}),
     limit: PAGE_SIZE
   });
   const countsPromise = countLeadsByMarker(access.workspace.context);
-  const hasSupervisorTeamPromise = access.workspace.role === "SUPERVISOR"
-    ? listTeam(access.workspace.context).then((members) => members.length > 0)
-    : Promise.resolve(true);
+  const teamPromise = access.workspace.role === "ATTENDANT"
+    ? Promise.resolve([])
+    : listTeam(access.workspace.context);
+  const assignDestinationsPromise = listLeadAssignmentDestinations(access.workspace.context, "ASSIGN");
+  const reassignDestinationsPromise = listLeadAssignmentDestinations(access.workspace.context, "REASSIGN");
 
   return (
     <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
@@ -68,6 +84,12 @@ export default async function LeadsPage({
         </header>
 
         <div className="mt-lg">
+          <Suspense fallback={null}>
+            <FiltersSection membersPromise={teamPromise} {...(responsibleUserId || isUnassignedView ? { responsible: responsibleUserId ?? "unassigned" } : {})} {...(teamName ? { team: teamName } : {})} />
+          </Suspense>
+        </div>
+
+        <div className="mt-lg">
           <Suspense fallback={<CountersSkeleton />}>
             <CountersSection countsPromise={countsPromise} marker={marker ?? undefined} slug={slug} />
           </Suspense>
@@ -76,9 +98,15 @@ export default async function LeadsPage({
         <div className="mt-lg">
           <Suspense fallback={<TableSkeleton />}>
             <TableSection
-              hasActiveFilter={Boolean(marker)}
+              hasActiveFilter={filterParams.size > 0}
               isFirstPage={cursor === undefined}
-              hasSupervisorTeamPromise={hasSupervisorTeamPromise}
+              teamPromise={teamPromise}
+              assignDestinationsPromise={assignDestinationsPromise}
+              reassignDestinationsPromise={reassignDestinationsPromise}
+              actorUserId={access.workspace.context.user_id}
+              isSupervisor={access.workspace.role === "SUPERVISOR"}
+              filterQuery={filterParams.toString()}
+              isUnassignedView={isUnassignedView}
               rowsPromise={rowsPromise}
               slug={slug}
             />
@@ -87,6 +115,14 @@ export default async function LeadsPage({
       </div>
     </main>
   );
+}
+
+async function FiltersSection({ membersPromise, responsible, team }: Readonly<{
+  membersPromise: ReturnType<typeof listTeam>;
+  responsible?: string;
+  team?: string;
+}>) {
+  return <LeadsFilters members={await membersPromise} {...(responsible ? { responsible } : {})} {...(team ? { team } : {})} />;
 }
 
 async function CountersSection({
@@ -103,34 +139,55 @@ async function TableSection({
   slug,
   hasActiveFilter,
   isFirstPage,
-  hasSupervisorTeamPromise
+  teamPromise,
+  assignDestinationsPromise,
+  reassignDestinationsPromise,
+  actorUserId,
+  isSupervisor,
+  filterQuery,
+  isUnassignedView
 }: Readonly<{
   rowsPromise: Promise<LeadListRow[]>;
   slug: string;
   hasActiveFilter: boolean;
   isFirstPage: boolean;
-  hasSupervisorTeamPromise: Promise<boolean>;
+  teamPromise: ReturnType<typeof listTeam>;
+  assignDestinationsPromise: ReturnType<typeof listLeadAssignmentDestinations>;
+  reassignDestinationsPromise: ReturnType<typeof listLeadAssignmentDestinations>;
+  actorUserId: string;
+  isSupervisor: boolean;
+  filterQuery: string;
+  isUnassignedView: boolean;
 }>) {
-  const [rows, hasSupervisorTeam] = await Promise.all([rowsPromise, hasSupervisorTeamPromise]);
+  const [rows, members, assignDestinations, reassignDestinations] = await Promise.all([
+    rowsPromise, teamPromise, assignDestinationsPromise, reassignDestinationsPromise
+  ]);
   const first = rows[0];
   const last = rows[rows.length - 1];
   const anchor =
     isFirstPage && first ? { arrived_at: first.arrived_at.toISOString(), id: first.opportunity_id } : null;
   const nextCursor = last && rows.length === PAGE_SIZE ? encodeLeadCursor({ arrived_at: last.arrived_at, id: last.opportunity_id }) : null;
+  const filteredHref = `/workspace/${slug}/leads${filterQuery ? `?${filterQuery}` : ""}`;
+  const nextParams = new URLSearchParams(filterQuery);
+  if (nextCursor) nextParams.set("cursor", nextCursor);
 
   return (
     <div className="grid gap-md">
       <NewLeadsBanner anchor={anchor} slug={slug} />
       <LeadsTable
         hasActiveFilter={hasActiveFilter}
-        isSupervisorWithoutTeam={!hasSupervisorTeam}
+        isSupervisorWithoutTeam={isSupervisor && members.length === 0}
+        actorUserId={actorUserId}
+        assignDestinations={assignDestinations}
+        reassignDestinations={reassignDestinations}
+        isUnassignedView={isUnassignedView}
         rows={rows}
         slug={slug}
       />
       {nextCursor || !isFirstPage ? (
         <nav aria-label="Paginação de leads" className="flex items-center justify-between">
           {!isFirstPage ? (
-            <Link className="text-body-sm text-primary hover:underline" href={`/workspace/${slug}/leads`}>
+            <Link className="text-body-sm text-primary hover:underline" href={filteredHref}>
               ← Início
             </Link>
           ) : (
@@ -139,7 +196,7 @@ async function TableSection({
           {nextCursor ? (
             <Link
               className="text-body-sm text-primary hover:underline"
-              href={`/workspace/${slug}/leads?cursor=${encodeURIComponent(nextCursor)}`}
+              href={`/workspace/${slug}/leads?${nextParams.toString()}`}
             >
               Próxima página →
             </Link>

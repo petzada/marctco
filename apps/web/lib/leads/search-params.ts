@@ -9,7 +9,9 @@ import { MARKERS } from "@marctco/domain";
  */
 export const leadsSearchParams = {
   cursor: parseAsString,
-  marker: parseAsStringLiteral(MARKERS)
+  marker: parseAsStringLiteral(MARKERS),
+  responsible: parseAsString,
+  team: parseAsString
 };
 
 export const leadsSearchParamsCache = createSearchParamsCache(leadsSearchParams);

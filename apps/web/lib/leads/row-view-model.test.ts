@@ -19,6 +19,7 @@ function row(overrides: Partial<LeadListRow> = {}): LeadListRow {
     arrived_at: new Date("2026-08-11T12:00:00.000Z"),
     missing_phone: false,
     assigned_user_id: null,
+    assigned_user_name: null,
     source: "META_LEAD_ADS",
     reviews: [],
     ...overrides

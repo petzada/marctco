@@ -4,10 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createUserContextFromResolvedMembership } from "../src/access-context.js";
 import {
   assignLead,
+  assignLeads,
+  LeadAssignmentError,
   countLeadsByMarker,
   countNewLeads,
   getLead,
   listLeads,
+  reassignLead,
+  reassignLeads,
   resolveIdentityConflict,
   updateLeadDetails
 } from "../src/leads.js";
@@ -39,6 +43,8 @@ const supervisor_user = randomUUID();
 const untagged_supervisor_user = randomUUID();
 const same_team_user = randomUUID();
 const other_team_user = randomUUID();
+const other_manager_user = randomUUID();
+const detached_user = randomUUID();
 
 const manager_context = createUserContextFromResolvedMembership({
   workspace_id: workspace,
@@ -191,8 +197,12 @@ beforeAll(async () => {
     });
     await transaction.workspaceMember.createMany({
       data: [
-        { workspace_id: workspace, user_id: manager_user, role: "MANAGER" },
-        { workspace_id: workspace, user_id: supervisor_user, role: "SUPERVISOR" },
+        { workspace_id: workspace, user_id: manager_user, role: "MANAGER", display_name: "Marina Gestão" },
+        { workspace_id: workspace, user_id: attendant_user, role: "ATTENDANT", display_name: "Ana Atendente" },
+        { workspace_id: workspace, user_id: other_attendant_user, role: "ATTENDANT", display_name: "Bia Atendente" },
+        { workspace_id: workspace, user_id: other_manager_user, role: "MANAGER", display_name: "Outro Gestor" },
+        { workspace_id: workspace, user_id: detached_user, role: "SUPERVISOR", status: "DETACHED", display_name: "Supervisor desligado" },
+        { workspace_id: workspace, user_id: supervisor_user, role: "SUPERVISOR", display_name: "Sofia Supervisora" },
         { workspace_id: workspace, user_id: untagged_supervisor_user, role: "SUPERVISOR" },
         { workspace_id: workspace, user_id: same_team_user, role: "ATTENDANT" },
         { workspace_id: workspace, user_id: other_team_user, role: "ATTENDANT" }
@@ -571,15 +581,21 @@ describe("assignLead", () => {
     const seeded = await seedOpportunity({ name: "A ser atribuido" });
 
     const settled = await Promise.allSettled([
-      assignLead(manager_context, { opportunity_id: seeded.opportunity_id, user_id: attendant_user }, app),
+      assignLead(manager_context, { opportunity_id: seeded.opportunity_id, user_id: supervisor_user }, app),
       assignLead(
         manager_context,
-        { opportunity_id: seeded.opportunity_id, user_id: other_attendant_user },
+        { opportunity_id: seeded.opportunity_id, user_id: supervisor_user },
         app
       )
     ]);
     const fulfilled = settled.filter((result) => result.status === "fulfilled");
     expect(fulfilled).toHaveLength(1);
+    const rejected = settled.find((result) => result.status === "rejected");
+    expect(rejected?.status).toBe("rejected");
+    if (rejected?.status === "rejected") {
+      expect(rejected.reason).toBeInstanceOf(LeadAssignmentError);
+      expect((rejected.reason as LeadAssignmentError).refusal.current_assigned_user_name).toBe("Sofia Supervisora");
+    }
 
     const stored = await seeder.opportunity.findUniqueOrThrow({
       where: { id: seeded.opportunity_id }
@@ -591,7 +607,7 @@ describe("assignLead", () => {
     const seeded = await seedOpportunity({ name: "Tentativa de atendente" });
     await expect(
       assignLead(attendant_context, { opportunity_id: seeded.opportunity_id, user_id: attendant_user }, app)
-    ).rejects.toThrow(/ATTENDANT/);
+    ).rejects.toThrow(/ACTOR_CANNOT_ASSIGN/);
   });
 
   it("lets a Supervisor open only a lead assigned inside their tagged team", async () => {
@@ -610,7 +626,96 @@ describe("assignLead", () => {
     const seeded = await seedOpportunity({ name: "Fila da GestÃ£o" });
     await expect(
       assignLead(supervisor_context, { opportunity_id: seeded.opportunity_id, user_id: supervisor_user }, app)
-    ).rejects.toThrow(/SUPERVISOR.*unassigned queue/i);
+    ).rejects.toThrow(/ACTOR_CANNOT_ASSIGN/);
+  });
+
+  it("refuses an Attendant destination and an untagged Supervisor", async () => {
+    const first = await seedOpportunity({ name: "Não pula o segundo nível" });
+    const second = await seedOpportunity({ name: "Supervisor precisa de time" });
+    await expect(assignLead(manager_context, { opportunity_id: first.opportunity_id, user_id: attendant_user }, app)).rejects.toThrow(/DESTINATION_MUST/);
+    await expect(assignLead(manager_context, { opportunity_id: second.opportunity_id, user_id: untagged_supervisor_user }, app)).rejects.toThrow(/SUPERVISOR_REQUIRES_TAG/);
+  });
+
+  it("refuses another Manager and a detached destination from the queue", async () => {
+    const first = await seedOpportunity();
+    const second = await seedOpportunity();
+    await expect(assignLead(manager_context, { opportunity_id: first.opportunity_id, user_id: other_manager_user }, app)).rejects.toThrow(/DESTINATION_MUST/);
+    await expect(assignLead(manager_context, { opportunity_id: second.opportunity_id, user_id: detached_user }, app)).rejects.toThrow(/DESTINATION_INACTIVE/);
+  });
+
+  it("completes Gestão → Supervisor → Atendente and preserves the previous owner", async () => {
+    const lead = await seedOpportunity({ name: "Caminho completo" });
+    await assignLead(manager_context, { opportunity_id: lead.opportunity_id, user_id: supervisor_user }, app);
+    await reassignLead(supervisor_context, {
+      opportunity_id: lead.opportunity_id,
+      current_user_id: supervisor_user,
+      user_id: same_team_user
+    }, app);
+    await expect(seeder.opportunity.findUniqueOrThrow({ where: { id: lead.opportunity_id } })).resolves.toMatchObject({
+      assigned_user_id: same_team_user,
+      previous_assigned_user_id: supervisor_user
+    });
+  });
+
+  it("requires the current owner in the reassignment WHERE and enforces both team ends", async () => {
+    const team = await seedOpportunity({ assigned_user_id: same_team_user });
+    const outside = await seedOpportunity({ assigned_user_id: other_team_user });
+    await expect(reassignLead(supervisor_context, { opportunity_id: team.opportunity_id, current_user_id: other_team_user, user_id: supervisor_user }, app)).rejects.toThrow();
+    await expect(reassignLead(supervisor_context, { opportunity_id: outside.opportunity_id, current_user_id: other_team_user, user_id: same_team_user }, app)).rejects.toThrow();
+    await expect(reassignLead(supervisor_context, { opportunity_id: team.opportunity_id, current_user_id: same_team_user, user_id: other_team_user }, app)).rejects.toThrow();
+  });
+
+  it("does not let an untagged Supervisor reassign", async () => {
+    const lead = await seedOpportunity({ assigned_user_id: same_team_user });
+    await expect(reassignLead(untagged_supervisor_context, {
+      opportunity_id: lead.opportunity_id,
+      current_user_id: same_team_user,
+      user_id: same_team_user
+    }, app)).rejects.toThrow(/LEAD_ASSIGNMENT_CONFLICT/);
+  });
+
+  it("assigns a batch partially and names the current owner in the refusal", async () => {
+    const free = await seedOpportunity({ name: "Livre" });
+    const occupied = await seedOpportunity({ name: "Ocupado", assigned_user_id: supervisor_user });
+    const result = await assignLeads(manager_context, {
+      opportunity_ids: [free.opportunity_id, occupied.opportunity_id],
+      user_id: manager_user
+    }, app);
+    expect(result.assigned).toEqual([{ opportunity_id: free.opportunity_id, assigned_user_id: manager_user }]);
+    expect(result.refused).toEqual([expect.objectContaining({
+      opportunity_id: occupied.opportunity_id,
+      reason: "ALREADY_ASSIGNED",
+      current_assigned_user_name: "Sofia Supervisora"
+    })]);
+  });
+
+  it("reassigns N rows to one destination without rateio", async () => {
+    const first = await seedOpportunity({ assigned_user_id: supervisor_user });
+    const second = await seedOpportunity({ assigned_user_id: supervisor_user });
+    const result = await reassignLeads(supervisor_context, {
+      assignments: [first, second].map(({ opportunity_id }) => ({ opportunity_id, current_user_id: supervisor_user })),
+      user_id: same_team_user
+    }, app);
+    expect(result.assigned).toHaveLength(2);
+    expect(new Set(result.assigned.map((item) => item.assigned_user_id))).toEqual(new Set([same_team_user]));
+  });
+});
+
+describe("assignment filters", () => {
+  it("filters by responsible and team inside listLeads", async () => {
+    const acr = await seedOpportunity({ name: "Filtro ACR", assigned_user_id: same_team_user });
+    await seedOpportunity({ name: "Filtro REAL", assigned_user_id: other_team_user });
+    const byResponsible = await listLeads(manager_context, { responsible_user_id: same_team_user, limit: 200 }, app);
+    const byTeam = await listLeads(manager_context, { team: "ACR", limit: 200 }, app);
+    expect(byResponsible.some((row) => row.opportunity_id === acr.opportunity_id)).toBe(true);
+    expect(byResponsible.every((row) => row.assigned_user_id === same_team_user)).toBe(true);
+    expect(byTeam.some((row) => row.opportunity_id === acr.opportunity_id)).toBe(true);
+    expect(byTeam.every((row) => row.assigned_user_id !== other_team_user)).toBe(true);
+  });
+
+  it("a Supervisor filtering another team gets an empty narrowing, never broader scope", async () => {
+    await seedOpportunity({ name: "Só REAL", assigned_user_id: other_team_user });
+    await expect(listLeads(supervisor_context, { team: "REAL", limit: 200 }, app)).resolves.toEqual([]);
   });
 });
 

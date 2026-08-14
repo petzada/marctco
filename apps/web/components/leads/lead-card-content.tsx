@@ -194,7 +194,7 @@ function PossibleDuplicatePanel({ review, slug }: Readonly<{ review: LeadReviewD
           <FinancingFact label="Chegada" value={formatArrivedAt(related.arrived_at)} />
           <FinancingFact
             label="Responsável"
-            value={related.assigned_user_id ? related.assigned_user_id : "Não atribuído"}
+            value={related.assigned_user_id ? (related.assigned_user_name ?? "Responsável sem nome") : "Não atribuído"}
           />
         </dl>
       ) : null}
