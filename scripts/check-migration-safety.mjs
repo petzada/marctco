@@ -10,6 +10,14 @@ const forbidden = [
   { name: "destructive type change", pattern: /\bALTER\s+COLUMN\s+[^;]+\s+TYPE\s+/i }
 ];
 
+// On a managed Postgres the migrations run as a non-superuser that owns
+// nothing: `marctco_migrator` owns every business table. A migration that
+// touches one without `SET ROLE marctco_migrator` dies with "must be owner
+// of table X" — and only `test:managed-migration` catches it, which is a
+// database job away from whoever wrote the SQL. This turns it into a scan.
+const ddl = /\b(?:CREATE|ALTER|DROP)\s+(?:TABLE|INDEX|TYPE|POLICY|VIEW|SEQUENCE|FUNCTION|TRIGGER)\b/i;
+const assumes_migrator = /\bSET\s+ROLE\s+marctco_migrator\b/i;
+
 const failures = [];
 for (const directory of readdirSync(migrations_root, { withFileTypes: true })) {
   if (!directory.isDirectory()) {
@@ -24,6 +32,10 @@ for (const directory of readdirSync(migrations_root, { withFileTypes: true })) {
     if (rule.pattern.test(sql)) {
       failures.push(`${directory.name}: ${rule.name}`);
     }
+  }
+
+  if (ddl.test(sql) && !assumes_migrator.test(sql)) {
+    failures.push(`${directory.name}: DDL without SET ROLE marctco_migrator`);
   }
 }
 
