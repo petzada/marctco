@@ -37,11 +37,11 @@ CREATE TABLE member_tags (
   tag_id UUID NOT NULL,
   created_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT member_tags_pkey PRIMARY KEY (workspace_id, user_id, tag_id),
-  CONSTRAINT member_tags_member_fkey
+  CONSTRAINT member_tags_workspace_id_user_id_fkey
     FOREIGN KEY (workspace_id, user_id)
     REFERENCES workspace_members(workspace_id, user_id)
     ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT member_tags_tag_fkey
+  CONSTRAINT member_tags_workspace_id_tag_id_fkey
     FOREIGN KEY (workspace_id, tag_id)
     REFERENCES tags(workspace_id, id)
     ON DELETE CASCADE ON UPDATE CASCADE
