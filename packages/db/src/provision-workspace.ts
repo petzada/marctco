@@ -28,9 +28,10 @@ interface ProvisionedWorkspaceRow {
  * to put in `app.workspace_id` before the workspace exists (ADR-0006 regra 9,
  * ADR-0019).
  *
- * Calling it twice — two clicks, two tabs — returns the workspace the caller
- * already belongs to instead of creating a second one. The right to reach this
- * function at all lives in the caller's `app_metadata`, never here.
+ * Calling it twice with the same name — two clicks, two tabs — returns the
+ * tenant that name already identified. A new name for the same OWNER creates
+ * another tenant (ADR-0022). The right to reach this function at all lives in
+ * the caller's `app_metadata`, never here.
  *
  * The pipeline definition travels as an argument so `packages/domain` stays
  * the single copy shared with the development seed (ticket 05): the SQL never

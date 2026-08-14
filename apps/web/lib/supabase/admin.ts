@@ -28,11 +28,22 @@ export function createSupabaseAdminClient(): ReturnType<typeof createClient> {
 }
 
 /**
- * Spends the right the technical team granted. Provisioning a second workspace
- * then requires a new marking in the Supabase panel.
+ * Spends the right the technical team granted, and only then. The live Auth
+ * user is the source of truth — a stale JWT can still look marked after the
+ * first click. Returns false when `can_provision_workspace` is not the boolean
+ * true, so the caller must not provision. A second workspace then requires a
+ * new marking in the Supabase panel.
  */
-export async function consumeProvisioningEntitlement(user_id: string): Promise<void> {
+export async function consumeProvisioningEntitlement(user_id: string): Promise<boolean> {
   const admin = createSupabaseAdminClient();
+  const { data, error: read_error } = await admin.auth.admin.getUserById(user_id);
+  if (read_error) {
+    throw new Error(`Could not consume the provisioning right: ${read_error.message}`);
+  }
+  if (data.user?.app_metadata?.[PROVISIONING_CLAIM] !== true) {
+    return false;
+  }
+
   const { error } = await admin.auth.admin.updateUserById(user_id, {
     app_metadata: {
       [PROVISIONING_CLAIM]: false,
@@ -42,4 +53,5 @@ export async function consumeProvisioningEntitlement(user_id: string): Promise<v
   if (error) {
     throw new Error(`Could not consume the provisioning right: ${error.message}`);
   }
+  return true;
 }

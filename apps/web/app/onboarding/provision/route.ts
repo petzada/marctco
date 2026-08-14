@@ -31,10 +31,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (decision.kind === "member") {
     return redirectTo("/access");
   }
-  if (decision.kind === "wait") {
-    // Um login sem associação e sem o direito não cria nada. A tentativa é
-    // auditada sem PII — identificador em hash, nunca e-mail ou nome — e passa
-    // pelo mesmo limiter em memória das tentativas de workspace alheio
+  if (decision.kind === "denied") {
+    // Sem direito e sem vínculo: a tela de erro terminal em /onboarding, nunca
+    // um redirect mudo para o login (ADR-0021). A tentativa é auditada sem PII
+    // e passa pelo mesmo limiter em memória das tentativas de workspace alheio
     // (ADR-0019 §4, ADR-0012).
     const limit = checkSuspiciousRequestLimit(unentitledProvisioningLimiter, {
       scope: "UNENTITLED_PROVISIONING_ATTEMPT",
@@ -53,9 +53,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   // than cleaned up after it. A right that survived a successful provisioning
   // is the ex-collaborator hole: membership removed later, stale claim still
   // in the token, brand-new workspace owned. If the workspace then fails to be
-  // created, the marking has to be redone — the safe side of the trade.
+  // created, the marking has to be redone — the safe side of the trade. A JWT
+  // that still looks marked after the first click must not provision again:
+  // the live Auth user is already false, so this call returns false and the
+  // function is not reached.
+  let spent: boolean;
   try {
-    await consumeProvisioningEntitlement(session.user_id);
+    spent = await consumeProvisioningEntitlement(session.user_id);
   } catch (error: unknown) {
     logger.error({
       event: "workspace_provisioning",
@@ -64,6 +68,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       error
     });
     return redirectTo("/onboarding?error=configuration");
+  }
+  if (!spent) {
+    return redirectTo(workspaces.length > 0 ? "/access" : "/onboarding?error=configuration");
   }
 
   let provisioned;

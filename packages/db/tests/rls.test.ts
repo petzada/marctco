@@ -1408,7 +1408,7 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
     ).toEqual(defaultCommercialPipeline.stages.map((stage) => ({ ...stage })));
   });
 
-  it("returns the workspace the owner already has instead of a second one", async () => {
+  it("returns the workspace of the same name instead of a second one", async () => {
     const owner = randomUUID();
     const [first, second] = await Promise.all([
       provisionAsApp(owner, "Duas abas"),
@@ -1422,12 +1422,17 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
     ).resolves.toBe(1);
   });
 
-  it("gives a collaborator who already belongs somewhere no new workspace to own", async () => {
-    // Ex-colaborador com associação removida é barrado antes, por não ter o
-    // direito em app_metadata; quem ainda tem vínculo nunca vira dono de um
-    // workspace novo por clicar duas vezes.
-    await expect(provisionAsApp(user_a, "Workspace paralelo")).resolves.toBe(workspace_a);
-    await expect(client.workspaceMember.count({ where: { user_id: user_a } })).resolves.toBe(1);
+  it("creates a second tenant for an owner already associated when the name is new", async () => {
+    const owner = randomUUID();
+    const hugs = await provisionAsApp(owner, "Hugs");
+    const acr = await provisionAsApp(owner, "ACR");
+
+    expect(hugs).toBeDefined();
+    expect(acr).toBeDefined();
+    expect(acr).not.toBe(hugs);
+    await expect(
+      client.workspaceMember.count({ where: { user_id: owner, role: "OWNER" } })
+    ).resolves.toBe(2);
   });
 
   it("leaves nothing behind when the workspace cannot be born valid", async () => {

@@ -1,17 +1,23 @@
 import { listUserWorkspaces } from "@marctco/db";
 import { redirect } from "next/navigation";
-import { getAuthenticatedUserId } from "../../lib/supabase/server";
+import { onboardingDecision } from "../../lib/onboarding-decision";
+import { provisioningEntitlement } from "../../lib/provisioning-entitlement";
+import { getAuthenticatedSession } from "../../lib/supabase/server";
 import { workspaceEntryDestination } from "../../lib/workspace-entry";
 import { workspaceRoleLabel } from "../../lib/workspace-role";
 import { EntryShell } from "../entry-shell";
 
 export default async function AccessPage() {
-  const authenticated_user_id = await getAuthenticatedUserId();
-  if (!authenticated_user_id) {
+  const session = await getAuthenticatedSession();
+  if (!session) {
     redirect("/login");
   }
 
-  const workspaces = await listUserWorkspaces({ authenticated_user_id });
+  const workspaces = await listUserWorkspaces({ authenticated_user_id: session.user_id });
+  const decision = onboardingDecision(provisioningEntitlement(session.claims), workspaces);
+  if (decision.kind === "provision") {
+    redirect("/onboarding");
+  }
   const destination = workspaceEntryDestination(workspaces);
   if (destination.kind === "onboarding") {
     redirect("/onboarding");
