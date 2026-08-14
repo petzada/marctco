@@ -9,7 +9,7 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 | # | Documento | Autoridade sobre |
 |---|-----------|------------------|
 | 1 | [CONTEXT.md](./CONTEXT.md) + [docs/adr/](./docs/adr/) | Nomes de domínio e decisões irreversíveis. Vence tudo; se outro doc contradiz, o outro doc está com bug. Autoridade sobre **código/schema**, não sobre rótulo de UI |
-| 2 | [stack-recomendada.md](./stack-recomendada.md) | Técnica: libs, deploy, ORM, fila, auth, isolamento. **Os ADRs 0013 a 0015 supersedem** o que ela diz sobre TanStack Query como padrão de leitura, sobre os cinco papéis e sobre guardar o `raw` sem prazo. **Os ADRs 0020 e 0022 supersedem** “tag também em oportunidades” e “um workspace por grupo” |
+| 2 | [stack-recomendada.md](./stack-recomendada.md) | Técnica: libs, deploy, ORM, fila, auth, isolamento. **Os ADRs 0013 a 0015 supersedem** o que ela diz sobre TanStack Query como padrão de leitura, sobre os cinco papéis e sobre guardar o `raw` sem prazo. **Os ADRs 0020 e 0022 supersedem** “tag também em oportunidades” e “um workspace por grupo”. **Os ADRs 0028 a 0031 supersedem** tag como marca, empresa do grupo como unidade de isolamento, workspace por campanha exclusiva e uma conexão por provedor |
 | 3 | [decisao-features-concorrentes.md](./decisao-features-concorrentes.md) | Escopo de features, navegação, UX |
 | 4 | [sintese-final.md](./sintese-final.md) + [docs/pesquisa/decisoes.md](./docs/pesquisa/decisoes.md) | Fluxo de produto e regras de negócio não tocadas pelo degrau 3. Mesmo nível: `decisoes.md` detalha `sintese-final.md`, não rivaliza com ele |
 | 5 | [docs/pesquisa/](./docs/pesquisa/) (pluga, sintese-manual, concorrentes) | **Nada.** Evidência e referência, nunca autoridade — `pluga.md` descreve o que a Pluga faz, não o que o CRM responde |
@@ -57,6 +57,10 @@ Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sess
 | [0025](./docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md) | **Destino da fila** é Supervisor (com tag) ou o próprio ator; Atendente nunca nasce dono direto |
 | [0026](./docs/adr/0026-atribuicao-em-massa.md) | **Atribuição em massa:** mesma operação, N linhas, um destino; 1 a 1 permanece |
 | [0027](./docs/adr/0027-sem-papel-de-plataforma.md) | **Sem papel de plataforma** — marctco provisiona; os quatro perfis são do cliente |
+| [0028](./docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md) | **Tag é o time** (não "marca ou time"); o time exclui os outros `SUPERVISOR` |
+| [0029](./docs/adr/0029-empresa-e-agrupamento-de-equipe.md) | **Empresa agrupa equipes para leitura** — `Company` + `Tag.company_id`; nunca tenant, escopo, RLS ou coluna da Oportunidade |
+| [0030](./docs/adr/0030-workspace-e-fronteira-do-dono.md) | **Workspace é fronteira do dono;** campanha exclusiva não abre tenant |
+| [0031](./docs/adr/0031-conexao-na-chave-idempotente.md) | **A conexão entra na chave idempotente;** N conexões por provedor |
 
 **Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.
 

@@ -1,141 +1,117 @@
-/implement Continuar a Fase 2 — Operação do lead — a partir das decisões
-travadas em 2026-08-13 (grelha de permissões + auditoria do código).
+/implement Continuar a Fase 2 — Operação do lead — a partir dos tickets 07, 08
+e 09. Os tickets 01 a 06 estão implementados e verdes.
 
-Este arquivo é o ponto de retomada. **Não comece pela `main` local antiga.**
-A sessão que travou a matriz commitou numa branch auxiliar; sem puxá-la, o
-próximo agente reimplementa o Supervisor vendo a fila sem dono.
+Este arquivo é o ponto de retomada, reescrito em 2026-08-14. Substitui a versão
+que descrevia o estado **anterior** à implementação (auditoria de 2026-08-13,
+"não existem `MemberTag`, `WorkspaceMember.status`, Equipe, `reassignLead`") —
+tudo aquilo existe agora.
 
-# Antes de qualquer ticket — sincronizar o ambiente local
+# Estado real (2026-08-14)
 
-A continuidade **não** vale se o working tree não tiver os ADRs 0024–0027, o
-`CONTEXT.md` emendado e a spec/tickets 05 e 06 reescritos.
+**Implementado, em `main`, com os gates verdes:**
 
-No clone/worktree onde a próxima sessão abrir:
+| Ticket | O que entregou |
+|---|---|
+| 01 | Login fechado; workspace adicional para a mesma Direção; tela `/access` para conta sem vínculo |
+| 02 | `campaign_id` / `campaign_name` / `form_id` / `form_name` persistidos na ingestão |
+| 03a | `Tag`, `MemberTag`, `WorkspaceMember.status`, `display_name`, `email`, `whatsapp_phone_e164`; `attachWorkspaceMember`, `listTeam` |
+| 03b | Tela Equipe, convite via Auth Admin, criação de tag no mesmo gesto |
+| 04 | `detachWorkspaceMember`, `terminateWorkspaceMember`, devolução de `OPEN` à fila, `previous_assigned_user_id` |
+| 05 | Escopo real do Supervisor: time por tag compartilhada, fim da equivalência com `MANAGER`, fila sem dono fora do escopo, estado vazio explicando a falta de tag |
+| 06 | `assignLead` / `assignLeads` / `reassignLead` / `reassignLeads`, lote parcial, `listLeadAssignmentDestinations`, filtro por responsável e equipe |
+
+**Não implementado:**
+
+- **07 — Kanban Meus leads.** Não foi começado. Não existe rota `my-leads`, não
+  existe `moveLeadStage`, `@dnd-kit` não está instalado e a barra lateral não
+  tem o item. **Nada pela metade** — não há rota órfã nem link quebrado.
+- **08 — Empresa agrupa equipes.** Nasce da revisão de 2026-08-14.
+- **09 — Supervisor não alcança Supervisor.** Idem. Corrige o conjunto do time
+  que o ticket 05 implementou.
+
+# O que a revisão de 2026-08-14 travou (não reabra)
+
+Autoridade: `CONTEXT.md` + ADRs **0028 a 0031**, que emendam 0002, 0007, 0020 e
+0022. Nasceram da avaliação de uma orientação externa que propunha "business
+units" como eixo de tenant e escopo — recusada.
+
+1. **Tag é o time**, não "marca ou time". O conjunto do time **exclui os outros
+   `SUPERVISOR`** ([ADR-0028](../../docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)).
+   Um Atendente com duas tags continua no time de dois Supervisores — isso é
+   correto e tem teste que o fixa.
+2. **Empresa do grupo agrupa equipes, para leitura.** `Company` +
+   `Tag.company_id`. Nunca tenant, nunca escopo, nunca RLS, nunca roteamento,
+   nunca coluna da Oportunidade. O membro **não** carrega empresa
+   ([ADR-0029](../../docs/adr/0029-empresa-e-agrupamento-de-equipe.md)).
+3. **Workspace é fronteira do dono.** Campanha exclusiva de sub-empresa **não**
+   abre tenant — ganha conexão própria
+   ([ADR-0030](../../docs/adr/0030-workspace-e-fronteira-do-dono.md)). Nada a
+   implementar nesta fase; a capacidade de multi-workspace do ticket 01 fica.
+4. **A conexão entra na chave idempotente**, e um provedor admite N conexões
+   ([ADR-0031](../../docs/adr/0031-conexao-na-chave-idempotente.md)). **Fora
+   desta fase:** [ticket 19 da fundação](../fundacao-e-ingestao/issues/19-conexoes-multiplas-por-provedor.md).
+5. **A quem uma venda "pertence" continua em aberto.** Campanha, quem atendeu,
+   quem fechou e quem contabiliza podem divergir. A forma prevista é snapshot no
+   Ganho — Fase 6/7, com honorários (item A10). Não antecipe.
+
+Continua valendo, sem reabertura, tudo dos ADRs 0024 a 0027: fila sem dono é da
+Gestão e da Direção; destino da fila é Supervisor com tag ou o próprio ator;
+massa é N linhas para um destino, lote parcial, não rateia; sem Super Admin.
+
+# Ordem sugerida
+
+```
+07 (Kanban)    — independente, fecha a fase como planejada
+08 (Empresa)   — independente de 07 e 09
+09 (Supervisor)— corrige o time de 05/06; não depende de 07 nem 08
+```
+
+**09 antes de cadastrar um segundo Supervisor no piloto.** Enquanto houver um
+Supervisor por tag, o defeito não se manifesta; com dois, um alcança o lead do
+outro sem erro nenhum.
+
+**08 antes de a Direção criar muitas tags.** Classificar depois é trabalho
+manual sobre rótulos em uso.
+
+# Gates
 
 ```bash
-git fetch origin
-git checkout docs/grelha-matriz-acesso-0024-0027
-# se você já estiver em main (ou em outra branch da Fase 2) com trabalho local:
-git merge origin/docs/grelha-matriz-acesso-0024-0027
-# para linearizar em cima da auxiliar:
-# git rebase origin/docs/grelha-matriz-acesso-0024-0027
+set -a; . ./.env; set +a          # o .env não entra sozinho no processo
+pnpm typecheck && pnpm lint && pnpm test:unit
+pnpm check:migrations && pnpm db:drift && pnpm test:db
+REDIS_URL=redis://localhost:6380 pnpm test:seam2   # ver nota abaixo
+pnpm test:a7 && pnpm test:managed-migration
 ```
 
-Nome canônico da branch:
+**Portas do compose não sobem nesta máquina.** O Windows bloqueia 63799
+(`bind: ... proibida pelas permissões de acesso`), então o Redis do
+`docker-compose.yml` não inicia. Contorno em uso: container avulso
+`marctco-seam2-redis` em **6380**, com `REDIS_URL` sobrescrito. O Postgres de
+`localhost:54329` é o container da worktree 01, servindo o banco `marctco`. Em
+CI nada disso se aplica — os serviços são do workflow.
 
-```text
-docs/grelha-matriz-acesso-0024-0027
-```
+Antes de julgar um gate vermelho, rode o mesmo gate na `main`. Se falhar nos
+dois, é ambiente.
 
-Depois do merge/rebase, confirme que existem:
+# Armadilha já paga (não repita)
 
-- `docs/adr/0024-fila-sem-dono-e-da-gestao.md`
-- `docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md`
-- `docs/adr/0026-atribuicao-em-massa.md`
-- `docs/adr/0027-sem-papel-de-plataforma.md`
-
-Se `git log -1 --oneline` na `main` local ainda for o merge do PR #37
-(`docs/fase-2-operacao-do-lead`) **sem** esses quatro ADRs, você está no
-documento errado. Pare e sincronize.
-
-Abrir PR e mergear esta branch na `main` remota é o jeito de a próxima
-máquina clonar certo. Até lá, o fetch da auxiliar é obrigatório.
-
-# Quem é você
-
-Você implementa a Fase 2 contra a spec em `.scratch/operacao-do-lead/`.
-Escada: `AGENTS.md` → `CONTEXT.md` → ADRs. **`permissoes.md` na raiz, se
-ainda estiver untracked, não é autoridade** — é o checklist genérico que a
-grelha recusou (entidade `Team`, convite solto, `can()`, Super Admin, RLS
-por papel).
-
-# O que a grelha travou (não reabra)
-
-Autoridade: `CONTEXT.md` + ADRs 0024–0027 (emendam 0015, 0005, 0020, 0022).
-
-1. **Fila sem dono = Gestão e Direção.** Supervisor não vê e não atribui
-   dali ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)).
-2. **Destino da fila = Supervisor `ACTIVE` com ao menos uma tag, ou o
-   próprio ator.** Atendente nunca nasce dono direto
-   ([ADR-0025](../../docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md)).
-3. **Massa = mesma operação, N linhas, um destino.** Preferida na manhã.
-   Não rateia. Lote **parcial**: quem ainda podia ir, vai; quem já tinha
-   dono recusa pelo nome ([ADR-0026](../../docs/adr/0026-atribuicao-em-massa.md)).
-4. **Dois isolamentos.** RLS = outro dono / outro workspace. Perfil =
-   colega no mesmo tenant, nas operações nomeadas. Sem `can()`, sem
-   `Team`, sem policy RLS por papel.
-5. **“Outra assessoria” = outro dono.** ACR e REAL no tenant compartilhado
-   não são vazamento ([ADR-0022](../../docs/adr/0022-workspace-e-fronteira-de-captacao.md)).
-6. **Sem Super Admin** ([ADR-0027](../../docs/adr/0027-sem-papel-de-plataforma.md)).
-7. Atendente = só Oportunidade atribuída a ele. Isso o código **já** faz.
-
-# Auditoria do código (fato, 2026-08-13)
-
-Fundação está na `main` (PR #37 é spec da Fase 2, não implementação).
-
-- **Tenant:** RLS + FORCE RLS + `SET LOCAL` + slug validado contra membro.
-  Teste: `listLeads` não devolve workspace alheio. Isolamento entre donos:
-  **bom**. Sem P0 de vazamento entre clientes.
-- **Atendente:** `attendantScopeSql` em `listLeads` / `getLead` /
-  `countLeadsByMarker`; recusa `assignLead`, resolver revisão, mesclar.
-  Testado. **Certo.**
-- **Supervisor em Leads:** vê o tenant inteiro (fila + outros times).
-  `attendantScopeSql` só recorta `ATTENDANT`. Comentário em
-  `packages/db/src/leads.ts`: *every other role today sees the whole
-  workspace*. **P1 — ilegal em relação ao ADR-0024.** Fechar no ticket 05,
-  **antes** de cadastrar Supervisor no piloto.
-- **Integrações e editor de funil:** Supervisor **já** é recusado (certo).
-  O fallback “SUPERVISOR = MANAGER” **não é uniforme**.
-- **`assignLead`:** recusa só Atendente; destino = qualquer UUID, sem
-  membership, sem tag. Sem route handler na web ainda.
-- **Não existem:** `MemberTag`, `WorkspaceMember.status`,
-  `previous_assigned_user_id` (a spec da Fase 2 pede; schema da fundação
-  ainda não tem), Equipe, `reassignLead`, lote.
-- **`service_role`:** só gasta o direito de provisionar em `app_metadata`.
-
-Parecer: arquitetura **aceitável com ajustes**. Pronto para outro cliente
-da marctco no eixo tenant; **não** pronto para lotar o piloto de
-supervisores.
-
-# Próximos passos (ordem)
-
-Grafo inalterado — [README.md](./README.md):
-
-```
-01 ─┐
-02 ─┤
-03a ┴─┬─ 03b ─┬─ 04
-      └─ 05 ──┴─ 06 ── 07
-```
-
-1. **01, 02, 03a** podem ir juntos. **03a é o gargalo** (`Tag`,
-   `MemberTag`, `ACTIVE|DETACHED`). Sem ele o 05 não computa time.
-2. **05** — obrigatório aplicar ADR-0024: Supervisor **não** vê fila sem
-   dono; sem tag, tabela vazia (não é consolo). Acabar a equivalência
-   Supervisor/Gestão nas leituras de Leads.
-3. **06** — `assignLead` / `reassignLead` / lote contra 0024–0026. Não
-   copiar o `assignLead` atual.
-4. **03b, 04, 07** na ordem do README.
-5. **Não** implementar motor de permissão, tabela `teams`, Super Admin,
-   nem RLS por papel.
-
-Critérios já reescritos: tickets
-[05](./issues/05-escopo-real-do-supervisor.md) e
-[06](./issues/06-atribuir-e-reatribuir.md), e [spec.md](./spec.md).
+A migration do ticket 03a nomeou as FKs de `member_tags` como
+`member_tags_member_fkey` / `member_tags_tag_fkey`. O resto do repo usa a
+derivação do Prisma (`<tabela>_<colunas>_fkey`), então o `pnpm db:drift`
+reprovava e o CI reprovaria junto. Corrigido em 2026-08-14, na própria migration
+(ainda não deployada). **Toda FK nova segue a derivação do Prisma.**
 
 # Skills sugeridas
 
-- `domain-modeling` — se um termo novo aparecer; senão só consumir `CONTEXT.md`.
+- `supabase-postgres-best-practices` — **antes** da migration do ticket 08.
 - `tdd` — operações nomeadas e costura principal.
-- `supabase-postgres-best-practices` — **antes** de qualquer migration
-  (`Tag`, `MemberTag`, `status`, RLS).
-- `code-review` — depois do ticket, contra spec **e** ADRs 0024–0027.
-- `design-taste-frontend` / `shadcn` — 03b e 07.
+- `design-taste-frontend` / `shadcn` — ticket 07.
+- `code-review` — depois do ticket, contra spec **e** ADRs 0024–0031.
 
 # Leitura obrigatória desta retomada
 
 1. Este arquivo
-2. `CONTEXT.md` — **Distribuição do lead**, **Perfil de acesso**, **Workspace**
-3. ADRs 0024, 0025, 0026, 0027 (e a emenda no 0015)
+2. `CONTEXT.md` — **Perfil de acesso**, **Tag**, **Empresa**, **Workspace**, **Distribuição do lead**
+3. ADRs 0028, 0029, 0030, 0031 (e as emendas em 0002, 0007, 0020, 0022)
 4. `.scratch/operacao-do-lead/spec.md` e `README.md`
 5. O ticket da vez

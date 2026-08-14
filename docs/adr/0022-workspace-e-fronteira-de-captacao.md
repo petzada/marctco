@@ -8,6 +8,12 @@ O piloto é um grupo: a **Hugs** é a holding, e ACR e REAL são empresas dela. 
 
 **Status:** accepted · 2026-08-12
 
+> **Emendado pelo [ADR-0030](./0030-workspace-e-fronteira-do-dono.md):** a fronteira é o **dono**, não a fila de entrada. Campanha exclusiva de sub-empresa **não** abre workspace novo — ela ganha conexão própria dentro do mesmo tenant ([ADR-0031](./0031-conexao-na-chave-idempotente.md)), porque separar tenant custa a detecção de duplicado da mesma pessoa. A objeção abaixo ("o unique `(workspace_id, provider)` admite uma Pluga por workspace") deixou de valer: o unique cai.
+>
+> **Emendado pelo [ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md):** o time do Supervisor exclui os outros `SUPERVISOR`, então "dono atual e destino compartilham tag com o ator" deixa de alcançar o lead de outro Supervisor.
+>
+> Permanece inalterado o que mais importa aqui: **a campanha não roteia o lead**, e a distribuição em dois níveis é decisão humana da Gestão.
+
 Fecha o recorte do piloto com o grupo Hugs, campanhas mistas e campanhas separadas. Emenda a leitura estrita do [ADR-0002](./0002-workspace-tags-times.md) (“um workspace por grupo”). Não reabre tag na oportunidade ([ADR-0020](./0020-tag-no-membro-define-o-time.md)): “este lead é da equipe X” é atribuir a um membro tagueado X.
 
 `campaign_id`, `campaign_name`, `form_id` e `form_name` do contrato `v1` são persistidos na Oportunidade — **não para rotear a fila**, e sim porque são a atribuição de mídia (a leitura de ROAS que a Fase 7 vai querer) e porque entram no conjunto de discriminadores de possível duplicado (A2). O payload bruto expira em 90 dias ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)): a ingestão é a **única** janela em que esses valores existem para serem gravados.

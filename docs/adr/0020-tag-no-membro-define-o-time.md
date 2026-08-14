@@ -4,6 +4,10 @@ O Supervisor responde por um time, e time neste produto é tag. A tag que comput
 
 **Status:** accepted · 2026-08-12
 
+> **Emendado pelo [ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md):** a tag é o **time**, e não "marca ou time". O conjunto do time exclui os outros `SUPERVISOR` — sem isso, dois Supervisores com a mesma tag reatribuem o lead um do outro sem nenhuma recusa disparar.
+>
+> **Complementado pelo [ADR-0029](./0029-empresa-e-agrupamento-de-equipe.md):** a marca do grupo sai da tag e vira `Company` + `Tag.company_id`, que agrupa equipes para leitura e **nunca** computa escopo.
+
 Fecha o item A1 do [plano de construção](../plano-de-construcao.md). Emenda [ADR-0002](./0002-workspace-tags-times.md) (o “opcionalmente em oportunidades”) e a dependência aberta do [ADR-0015](./0015-perfis-de-acesso-e-escopo.md).
 
 **Considered options (rejeitadas):**

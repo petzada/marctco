@@ -12,13 +12,15 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 
 | Glossário (`CONTEXT.md`) | Código | Nota |
 |---|---|---|
-| Workspace | `Workspace` | Fronteira de captação, não “uma assessoria” nem automaticamente o grupo ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
+| Workspace | `Workspace` | Fronteira do **dono**, não “uma assessoria” nem a pessoa jurídica do grupo. Campanha exclusiva não abre tenant ([ADR-0030](./0030-workspace-e-fronteira-do-dono.md), emendando o [ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
 | Associação ao workspace | `WorkspaceMember` | Onde vive o perfil de acesso e o `status` do vínculo. **Nunca** `Membership` solto nem `User` do workspace |
 | Perfil de acesso | `WorkspaceMember.role` | `ATTENDANT \| SUPERVISOR \| MANAGER \| OWNER` — quatro, e nenhum a mais ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
 | Contexto de acesso | `AccessContext` = `UserContext \| JobContext` | `UserContext`: `workspace_id` + `user_id` + `role`, construído somente por `resolveUserContextForSlug` após validar a associação. `JobContext`: `workspace_id` + `integration_event_id` — o worker não tem usuário nem papel ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md), [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). **Nunca** `Session` nem `RequestContext` |
 | Provisionamento | `private.provision_workspace` | Workspace + vínculo do dono + funil padrão, num commit ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9) |
-| Tag | `Tag` | Catálogo do workspace, gerido na Equipe no mesmo gesto do cadastro. Na oportunidade fica **fora da Fase 2**; se nascer depois, é o mesmo catálogo e não computa escopo ([ADR-0020](./0020-tag-no-membro-define-o-time.md)) |
+| Tag | `Tag` | Catálogo do workspace, gerido na Equipe no mesmo gesto do cadastro. Nomeia o **time**, nunca a marca ([ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)). Na oportunidade fica **fora da Fase 2**; se nascer depois, é o mesmo catálogo e não computa escopo ([ADR-0020](./0020-tag-no-membro-define-o-time.md)) |
 | Tag no membro | `MemberTag` | Aplicação da tag ao `WorkspaceMember`. É o que computa o time de um `SUPERVISOR`. **Nunca** `Team` nem herança para a Oportunidade |
+| Empresa do grupo | `Company` | Sub-empresa da assessoria (ACR, REAL), linha do workspace. Agrupa equipes **para leitura**; nunca tenant, nunca escopo, nunca coluna da Oportunidade ([ADR-0029](./0029-empresa-e-agrupamento-de-equipe.md)). **Nunca** `BusinessUnit`, `Branch` nem `Organization` |
+| Empresa da equipe | `Tag.company_id` | Aponta a equipe para a empresa. O membro **não** carrega empresa: ela é derivada da equipe dele, e é por isso que ninguém consegue usá-la como eixo de permissão |
 | Tipo de financiamento | `FinancingType` | `VEHICLE \| REAL_ESTATE \| PERSONAL_LOAN \| OTHER`; opcional na Oportunidade |
 | Funil | `Pipeline` | Sempre tipado: `type: COMMERCIAL \| LEGAL` |
 | Funil padrão do workspace | `Pipeline.is_default` | Exatamente um comercial por workspace; destino da ingestão ([ADR-0009](./0009-etapas-editaveis-papeis-e-status.md)) |
@@ -38,7 +40,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Oportunidade do envio | `LeadSubmission.opportunity_id` | Nula enquanto o envio não produziu card: quarentena, ou plano ainda não aplicado |
 | Payload bruto recebido | `IntegrationEvent.raw` | Cópia única. Anulável, e **nulo só pode significar expirado**: o payload é gravado no recebimento, antes do 200 ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)) |
 | Atendente | `WorkspaceMember.role = ATTENDANT` | Enxerga apenas oportunidade atribuída a si ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
-| Supervisor | `WorkspaceMember.role = SUPERVISOR` | Com tag: o time. Sem tag: não reatribui — não herda Gestão. **Não vê a fila sem dono** ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). O código da fundação ainda trata como `MANAGER` só porque `MemberTag` não existe; nunca fallback permanente ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md), [ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
+| Supervisor | `WorkspaceMember.role = SUPERVISOR` | Com tag: o time — que **exclui os outros `SUPERVISOR`** ([ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)). Sem tag: não reatribui — não herda Gestão. **Não vê a fila sem dono** ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)) ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md), [ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
 | Gestão | `WorkspaceMember.role = MANAGER` | Operação inteira do workspace |
 | Direção | `WorkspaceMember.role = OWNER` | Operação **e** conta: membros, papéis, segredo de integração. É o papel criado no provisionamento |
 | Cadastro de colaborador | — | Ato da Direção na Equipe: login + `WorkspaceMember` no mesmo ato, sem direito de provisionar. E-mail já existente só atrela ([ADR-0021](./0021-dois-caminhos-de-nascimento-login-fechado.md), [ADR-0023](./0023-desligamento-desativa-o-vinculo.md)). **Nunca** `SignUp` |
@@ -57,7 +59,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Decisão de Pessoa | `PersonDecision` | União discriminada `NO_CONTACT \| REUSE_PERSON \| NEW_PERSON \| NEW_PERSON_WITH_IDENTITY_CONFLICT`; entra em `decideIntake` como a metade "quem é" do `IntakePlan`. **Nunca** `decideReuseOfPerson` devolvendo um id anulável — a variante do conflito precisa carregar as candidatas |
 | Candidata a Pessoa | `PersonCandidate` | O que `findPersonCandidates` devolve: `person_id`, o `cpf` já gravado e quais tipos de chave casaram |
 | Contatos da Pessoa | `PersonContacts` | O conjunto **completo** que a submissão traz — nunca um delta. A não-sobrescrita é da constraint `UNIQUE(person_id, phone_e164)`, não da decisão |
-| Chave idempotente do envio | `SubmissionKey` | `source` + `external_lead_id`; o que a constraint `UNIQUE(workspace_id, source, external_lead_id)` arbitra ([ADR-0007](./0007-ingestao-idempotencia.md)) |
+| Chave idempotente do envio | `SubmissionKey` | Conexão + `source` + `external_lead_id`; o que a constraint `UNIQUE(workspace_id, integration_connection_id, source, external_lead_id)` arbitra ([ADR-0007](./0007-ingestao-idempotencia.md), [ADR-0031](./0031-conexao-na-chave-idempotente.md)) |
 | Revisão de ingestão | `IntakeReview` | Pendência **marcada na Oportunidade já criada**, nunca bloqueio; `type: IDENTITY_CONFLICT \| POSSIBLE_DUPLICATE` |
 | Candidatas da revisão de identidade | `IntakeReview.candidate_person_ids` | As Pessoas para quem as chaves apontaram; vazio em `POSSIBLE_DUPLICATE`, e o `CHECK` recusa a combinação errada |
 | Oportunidade ligada pela revisão | `IntakeReview.related_opportunity_id` | A outra Oportunidade em aberto da mesma Pessoa; nula em `IDENTITY_CONFLICT` |
@@ -106,8 +108,10 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Nome de exibição do membro | `WorkspaceMember.display_name` | Denormalizado, para a Equipe e o nome do responsável listarem sem consultar a Auth por linha |
 | E-mail do membro | `WorkspaceMember.email` | Idem `display_name` |
 | WhatsApp do membro | `WorkspaceMember.whatsapp_phone_e164` | Opcional; mesmo leitor de telefone da ingestão. O disparo é Fase 4 ([ADR-0003](./0003-whatsapp-instancia-unica-gatilho-atribuicao.md)) |
-| Tag | `Tag` | Catálogo do workspace; unicidade por `(workspace_id, nome)` sem distinguir maiúscula |
+| Tag | `Tag` | Catálogo do workspace; unicidade por `(workspace_id, nome)` sem distinguir maiúscula. Nomeia o time ([ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)) |
 | Tag do membro | `MemberTag` | Aplicação da tag ao membro. É o que computa o time do Supervisor; nunca herdada pela Oportunidade ([ADR-0020](./0020-tag-no-membro-define-o-time.md)) |
+| Empresa do grupo | `Company` | `(id, workspace_id, name)`; unicidade por `(workspace_id, nome)` sem distinguir maiúscula, como a `Tag` |
+| Empresa da equipe | `Tag.company_id` | Anulável. Só leitura e relatório o consultam — nenhuma operação de escopo, RLS ou roteamento ([ADR-0029](./0029-empresa-e-agrupamento-de-equipe.md)) |
 | Instituição financeira | `financial_institution` | Dado opcional do financiamento; não identifica Pessoa |
 | Valor da parcela | `installment_amount` | Decimal monetário normalizado; entrada preserva também o valor bruto |
 | Chegada | `arrived_at` | Início do relógio de SLA. Instante em que a Oportunidade passa a existir — igual ao recebimento no caminho direto, igual à liberação para lead ex-quarentena ([ADR-0007](./0007-ingestao-idempotencia.md)) |
