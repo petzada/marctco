@@ -53,6 +53,10 @@ Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sess
 | [0021](./docs/adr/0021-dois-caminhos-de-nascimento-login-fechado.md) | **Dois caminhos de nascimento;** login fechado — marctco provisiona, Direção cadastra colaborador |
 | [0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) | **Workspace é fronteira de captação;** mesma Direção em vários; tag em membro é a marca/time |
 | [0023](./docs/adr/0023-desligamento-desativa-o-vinculo.md) | **Desatrelar** é de um workspace; **desligar** é do quadro — Direção atravessa todos os tenants |
+| [0024](./docs/adr/0024-fila-sem-dono-e-da-gestao.md) | **Fila sem dono** é da Gestão e da Direção; Supervisor só reatribui dentro do time |
+| [0025](./docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md) | **Destino da fila** é Supervisor (com tag) ou o próprio ator; Atendente nunca nasce dono direto |
+| [0026](./docs/adr/0026-atribuicao-em-massa.md) | **Atribuição em massa:** mesma operação, N linhas, um destino; 1 a 1 permanece |
+| [0027](./docs/adr/0027-sem-papel-de-plataforma.md) | **Sem papel de plataforma** — marctco provisiona; os quatro perfis são do cliente |
 
 **Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.
 

@@ -1,6 +1,6 @@
 # Fase 2 — Operação do lead
 
-Fonte: [spec.md](./spec.md). Tickets em [issues/](./issues/). Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
+Fonte: [spec.md](./spec.md). Tickets em [issues/](./issues/). Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Retomada: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md) — sem os ADRs 0024–0027 no working tree, o Supervisor volta a ver a fila sem dono.
 
 ## O que esta fase abre
 
@@ -28,11 +28,17 @@ O caminho do lead até quem atende, que hoje não existe. A operação é em **d
 
 **03a é o gargalo:** cinco dos oito tickets passam por ele. Foi rachado do ticket 03 original justamente por isso — a metade que destrava os outros não precisa esperar pela tela.
 
+Retomada: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md). Sem os ADRs 0024–0027 no working tree, o Supervisor volta a ver a fila sem dono.
+
 ## Decisões que esta revisão fechou
 
 Registradas nos ADRs (degrau 1 da escada do [AGENTS.md](../../AGENTS.md)), não aqui:
 
 - **Distribuição em dois níveis** e, por consequência, o **Supervisor reatribui dentro do time** — [ADR-0015](../../docs/adr/0015-perfis-de-acesso-e-escopo.md), [ADR-0022](../../docs/adr/0022-workspace-e-fronteira-de-captacao.md). Sem isso o lead trava no Supervisor: `assignLead` exige `IS NULL`.
+- **Fila sem dono é da Gestão e da Direção.** Supervisor não vê e não puxa dali — [ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md).
+- **Destino da fila é Supervisor com tag ou o próprio ator.** Atendente nunca nasce dono direto — [ADR-0025](../../docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md).
+- **Atribuição em massa:** N linhas, um destino, lote parcial; não rateia — [ADR-0026](../../docs/adr/0026-atribuicao-em-massa.md).
+- **Sem papel de plataforma** — [ADR-0027](../../docs/adr/0027-sem-papel-de-plataforma.md).
 - **A campanha não roteia o lead.** Quem decide qual equipe atende é a Gestão, por capacidade — não a empresa do grupo que pagou o anúncio. Campanha e formulário se persistem para atribuição de mídia e para discriminar duplicado — [ADR-0022](../../docs/adr/0022-workspace-e-fronteira-de-captacao.md).
 - **Gestão e Direção não têm Kanban.** Não atendem: distribuem e acompanham na tabela, com filtro por responsável e por equipe. Honra o §4 do [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md).
 - **Sem campo monetário novo.** `amount` adiado para a Fase 7 — item A10 do plano.
