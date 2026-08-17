@@ -58,7 +58,7 @@ Quem atende ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 
 ### Perfil de acesso e escopo do Supervisor
 
-21. Como Atendente, quero ver só os leads atribuídos a mim, na tabela e no Kanban, para não navegar a carteira da empresa.
+21. Como Atendente, quero ver só os leads atribuídos a mim, em Meus leads (Kanban e Lista), para não navegar a carteira da empresa nem uma segunda tela com o mesmo conjunto.
 22. Como Supervisor com tag, quero ver na tabela só os leads do meu time — inclusive os que a Gestão atribuiu a mim —, para repartir entre os atendentes. A fila sem dono não é minha.
 23. Como Supervisor com tag, quero que o Kanban **Meus leads** mostre só os cards atribuídos a mim — não a fila sem dono e não o que já roteei ao time. O time continua na tabela de Leads.
 24. Como Supervisor sem tag, quero não ter time e não reatribuir, para o alcance não voltar a ser o da Gestão por omissão — e quero que a tela me diga **por que** está vazia, em vez de parecer defeito. A fila sem dono não é o consolo.
@@ -120,9 +120,10 @@ Quem atende ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 
 ### Navegação
 
-66. Como membro, quero **Equipe** na barra lateral se o meu perfil a alcança, e quero **Meus leads** além de **Leads** se eu atendo.
+66. Como membro, quero **Equipe** na barra lateral se o meu perfil a alcança. Quero **Meus leads** se eu atendo, e **Leads** se eu distribuo ou acompanho o time — o Atendente não tem as duas.
 67. Como Atendente, não quero o item Equipe na barra — ausência de item não é o controle de acesso; a rota recusa sozinha.
 68. Como Gestão ou Direção, não quero o item **Meus leads**, porque não atendo — e isso não é recusa de acesso, é ausência de escopo.
+68a. Como Atendente, não quero o item **Leads**, porque Meus leads (Kanban e Lista) já é o conjunto inteiro — e isso não é recusa, é ausência de escopo.
 69. Como Supervisor recém-cadastrado sem tag, quero que a Equipe e os Leads me expliquem que ainda não tenho time e que a Direção define isso, em vez de mostrarem tela vazia sem motivo.
 
 ## Implementation Decisions
@@ -226,7 +227,7 @@ O teste atual que exige “quem já pertence recebe o workspace antigo” **inve
 
 `DESIGN.md` é a lei. Equipe é `{component.data-table}` no desktop e card empilhado abaixo de 480px. Kanban vira faixa com scroll-snap abaixo de 768px. Integrações continuam Gestão para cima.
 
-A barra ganha **Equipe** (só para quem a matriz alcança na leitura; a rota recusa o resto) e **Meus leads** (só para quem atende — `ATTENDANT` e `SUPERVISOR`). São ausências de natureza diferente e os testes devem tratá-las assim: Equipe some do Atendente **e** a rota o recusa, porque há dado que ele não pode ler; Meus leads some da Gestão porque o escopo dela ali é vazio, e a rota apenas a manda para Leads.
+A barra ganha **Equipe** (só para quem a matriz alcança na leitura; a rota recusa o resto) e **Meus leads** (só para quem atende — `ATTENDANT` e `SUPERVISOR`). **Leads** some do Atendente: Meus leads já mostra o conjunto dele. São ausências de natureza diferente e os testes devem tratá-las assim: Equipe some do Atendente **e** a rota o recusa, porque há dado que ele não pode ler; Meus leads some da Gestão porque o escopo dela ali é vazio, e a rota apenas a manda para Leads; Leads some do Atendente pelo mesmo motivo, e a rota o manda para Meus leads.
 
 Parcela usa numerais tabulares. Campanha e formulário são colunas da tabela de Leads — permanentes, não um layout que aparece só quando o filtro é "sem responsável": elas servem para ler a origem do lead a qualquer momento, e o filtro por responsável/equipe é que faz o recorte da fila. Esse filtro é `{component.data-table}` com controle de filtro no cabeçalho, refletido na URL para a Gestão poder voltar à mesma vista.
 

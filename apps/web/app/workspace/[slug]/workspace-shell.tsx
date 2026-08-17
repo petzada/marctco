@@ -23,6 +23,12 @@ interface WorkspaceShellProps {
    * refuses them — it redirects (ADR-0015).
    */
   readonly attendsLeads: boolean;
+  /**
+   * Whether this profile has the Leads table. Absent for the ATTENDANT:
+   * Meus leads already shows their set. The route redirects, same absence
+   * of scope as Gestão on the board (ADR-0015).
+   */
+  readonly seesLeadsTable: boolean;
 }
 
 interface NavigationProps {
@@ -39,7 +45,8 @@ export function WorkspaceShell({
   roleLabel,
   canReadTeam,
   canManageIntegrations,
-  attendsLeads
+  attendsLeads,
+  seesLeadsTable
 }: WorkspaceShellProps) {
   const pathname = usePathname();
   const mobileMenu = useRef<HTMLDetailsElement>(null);
@@ -49,11 +56,15 @@ export function WorkspaceShell({
       icon: <HouseIcon aria-hidden="true" size={20} weight="regular" />,
       label: "Visão geral"
     },
-    {
-      href: `/workspace/${slug}/leads`,
-      icon: <UsersIcon aria-hidden="true" size={20} weight="regular" />,
-      label: "Leads"
-    },
+    ...(seesLeadsTable
+      ? [
+          {
+            href: `/workspace/${slug}/leads`,
+            icon: <UsersIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Leads"
+          }
+        ]
+      : []),
     ...(attendsLeads
       ? [
           {

@@ -41,7 +41,7 @@ A distribuição do lead tem **dois níveis**, e a matriz existe para sustentá-
 
 | Tela | Fase | Atendente | Supervisor | Gestão | Direção |
 |---|---|---|---|---|---|
-| Leads (tabela) | 1 | eu | time | tudo | tudo |
+| Leads (tabela) | 1 | — | time | tudo | tudo |
 | Card do lead — editar | 1 | eu | time | tudo | tudo |
 | Resolver identidade / duplicidade | 1 | — | time | tudo | tudo |
 | Integrações — histórico, reprocessar, quarentena | 1 | — | — | ✓ | ✓ |
@@ -78,6 +78,7 @@ Estas linhas não são arbitrárias:
 - **Supervisor reatribui dentro do time; Gestão e Direção reatribuem em qualquer lugar.** Sem isso o segundo nível da distribuição não existe: o lead que a Gestão entregou ao Supervisor já tem dono, e passá-lo ao Atendente é reatribuir. O Supervisor só o faz quando o dono atual **e** o destino estão no seu time — nunca tira lead de quem não é seu.
 - **O Kanban é tela de atendimento, e Gestão e Direção não atendem.** Eles distribuem e acompanham, e fazem as duas coisas na tabela de Leads, que é a vista de alto volume decidida no [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md) §4. O “—” nessa linha **não é recusa de acesso**: nada no quadro está fora do que a tabela já lhes mostra. O acompanhamento que eles precisam é o filtro por responsável e por equipe na própria tabela — a linha logo abaixo.
 - **Meus leads do Supervisor é `eu`, não `time`.** A tabela continua `time` — é lá que ele vê o que já roteou e reatribui. O quadro é de quem atende agora: depois de passar o card ao Atendente, ele some de Meus leads. Emenda do piloto em 2026-08-17; a célula da matriz acima era `time` e mentia o nome da tela.
+- **Leads (tabela) do Atendente é `—`, não `eu`.** Meus leads (Kanban e Lista) já mostra o conjunto inteiro dele. A tabela é de quem distribui e acompanha. O item some da barra e a rota o manda para Meus leads — o espelho do “—” de Gestão e Direção no Kanban, e a mesma ausência de escopo, não um bloqueio. Emenda do piloto em 2026-08-17.
 - **Desligar é da Direção; desatrelar é da Gestão para cima.** Tirar alguém de um workspace é operação; tirar do quadro inteiro atravessa tenants e é conta ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)).
 
 ## Por que uma regra agora, e não a matriz inteira

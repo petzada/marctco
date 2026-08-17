@@ -1,6 +1,6 @@
 # 07 — Kanban Meus leads
 
-**What to build:** O atendente conduz o dia num quadro das próprias etapas em aberto — com lista alternada. Arrastar o card persiste a etapa. Ganho e perda não são colunas. A tabela geral de Leads continua sendo tabela. O Supervisor vê **os cards atribuídos a ele**; o que já roteou ao time fica na tabela, não no quadro. **Gestão e Direção não têm quadro:** elas distribuem e acompanham, não atendem.
+**What to build:** O atendente conduz o dia num quadro das próprias etapas em aberto — com lista alternada. Arrastar o card persiste a etapa. Ganho e perda não são colunas. A tabela geral de Leads continua sendo tabela **para quem distribui**; o Atendente não a vê — Meus leads já é o conjunto dele. O Supervisor vê **os cards atribuídos a ele**; o que já roteou ao time fica na tabela, não no quadro. **Gestão e Direção não têm quadro:** elas distribuem e acompanham, não atendem.
 
 **Blocked by:** 06 — Atribuir e reatribuir
 
@@ -8,7 +8,7 @@
 
 ## Acceptance criteria
 
-- [x] Item **Meus leads** na barra para quem atende (`ATTENDANT` e `SUPERVISOR`), rota própria, além de **Leads**. A lista geral permanece tabela paginada — sem Kanban global ([decisao-features-concorrentes.md](../../../decisao-features-concorrentes.md) §4)
+- [x] Item **Meus leads** na barra para quem atende (`ATTENDANT` e `SUPERVISOR`), rota própria. **Leads** (tabela) some do Atendente: Meus leads já é o conjunto dele (Kanban e Lista). Supervisor, Gestão e Direção continuam com a tabela. Sem Kanban global ([decisao-features-concorrentes.md](../../../decisao-features-concorrentes.md) §4)
 - [x] Toggle Lista / Kanban (`{component.toggle-segmented}` do `DESIGN.md`)
 - [x] Colunas = etapas do funil comercial padrão; só Oportunidades `OPEN` não mescladas, no escopo do papel ([ADR-0009](../../../docs/adr/0009-etapas-editaveis-papeis-e-status.md), [ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
 - [x] Atendente: só os atribuídos a ele. Supervisor: só os atribuídos a ele — **não** a fila sem dono e **não** o que já roteou ao time. O time continua na tabela de Leads (piloto, 2026-08-17; ADR-0015 célula `eu`)
