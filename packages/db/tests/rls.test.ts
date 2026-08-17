@@ -1977,4 +1977,20 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       { table_name: "workspaces", command: "SELECT" }
     ]);
   });
+
+  it("indexes open leads still waiting for first contact, only in the migration", async () => {
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'opportunities_workspace_id_arrived_at_first_contact_pending_idx'
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "opportunities_workspace_id_arrived_at_first_contact_pending_idx",
+        predicate:
+          "((first_contact_at IS NULL) AND (status = 'OPEN'::opportunity_status) AND (merged_into_opportunity_id IS NULL))"
+      }
+    ]);
+  });
 });

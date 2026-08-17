@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { LeadAssignmentBatchResult, LeadAssignmentDestination, LeadListRow } from "@marctco/db";
+import type { ResolvedWorkspaceSettings } from "@marctco/domain";
 import { buildLeadRowViewModel, formatArrivedAt } from "../../lib/leads/row-view-model";
 import { supervisorTeamEmptyState } from "../../lib/supervisor-team-empty-state";
 import { Card } from "../ui/card";
@@ -24,6 +25,8 @@ export interface LeadsTableProps {
   readonly assignDestinations: readonly LeadAssignmentDestination[];
   readonly reassignDestinations: readonly LeadAssignmentDestination[];
   readonly isUnassignedView: boolean;
+  readonly clockSettings: ResolvedWorkspaceSettings;
+  readonly nowIso: string;
 }
 
 /**
@@ -48,7 +51,9 @@ function InteractiveLeadsTable({
   actorUserId,
   assignDestinations,
   reassignDestinations,
-  isUnassignedView
+  isUnassignedView,
+  clockSettings,
+  nowIso
 }: LeadsTableProps) {
   const router = useRouter();
   const cache = useQueryClient();
@@ -135,7 +140,11 @@ function InteractiveLeadsTable({
     );
   }
 
-  const models = visibleRows.map((row) => ({ row, opportunity_id: row.opportunity_id, model: buildLeadRowViewModel(row) }));
+  const models = visibleRows.map((row) => ({
+    row,
+    opportunity_id: row.opportunity_id,
+    model: buildLeadRowViewModel(row, { settings: clockSettings, now: new Date(nowIso) })
+  }));
 
   function openAssignment(rowsToAssign: readonly LeadListRow[]) {
     setDialogRows(rowsToAssign);
@@ -165,6 +174,7 @@ function InteractiveLeadsTable({
               <DataTableHeaderCell>Campanha</DataTableHeaderCell>
               <DataTableHeaderCell>Formulário</DataTableHeaderCell>
               <DataTableHeaderCell>Chegada</DataTableHeaderCell>
+              <DataTableHeaderCell>Espera</DataTableHeaderCell>
               <DataTableHeaderCell>
                 <span className="sr-only">Ações</span>
               </DataTableHeaderCell>
@@ -189,6 +199,7 @@ function InteractiveLeadsTable({
                 <DataTableCell>{model.campaignLabel}</DataTableCell>
                 <DataTableCell>{model.formLabel}</DataTableCell>
                 <DataTableCell numeric>{formatArrivedAt(model.arrivedAt)}</DataTableCell>
+                <DataTableCell numeric>{model.waitLabel}</DataTableCell>
                 <DataTableCell>
                   <div className="flex items-center gap-xxs"><LeadRowActions markers={model.markers} opportunityId={opportunity_id} slug={slug} />
                     {(row.assigned_user_id ? reassignDestinations : assignDestinations).length ? <Button onClick={() => openAssignment([row])} variant="tertiary">{row.assigned_user_id ? "Reatribuir" : "Atribuir"}</Button> : null}
@@ -220,6 +231,7 @@ function InteractiveLeadsTable({
               <StackedField label="Campanha" value={model.campaignLabel} />
               <StackedField label="Formulário" value={model.formLabel} />
               <StackedField label="Chegada" numeric value={formatArrivedAt(model.arrivedAt)} />
+              <StackedField label="Espera" numeric value={model.waitLabel} />
             </dl>
             {(row.assigned_user_id ? reassignDestinations : assignDestinations).length ? <Button className="mt-sm w-full" onClick={() => openAssignment([row])} variant="secondary">{row.assigned_user_id ? "Reatribuir" : "Atribuir"}</Button> : null}
           </Card>

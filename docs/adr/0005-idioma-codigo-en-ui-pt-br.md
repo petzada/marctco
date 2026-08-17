@@ -120,6 +120,10 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Situação da atividade | `ActivityStatus` | `OPEN \| DONE \| CANCELED`. Concluir prova atendimento; cancelar não |
 | SLA de primeiro contato | `WorkspaceSettings.first_contact_sla_minutes` | Minutos até a primeira evidência de atendimento. Anulável: nulo (ou linha ausente) resolve para o padrão do domínio, nunca desliga o relógio. Sem `first_contact_trigger` nesta fase |
 | Limite de estagnação | `WorkspaceSettings.stagnation_days` | Dias sem movimento. Anulável pela mesma regra do SLA |
+| Primeiro contato | `Opportunity.first_contact_at` | Instante da primeira evidência de atendimento. Anulável; escrito uma vez com `WHERE first_contact_at IS NULL`. Nesta fase a evidência é a primeira Atividade concluída; a Fase 4 preenche a mesma coluna com a mensagem de WhatsApp |
+| Estado de SLA de primeiro contato | `FirstContactSlaState: PENDING \| MET \| BREACHED` | Função pura `firstContactSla` em `packages/domain`. Relógio corrido. `WON`/`LOST` sem contato nunca é `MET` |
+| Duração da espera de primeiro contato | `FirstContactSla.duration_ms` | Milissegundos corridos de `arrived_at` até `first_contact_at`, ou até `now` enquanto não houve contato |
+| Marcador de SLA estourado | `Marker = … \| FIRST_CONTACT_SLA_BREACHED` | `markersFor` passa a receber o estado de SLA e devolve o estourado como mais um marcador. Os contadores do topo da tabela **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
 
 ## Regras
 

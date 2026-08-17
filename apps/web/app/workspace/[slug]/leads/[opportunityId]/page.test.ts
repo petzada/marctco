@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getLead = vi.fn();
 const listLeadActivities = vi.fn();
 const listTeam = vi.fn();
+const getWorkspaceSettings = vi.fn();
 const resolveWorkspaceAccess = vi.fn();
 
-vi.mock("@marctco/db", () => ({ getLead, listLeadActivities, listTeam }));
+vi.mock("@marctco/db", () => ({ getLead, listLeadActivities, listTeam, getWorkspaceSettings }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
 vi.mock("next/link", () => ({ default: (props: { href: string; children: unknown }) => props.children }));
 vi.mock("../../../../../lib/workspace-access", () => ({ resolveWorkspaceAccess }));
@@ -23,9 +24,20 @@ function context(role: "ATTENDANT" | "SUPERVISOR" | "MANAGER") {
 
 describe("Lead card page", () => {
   beforeEach(() => {
-    getLead.mockReset().mockResolvedValue({ opportunity_id: opportunityId, reviews: [] });
+    getLead.mockReset().mockResolvedValue({
+      opportunity_id: opportunityId,
+      reviews: [],
+      arrived_at: new Date("2026-08-17T12:00:00.000Z"),
+      first_contact_at: null,
+      status: "OPEN",
+      missing_phone: false
+    });
     listLeadActivities.mockReset().mockResolvedValue([]);
     listTeam.mockReset().mockResolvedValue([]);
+    getWorkspaceSettings.mockReset().mockResolvedValue({
+      first_contact_sla_minutes: 120,
+      stagnation_days: 7
+    });
     resolveWorkspaceAccess.mockReset();
   });
 

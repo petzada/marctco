@@ -11,7 +11,7 @@ import {
   normalizeEmail,
   readPhone,
   type AssignmentRole,
-  type Marker
+  type TableMarker
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
@@ -64,6 +64,8 @@ export interface LeadListRow {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly assigned_user_name: string | null;
@@ -81,7 +83,7 @@ export interface ListLeadsOptions {
   readonly limit?: number;
   readonly after?: LeadListCursor;
   /** Filters the table in place — the same question a counter answers. */
-  readonly marker?: Marker;
+  readonly marker?: TableMarker;
   readonly responsible_user_id?: string;
   readonly unassigned?: boolean;
   readonly team?: string;
@@ -101,6 +103,8 @@ interface LeadListRawRow {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly assigned_user_name: string | null;
@@ -114,7 +118,7 @@ interface LeadListRawRow {
  * this marker", the counter's question — it never calls `markersFor`, which
  * answers "what does this one lead have" (ADR-0018).
  */
-function markerFilterSql(marker: Marker | undefined): Prisma.Sql {
+function markerFilterSql(marker: TableMarker | undefined): Prisma.Sql {
   switch (marker) {
     case undefined:
       return Prisma.empty;
@@ -163,6 +167,8 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
     form_id: row.form_id,
     form_name: row.form_name,
     arrived_at: row.arrived_at,
+    first_contact_at: row.first_contact_at,
+    status: row.status as LeadListRow["status"],
     missing_phone: row.missing_phone,
     assigned_user_id: row.assigned_user_id,
     assigned_user_name: row.assigned_user_name,
@@ -240,6 +246,8 @@ export async function listLeads(
         opportunity.form_id,
         opportunity.form_name,
         opportunity.arrived_at,
+        opportunity.first_contact_at,
+        opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
         assignee.display_name AS assigned_user_name,
@@ -446,6 +454,8 @@ export interface LeadDetail {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly source: LeadSource | null;
@@ -467,6 +477,8 @@ interface LeadCoreRawRow {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly source: string | null;
@@ -532,6 +544,8 @@ export async function getLead(
         opportunity.form_id,
         opportunity.form_name,
         opportunity.arrived_at,
+        opportunity.first_contact_at,
+        opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
         origin.source::text AS source
@@ -695,6 +709,8 @@ export async function getLead(
       form_id: core.form_id,
       form_name: core.form_name,
       arrived_at: core.arrived_at,
+      first_contact_at: core.first_contact_at,
+      status: core.status as LeadDetail["status"],
       missing_phone: core.missing_phone,
       assigned_user_id: core.assigned_user_id,
       source: (core.source as LeadSource | null) ?? null,
