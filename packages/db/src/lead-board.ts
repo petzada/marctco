@@ -3,7 +3,6 @@ import { decideLeadStageMove, type StageMoveStatus } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { assertUuid } from "./internal/uuid.js";
-import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext } from "./internal/scoped-transaction.js";
 
 const sharedPrisma = createPrismaClient();
@@ -20,29 +19,31 @@ const sharedPrisma = createPrismaClient();
 // ---------------------------------------------------------------------------
 
 /**
- * The board's scope is the profile scope every Opportunity operation already
- * uses, minus the two profiles that have no board.
+ * The board's scope is who currently attends the card: `assigned_user_id`
+ * equals the actor. That is the same rule for `ATTENDANT` and `SUPERVISOR`.
  *
- * `ATTENDANT` sees the cards assigned to them and `SUPERVISOR` the ones
- * already assigned inside their team — the team rule is computed **once**, in
- * `opportunityScopeSql`, so the board and the Leads table can never drift
- * apart on who a Supervisor's team is (ADR-0015, ADR-0020). The ownerless
- * queue reaches neither: `NULL` matches no equality and no `IN`, and the
- * queue belongs to Gestão and Direção (ADR-0024).
+ * The Leads table still uses the named-operation team scope, so a Supervisor keeps
+ * seeing the team there and can reassign. After they route a card to an
+ * attendant, it must leave **Meus leads** — the board is named for who
+ * attends, not for who can still see the team (pilot, 2026-08-17; the
+ * ADR-0015 matrix cell for this screen is `eu`, not `time`).
  *
- * Gestão and Direção get the empty set instead of the workspace-wide
- * `Prisma.empty` that scope returns for them. The board is the screen of who
- * attends and they do not: the matrix in ADR-0015 records "—" for them, an
- * **absence of scope** and not a refusal, and the whole workspace here would
- * be the global Kanban that `decisao-features-concorrentes.md` §4 turned
- * down, wearing the name "Meus leads". The web route sends those two profiles
+ * The ownerless queue reaches neither: `NULL` matches no equality, and the
+ * queue belongs to Gestão and Direção (ADR-0024). Gestão and Direção get
+ * the empty set instead of the workspace-wide `Prisma.empty` that table
+ * scope returns for them. The board is the screen of who attends and they
+ * do not: the matrix in ADR-0015 records "—" for them, an **absence of
+ * scope** and not a refusal, and the whole workspace here would be the
+ * global Kanban that `decisao-features-concorrentes.md` §4 turned down,
+ * wearing the name "Meus leads". The web route sends those two profiles
  * to Leads, which shows them everything this board would have and more.
  */
 function boardScopeSql(context: UserContext, alias: string): Prisma.Sql {
   if (context.role === "MANAGER" || context.role === "OWNER") {
     return Prisma.sql`AND false`;
   }
-  return opportunityScopeSql(context, alias);
+  const opportunity = Prisma.raw(alias);
+  return Prisma.sql`AND ${opportunity}.assigned_user_id = ${context.user_id}::uuid`;
 }
 
 /**

@@ -46,7 +46,7 @@ A distribuição do lead tem **dois níveis**, e a matriz existe para sustentá-
 | Resolver identidade / duplicidade | 1 | — | time | tudo | tudo |
 | Integrações — histórico, reprocessar, quarentena | 1 | — | — | ✓ | ✓ |
 | Integrações — gerar/rotacionar segredo, ativar/desativar | 1 | — | — | — | ✓ |
-| Kanban "Meus leads" | 2 | eu | time | — | — |
+| Kanban "Meus leads" | 2 | eu | eu | — | — |
 | Atribuir (lead **sem** dono) | 2 | — | — | Supervisor ou si | Supervisor ou si |
 | Reatribuir (lead **com** dono) | 2 | — | dentro do time | tudo | tudo |
 | Leads (tabela) — filtrar por responsável e por equipe | 2 | — | time | tudo | tudo |
@@ -77,11 +77,12 @@ Estas linhas não são arbitrárias:
 - **Massa é o mesmo gesto, N linhas, um destino** ([ADR-0026](./0026-atribuicao-em-massa.md)). Não rateia. 1 a 1 permanece.
 - **Supervisor reatribui dentro do time; Gestão e Direção reatribuem em qualquer lugar.** Sem isso o segundo nível da distribuição não existe: o lead que a Gestão entregou ao Supervisor já tem dono, e passá-lo ao Atendente é reatribuir. O Supervisor só o faz quando o dono atual **e** o destino estão no seu time — nunca tira lead de quem não é seu.
 - **O Kanban é tela de atendimento, e Gestão e Direção não atendem.** Eles distribuem e acompanham, e fazem as duas coisas na tabela de Leads, que é a vista de alto volume decidida no [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md) §4. O “—” nessa linha **não é recusa de acesso**: nada no quadro está fora do que a tabela já lhes mostra. O acompanhamento que eles precisam é o filtro por responsável e por equipe na própria tabela — a linha logo abaixo.
+- **Meus leads do Supervisor é `eu`, não `time`.** A tabela continua `time` — é lá que ele vê o que já roteou e reatribui. O quadro é de quem atende agora: depois de passar o card ao Atendente, ele some de Meus leads. Emenda do piloto em 2026-08-17; a célula da matriz acima era `time` e mentia o nome da tela.
 - **Desligar é da Direção; desatrelar é da Gestão para cima.** Tirar alguém de um workspace é operação; tirar do quadro inteiro atravessa tenants e é conta ([ADR-0023](./0023-desligamento-desativa-o-vinculo.md)).
 
 ## Por que uma regra agora, e não a matriz inteira
 
-A matriz acima é **especificação**, não implementação. A fatia de fundação implementa apenas: `ATTENDANT` enxerga somente oportunidade atribuída a si. Todo o resto continua liberado.
+A matriz acima é **especificação** para o que ainda não nasceu (Agenda, handoff, Analytics) — não é implementação daquelas linhas. A fatia de fundação implementou apenas: `ATTENDANT` enxerga somente oportunidade atribuída a si. A Fase 2 implementou o restante da matriz desta fase: Supervisor por tag, fila sem dono, atribuir/reatribuir, Equipe e Kanban para quem atende.
 
 O que precisa nascer com a fatia não é a matriz — é o **ponto único onde ela mora**. A leitura de dados já passa obrigatoriamente pelo helper de transação de `packages/db`, que é o único caminho de acesso a dado; ele recebe o papel junto com o `workspace_id`, e é ali que qualquer regra futura entra.
 
@@ -97,10 +98,10 @@ O que precisa nascer com a fatia não é a matriz — é o **ponto único onde e
 
 Time neste produto **é tag no membro** ([ADR-0002](./0002-workspace-tags-times.md), [ADR-0020](./0020-tag-no-membro-define-o-time.md)). Sem essa associação não há como computar "o time dele". Tag na oportunidade, se existir, não participa do escopo.
 
-`SUPERVISOR` **nasce no enum agora**, para não haver migração de papel nem reclassificação de gente depois. **Regra de produto:** com tag, escopo = time; sem tag, não reatribui — não herda Gestão ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)). A fila sem dono é da Gestão e da Direção ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). O código da fundação ainda trata `SUPERVISOR` como `MANAGER` porque `MemberTag` não existe; isso é estado atual, **nunca fallback permanente**. A regra estreita entra no lugar único que este ADR cria.
+`SUPERVISOR` **nasce no enum agora**, para não haver migração de papel nem reclassificação de gente depois. **Regra de produto:** com tag, escopo = time; sem tag, não reatribui — não herda Gestão ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)). A fila sem dono é da Gestão e da Direção ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). `MemberTag` existe desde a Fase 2; o escopo do Supervisor é computado das tags do membro; sem tag = time vazio, não reatribui. A regra estreita entra no lugar único que este ADR cria.
 
 ## Consequences
 
 O enum encolhe de cinco valores para quatro, com `SUPERVISOR` no lugar de `ADMIN` e `VIEWER`. Como não há dado em produção, é uma migração sem expand/contract. O helper de acesso passa a exigir papel além de workspace — mas **exigir o papel não basta para que ele seja usado**, e é por isso que o [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md) fecha o `packages/db` em operações nomeadas: só assim nenhuma consulta consegue ser escrita sem que o autor decida, ali, o que aquele papel enxerga.
 
-**Na fatia de fundação, a regra do `ATTENDANT` não tem quem a exercite, e isso é esperado.** O provisionamento cria um único membro, `OWNER`, e o cadastro de colaboradores fica fora da fatia; atribuição só chega na Fase 2, então `assigned_user_id` é sempre nulo. Um atendente, se existisse, veria uma lista vazia — o que está **correto** e não é defeito. A regra entra agora pelo mesmo motivo que `arrived_at` é gravado antes de existir tela de SLA: o que se paga caro depois não é a regra, é ter construído telas sem o lugar onde ela mora.
+**Na fatia de fundação, a regra do `ATTENDANT` não tinha quem a exercitasse, e isso era esperado.** O provisionamento criava um único membro, `OWNER`, e o cadastro de colaboradores ficava fora da fatia; atribuição só chegava na Fase 2, então `assigned_user_id` era sempre nulo. Um atendente, se existisse, veria uma lista vazia — o que estava **correto** e não era defeito. A Fase 2 acrescentou Equipe e atribuição. A regra entrou na fundação pelo mesmo motivo que `arrived_at` é gravado antes de existir tela de SLA: o que se paga caro depois não é a regra, é ter construído telas sem o lugar onde ela mora.
