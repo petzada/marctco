@@ -10,7 +10,11 @@ import { Button } from "../ui/button";
  * "copiável", and DESIGN.md documents no generic clipboard component to build
  * one against.
  */
-export function CopyBlock({ code, label }: Readonly<{ code: string; label: string }>) {
+export function CopyBlock({
+  code,
+  label,
+  className = "mt-md"
+}: Readonly<{ code: string; label: string; className?: string }>) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy(): Promise<void> {
@@ -28,7 +32,7 @@ export function CopyBlock({ code, label }: Readonly<{ code: string; label: strin
   }
 
   return (
-    <div className="mt-md">
+    <div className={className}>
       <pre className="overflow-x-auto rounded-lg border border-hairline bg-surface-inset p-md text-mono text-ink">
         <code>{code}</code>
       </pre>
