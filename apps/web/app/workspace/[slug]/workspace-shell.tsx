@@ -1,5 +1,6 @@
 "use client";
 
+import { CalendarBlankIcon } from "@phosphor-icons/react/CalendarBlank";
 import { ColumnsIcon } from "@phosphor-icons/react/Columns";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/GlobeSimple";
@@ -108,7 +109,12 @@ export function WorkspaceShell({
             label: "Configurações"
           }
         ]
-      : [])
+      : []),
+    {
+      href: `/workspace/${slug}/agenda`,
+      icon: <CalendarBlankIcon aria-hidden="true" size={20} weight="regular" />,
+      label: "Agenda"
+    }
   ];
 
   return (

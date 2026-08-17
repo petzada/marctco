@@ -231,3 +231,18 @@ export {
   WorkspaceSettingsWriteError
 } from "./workspace-settings.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 06 — Agenda, a calendar view over Activity. Appended at the end so
+// parallel Fase 3 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  listAgenda,
+  AgendaError,
+  type AgendaItem,
+  type AgendaPipelineOption,
+  type AgendaRefusal,
+  type AgendaTagOption,
+  type AgendaView,
+  type ListAgendaOptions
+} from "./agenda.js";
+

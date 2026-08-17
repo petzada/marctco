@@ -10,7 +10,8 @@ export const ACTIVITY_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   ALREADY_CANCELED: "Esta atividade já foi cancelada.",
   INVALID_TITLE: "A descrição da atividade é obrigatória.",
   INVALID_TYPE: "Escolha ligação, mensagem, reunião ou tarefa.",
-  INVALID_DUE_AT: "Informe data e hora de vencimento."
+  INVALID_DUE_AT: "Informe data e hora de vencimento.",
+  OPPORTUNITY_REQUIRED: "Escolha o lead desta atividade."
 };
 
 export function activityErrorMessage(error: unknown): string {

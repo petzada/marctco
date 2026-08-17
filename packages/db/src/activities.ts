@@ -27,7 +27,8 @@ export type ActivityRefusal =
   | "ALREADY_CANCELED"
   | "INVALID_TITLE"
   | "INVALID_TYPE"
-  | "INVALID_DUE_AT";
+  | "INVALID_DUE_AT"
+  | "OPPORTUNITY_REQUIRED";
 
 export class ActivityError extends Error {
   constructor(readonly reason: ActivityRefusal) {
@@ -237,6 +238,9 @@ export async function createActivity(
   input: CreateActivityInput,
   prisma: PrismaClient = sharedPrisma
 ): Promise<LeadActivity> {
+  if (!input.opportunity_id) {
+    throw new ActivityError("OPPORTUNITY_REQUIRED");
+  }
   assertUuid(input.opportunity_id, "opportunity_id");
   const assigned_user_id = input.assigned_user_id ?? context.user_id;
   assertUuid(assigned_user_id, "assigned_user_id");

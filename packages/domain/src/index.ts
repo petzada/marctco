@@ -134,6 +134,18 @@ export {
   type ActivityType
 } from "./activity.js";
 export {
+  AGENDA_VIEWS,
+  MAX_AGENDA_RANGE_MS,
+  agendaBoundsForView,
+  isAgendaView,
+  parseAgendaInterval,
+  shiftAgendaDate,
+  todayAgendaDate,
+  type AgendaIntervalDecision,
+  type AgendaIntervalRefusal,
+  type AgendaViewKind
+} from "./agenda.js";
+export {
   DEFAULT_FIRST_CONTACT_SLA_MINUTES,
   DEFAULT_STAGNATION_DAYS,
   MAX_FIRST_CONTACT_SLA_MINUTES,
