@@ -4,7 +4,13 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type { AgendaItem, AgendaPipelineOption, AgendaTagOption } from "@marctco/db";
-import { ACTIVITY_TYPES, isActivityOverdue, shiftAgendaDate, type ActivityType } from "@marctco/domain";
+import {
+  ACTIVITY_TYPES,
+  agendaBoundsForView,
+  isActivityOverdue,
+  shiftAgendaDate,
+  type ActivityType
+} from "@marctco/domain";
 import { Button } from "../../../../components/ui/button";
 import { Card } from "../../../../components/ui/card";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -422,8 +428,12 @@ function visibleDays(
   query: AgendaQuery,
   items: readonly AgendaItem[]
 ): ReadonlyArray<{ key: string; label: string; items: AgendaItem[] }> {
+  const bounds = agendaBoundsForView({ view: query.view, date: query.date });
+  if (!bounds.ok) {
+    return [];
+  }
   const days: Array<{ key: string; label: string; items: AgendaItem[] }> = [];
-  const start = query.view === "week" ? mondayOf(query.date) : query.date;
+  const start = civilDate(bounds.from);
   const count = query.view === "week" ? 7 : 1;
   const byDay = new Map<string, AgendaItem[]>();
   for (const item of items) {
@@ -434,23 +444,20 @@ function visibleDays(
   }
   for (let offset = 0; offset < count; offset += 1) {
     const key = shiftAgendaDate(start, offset);
-    const [year, month, day] = key.split("-").map(Number);
-    const utc = new Date(Date.UTC(year ?? 2026, (month ?? 1) - 1, day ?? 1));
+    const dayBounds = agendaBoundsForView({ view: "day", date: key });
+    const labelInstant = dayBounds.ok ? dayBounds.from : bounds.from;
     days.push({
       key,
-      label: utc.toLocaleDateString("pt-BR", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }),
+      label: new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        weekday: "short",
+        day: "numeric",
+        month: "short"
+      }).format(labelInstant),
       items: byDay.get(key) ?? []
     });
   }
   return days;
-}
-
-function mondayOf(date: string): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const utc = new Date(Date.UTC(year ?? 2026, (month ?? 1) - 1, day ?? 1));
-  const weekday = utc.getUTCDay();
-  const offset = weekday === 0 ? 6 : weekday - 1;
-  return shiftAgendaDate(date, -offset);
 }
 
 function civilDate(value: Date): string {

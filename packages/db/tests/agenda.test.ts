@@ -257,8 +257,9 @@ describe("listAgenda scope", () => {
     );
 
     const attendantView = await listAgenda(attendant_context, { from: window_from, to: window_to }, app);
-    expect(attendantView.items.every((row) => row.opportunity_id === mine || row.title === "Da Ana" || row.title === "Dentro")).toBe(true);
+    expect(attendantView.items.some((row) => row.title === "Da Ana")).toBe(true);
     expect(attendantView.items.some((row) => row.title === "Da Bia")).toBe(false);
+    expect(attendantView.items.some((row) => row.title === "Do time")).toBe(false);
 
     const supervisorView = await listAgenda(supervisor_context, { from: window_from, to: window_to }, app);
     expect(supervisorView.items.some((row) => row.title === "Da Ana")).toBe(true);

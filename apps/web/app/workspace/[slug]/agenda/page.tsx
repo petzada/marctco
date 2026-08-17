@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { listAgenda, listLeads, listTeam } from "@marctco/db";
-import { shiftAgendaDate } from "@marctco/domain";
+import { agendaBoundsForView, shiftAgendaDate } from "@marctco/domain";
 import { ToggleSegmented } from "../../../../components/ui/toggle-segmented";
 import { resolveWorkspaceAccess } from "../../../../lib/workspace-access";
 import { agendaHref, agendaListOptions, agendaSearchParamsCache, resolveAgendaQuery } from "../../../../lib/agenda/search-params";
@@ -94,10 +94,15 @@ export default async function AgendaPage({
 }
 
 function intervalLabel(view: "day" | "week", date: string): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const utc = new Date(Date.UTC(year ?? 2026, (month ?? 1) - 1, day ?? 1));
-  if (view === "day") {
-    return utc.toLocaleDateString("pt-BR", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
+  const bounds = agendaBoundsForView({ view: "day", date });
+  if (!bounds.ok) {
+    return date;
   }
-  return `Semana de ${utc.toLocaleDateString("pt-BR", { timeZone: "UTC", day: "numeric", month: "long" })}`;
+  const formatted = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: view === "day" ? "long" : undefined,
+    day: "numeric",
+    month: "long"
+  }).format(bounds.from);
+  return view === "day" ? formatted : `Semana de ${formatted}`;
 }
