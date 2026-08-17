@@ -62,6 +62,11 @@ let user_context_a: UserContext;
 const provisioned_workspace_ids: string[] = [];
 const isolation_cases = [
   {
+    table_name: "activities",
+    read_sql: "SELECT workspace_id AS tenant_id FROM activities ORDER BY workspace_id",
+    write_sql: `INSERT INTO activities (id, workspace_id, opportunity_id, assigned_user_id, type, title, due_at, status, created_by_user_id, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', '${user_b}', 'TASK', 'Cross-workspace', CURRENT_TIMESTAMP, 'OPEN', '${user_b}', CURRENT_TIMESTAMP)`
+  },
+  {
     table_name: "intake_reviews",
     read_sql: "SELECT workspace_id AS tenant_id FROM intake_reviews ORDER BY workspace_id",
     write_sql: `INSERT INTO intake_reviews (id, workspace_id, opportunity_id, type, candidate_person_ids) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'IDENTITY_CONFLICT', ARRAY['${person_b}']::uuid[])`
@@ -369,6 +374,28 @@ beforeAll(async () => {
         }
       ]
     });
+    await transaction.activity.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          assigned_user_id: user_a,
+          type: "TASK",
+          title: "Ligar para o lead A",
+          due_at: new Date(),
+          created_by_user_id: user_a
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: opportunity_b,
+          assigned_user_id: user_b,
+          type: "CALL",
+          title: "Ligar para o lead B",
+          due_at: new Date(),
+          created_by_user_id: user_b
+        }
+      ]
+    });
     await transaction.workspaceFlag.createMany({
       data: [
         { workspace_id: workspace_a, key: "auto_primeiro_contato" },
@@ -398,6 +425,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const disposable_workspace_ids = [workspace_a, workspace_b, ...provisioned_workspace_ids];
+  await client.activity.deleteMany({
+    where: { workspace_id: { in: disposable_workspace_ids } }
+  });
   await client.workspaceMember.deleteMany({
     where: { workspace_id: { in: disposable_workspace_ids } }
   });
@@ -427,6 +457,7 @@ describe("Seam 3: RLS and schema invariants", () => {
     `;
 
     expect(rows.map((row) => row.table_name)).toEqual([
+      "activities",
       "intake_reviews",
       "integration_connections",
       "integration_events",

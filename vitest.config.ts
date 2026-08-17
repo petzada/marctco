@@ -50,7 +50,7 @@ export default defineConfig({
             "packages/db/src/provision-workspace.test.ts",
             "packages/db/src/runtime-database-url.test.ts",
             "packages/db/src/workspace-context.test.ts",
-            "packages/db/tests/{boot-check,feature-flags,intake,intake-review-resolution,integration-connection-operations,lead-board,leads,outbox-recovery,person-candidates,quarantine,rls,team,team-membership-lifecycle}.test.ts"
+            "packages/db/tests/{activities,boot-check,feature-flags,intake,intake-review-resolution,integration-connection-operations,lead-board,leads,outbox-recovery,person-candidates,quarantine,rls,team,team-membership-lifecycle}.test.ts"
           ],
           fileParallelism: false
         }

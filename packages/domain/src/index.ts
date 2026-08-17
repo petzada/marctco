@@ -114,3 +114,22 @@ export {
   type StageMoveOpportunity,
   type StageMoveStatus
 } from "./lead-stage-move.js";
+export {
+  ACTIVITY_STATUSES,
+  ACTIVITY_TYPES,
+  activityAssigneeUserIds,
+  decideActivityCreate,
+  decideActivityTransition,
+  isActivityOverdue,
+  isActivityType,
+  memberReachesOpportunity,
+  type ActivityActorRole,
+  type ActivityAssigneeMember,
+  type ActivityCreateDecision,
+  type ActivityCreateRefusal,
+  type ActivityStatus,
+  type ActivityTransitionAction,
+  type ActivityTransitionDecision,
+  type ActivityTransitionRefusal,
+  type ActivityType
+} from "./activity.js";
