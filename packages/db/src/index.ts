@@ -188,3 +188,19 @@ export {
   type TeamMember
 } from "./team.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 07 — Kanban "Meus leads". Appended at the end for the same reason as
+// every block above it: additive, never interleaved.
+// ---------------------------------------------------------------------------
+export {
+  getLeadBoard,
+  moveLeadStage,
+  LeadStageMoveError,
+  type LeadBoard,
+  type LeadBoardCard,
+  type LeadBoardColumn,
+  type LeadStageMoveRefusal,
+  type MoveLeadStageInput,
+  type MovedLeadStage
+} from "./lead-board.js";
+
