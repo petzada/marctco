@@ -1,6 +1,6 @@
 # Fase 3 — Tempo
 
-Status da fatia: **especificada, não implementada.** Spec em [spec.md](./spec.md), tickets em [issues/](./issues/), todos `ready-for-agent`.
+Status da fatia: **em implementação.** Tickets 01, 02, 03 e 06 aceitos e integrados; retomar pelo ticket 04 conforme [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md). Spec em [spec.md](./spec.md), tickets em [issues/](./issues/).
 
 Fase 3 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Estado de partida: [fechamento das Fases 0–2](../fechamento-fases-0-2.md).
 
