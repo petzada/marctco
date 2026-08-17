@@ -39,6 +39,8 @@ export interface IntegrationSurface {
  */
 export interface IntegrationSurfaceCopy {
   readonly panelDescription: string;
+  /** Label of the URL the operator pastes into the origin. */
+  readonly urlFieldLabel: string;
   readonly enableButton: string;
   readonly disableButton: string;
   readonly disableTitle: string;
@@ -52,14 +54,15 @@ export const PLUGA_SURFACE: IntegrationSurface = {
   endpointPath: PLUGA_LEADS_ENDPOINT_PATH,
   copy: {
     panelDescription:
-      "Cole a URL e o segredo no destino HTTP Request da automação da Pluga.",
+      "Cole a URL de API e o segredo nos cabeçalhos JSON da automação HTTP Request da Pluga.",
+    urlFieldLabel: "URL de API",
     enableButton: "Ativar integração",
     disableButton: "Desativar integração",
     disableTitle: "Desativar a integração?",
     rotateWarning:
       "O segredo atual para de funcionar imediatamente. Você vai precisar colar o novo valor na Pluga antes que os leads voltem a chegar.",
     disableWarning:
-      "Nenhum lead novo é aceito enquanto a integração estiver desativada. A configuração e o segredo continuam guardados — você pode reativar a qualquer momento sem gerar um novo segredo."
+      "Nenhum lead novo é aceito enquanto a integração estiver desativada. A configuração e o segredo continuam guardados: você pode reativar a qualquer momento sem gerar um novo segredo."
   }
 };
 
@@ -69,13 +72,14 @@ export const LANDING_PAGE_SURFACE: IntegrationSurface = {
   endpointPath: LANDING_PAGE_ENDPOINT_PATH,
   copy: {
     panelDescription:
-      "Guarde o segredo no servidor do site — no WordPress, no backend ou nos segredos da função serverless. Ele nunca vai no JavaScript da página.",
+      "Guarde o segredo no servidor do site: no WordPress, no backend ou nos segredos da função serverless. Ele nunca vai no JavaScript da página.",
+    urlFieldLabel: "URL do webhook",
     enableButton: "Ativar conexão",
     disableButton: "Desativar conexão",
     disableTitle: "Desativar a conexão da landing page?",
     rotateWarning:
       "O segredo atual para de funcionar imediatamente. Atualize o valor no servidor da landing page antes que os formulários voltem a chegar.",
     disableWarning:
-      "Nenhum lead novo da landing page é aceito enquanto a conexão estiver desativada. A configuração e o segredo continuam guardados — você pode reativar a qualquer momento sem gerar um novo segredo."
+      "Nenhum lead novo da landing page é aceito enquanto a conexão estiver desativada. A configuração e o segredo continuam guardados: você pode reativar a qualquer momento sem gerar um novo segredo."
   }
 };

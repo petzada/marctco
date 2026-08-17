@@ -11,11 +11,12 @@ import {
 } from "@marctco/db";
 import { readLeadPayload } from "@marctco/domain";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CopyBlock } from "../../../../../components/integrations/copy-block";
 import { IntegrationSecretNotice } from "../../../../../components/integrations/integration-secret-notice";
 import { IntegrationSecretPanel } from "../../../../../components/integrations/integration-secret-panel";
+import { PlugaMetaOnboarding } from "../../../../../components/integrations/pluga-meta-onboarding";
 import { Button } from "../../../../../components/ui/button";
 import {
   DataTable,
@@ -32,7 +33,8 @@ import {
 } from "../../../../../lib/integration-access";
 import { PLUGA_SURFACE } from "../../../../../lib/integration-surfaces";
 import { formatQuarantineWait } from "../../../../../lib/quarantine-wait-time";
-import { metaHttpRequestTemplate, pluginRequestHeaders } from "../../../../../lib/pluga-templates";
+import { pluginRequestHeadersFor, PLUGA_LEADS_ENDPOINT_PATH } from "../../../../../lib/pluga-templates";
+import { publicIntegrationUrl } from "../../../../../lib/public-origin";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
 export const metadata: Metadata = {
@@ -71,10 +73,11 @@ export default async function PlugaIntegrationPage({
 }>) {
   const { slug } = await params;
   const query = await searchParams;
-  const access = await resolveWorkspaceAccess(slug);
+  const [access, requestHeaders] = await Promise.all([resolveWorkspaceAccess(slug), headers()]);
   if (access.status !== "resolved" || !canOpenIntegrationScreen(access.workspace.role)) {
     notFound();
   }
+  const webhookUrl = publicIntegrationUrl(requestHeaders, PLUGA_LEADS_ENDPOINT_PATH);
 
   const isOwner = canManageIntegrationSecret(access.workspace.role);
   const [connection, events, lastSync, quarantine, deadLetter] = await Promise.all([
@@ -98,8 +101,8 @@ export default async function PlugaIntegrationPage({
           <p className="text-eyebrow text-primary">Integração</p>
           <h1 className="mt-xs text-headline text-ink md:text-display-md">Pluga</h1>
           <p className="mt-sm text-body text-ink-secondary">
-            Copie a URL, gere o segredo, cole na Pluga e dispare um lead de teste. O resultado
-            aparece aqui, sem precisar chamar suporte.
+            Siga o passo a passo com os mesmos nomes da Pluga, cole URL e segredo, dispare um
+            lead de teste. O resultado aparece no histórico abaixo.
           </p>
         </header>
 
@@ -124,14 +127,16 @@ export default async function PlugaIntegrationPage({
         {isOwner ? (
           <IntegrationSecretPanel
             connection={connection}
+            headersJsonForToken={pluginRequestHeadersFor}
             slug={slug}
             surface={PLUGA_SURFACE}
+            webhookUrl={webhookUrl}
           />
         ) : (
           <IntegrationSecretNotice />
         )}
 
-        <DocumentationSection />
+        <PlugaMetaOnboarding webhookUrl={webhookUrl} />
 
         <section className="flex flex-col gap-sm">
           <div className="flex flex-wrap items-center justify-between gap-sm">
@@ -380,88 +385,5 @@ function QuarantineRow({
         </Link>
       </DataTableCell>
     </DataTableRow>
-  );
-}
-
-function DocumentationSection() {
-  return (
-    <>
-      <section className="rounded-lg border border-hairline bg-canvas p-lg md:p-xl">
-        <p className="inline-flex rounded-pill bg-warning-surface px-sm py-xs text-caption text-warning-ink">
-          Aviso de plano
-        </p>
-        <h2 className="mt-sm text-title text-ink">HTTP Request exige plano pago da Pluga</h2>
-        <p className="mt-sm max-w-prose text-body text-ink-secondary">
-          O recurso que envia o lead da Pluga para o CRM (HTTP Request) só existe nos planos
-          pagos da Pluga. Sem um deles contratado, a automação não tem como entregar o lead
-          aqui — não há ingestão de anúncios sem esse plano.
-        </p>
-      </section>
-
-      <section className="rounded-lg border border-hairline bg-canvas p-lg md:p-xl">
-        <h2 className="text-title text-ink">Formato esperado, em linguagem simples</h2>
-        <p className="mt-sm max-w-prose text-body text-ink-secondary">
-          A Pluga não tem um formato próprio: você monta o JSON que ela envia campo por campo, no
-          editor da automação. O CRM entende um conjunto fixo de nomes — o contrato{" "}
-          <code className="font-mono">v1</code> — e nenhum campo de negócio é obrigatório. Um
-          lead sem telefone e sem e-mail ainda é guardado; ele só não vira card no funil sozinho.
-        </p>
-      </section>
-
-      <section className="rounded-lg border border-hairline bg-canvas p-lg md:p-xl">
-        <h2 className="text-title text-ink">Modelo para Meta (Facebook/Instagram)</h2>
-        <p className="mt-sm max-w-prose text-body text-ink-secondary">
-          Na automação Facebook Lead Ads → HTTP Request da Pluga, use POST para a URL acima, os
-          cabeçalhos abaixo e o corpo como modelo — troque cada <code>{"<< … >>"}</code> pelo
-          campo que o editor da Pluga oferece para aquele gatilho.
-        </p>
-        <p className="mt-md text-label text-ink-secondary">Cabeçalhos</p>
-        <CopyBlock code={pluginRequestHeaders} label="cabeçalhos" />
-        <p className="mt-md text-label text-ink-secondary">Corpo da requisição</p>
-        <CopyBlock code={metaHttpRequestTemplate} label="corpo" />
-        <p className="mt-md max-w-prose text-body-sm text-ink-secondary">
-          Nome, telefone e e-mail não aparecem na lista pública de campos da Pluga para este
-          gatilho — o mais provável é que surjam no editor assim que você conectar sua conta e
-          escolher o formulário real. Confirme isso no fluxo de teste abaixo antes de considerar
-          a automação pronta.
-        </p>
-      </section>
-
-      <section className="rounded-lg border border-hairline-strong bg-surface-inset p-lg md:p-xl">
-        <p className="text-caption text-ink-muted">Google Ads</p>
-        <h2 className="mt-xs text-title text-ink">Modelo aguardando teste em conta real</h2>
-        <p className="mt-sm max-w-prose text-body text-ink-secondary">
-          A lista pública da Pluga para o gatilho de formulário do Google Ads não é confiável —
-          ela veio incompleta, sem campos de contato. Antes de publicar um modelo, alguém precisa
-          conectar uma conta real, enviar um lead de teste e confirmar quais campos aparecem.
-        </p>
-      </section>
-
-      <section className="rounded-lg border border-hairline bg-canvas p-lg md:p-xl">
-        <h2 className="text-title text-ink">Como testar cada automação</h2>
-        <ol className="mt-sm max-w-prose list-decimal space-y-xs pl-lg text-body-sm text-ink-secondary">
-          <li>Cole a URL e o segredo desta tela no destino HTTP Request da automação na Pluga.</li>
-          <li>
-            Na própria Pluga, use o recurso de enviar um dado de teste da automação (um lead real
-            do formulário conectado).
-          </li>
-          <li>
-            Volte a esta tela e confira, no histórico abaixo, se nome, telefone e e-mail aparecem
-            marcados na coluna &quot;Mapeamento&quot;. Sem os três, a automação ainda não está
-            pronta para receber leads de verdade.
-          </li>
-        </ol>
-      </section>
-
-      <section className="rounded-lg border border-hairline bg-canvas p-lg md:p-xl">
-        <h2 className="text-title text-ink">Quanto tempo o conteúdo fica guardado</h2>
-        <p className="mt-sm max-w-prose text-body text-ink-secondary">
-          Depois de 90 dias, o conteúdo do lead (nome, telefone, respostas do formulário) deixa
-          de ser guardado. O registro de que o lead chegou, quando e no que deu continua para
-          sempre — só o conteúdo pessoal sai. Um evento em quarentena é a única exceção: ele não
-          expira enquanto ninguém completar os dados e liberar o card.
-        </p>
-      </section>
-    </>
   );
 }

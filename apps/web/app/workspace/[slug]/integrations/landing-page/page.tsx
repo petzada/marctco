@@ -1,5 +1,6 @@
 import { getIntegrationConnectionSummary } from "@marctco/db";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { IntegrationSecretNotice } from "../../../../../components/integrations/integration-secret-notice";
 import { IntegrationSecretPanel } from "../../../../../components/integrations/integration-secret-panel";
@@ -19,6 +20,7 @@ import {
   wordpressBaseRecipe,
   wpFormsRecipe
 } from "../../../../../lib/landing-page-recipes";
+import { publicIntegrationUrl } from "../../../../../lib/public-origin";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
 export const metadata: Metadata = {
@@ -30,10 +32,11 @@ export default async function LandingPageIntegrationGuide({
   params
 }: Readonly<{ params: Promise<{ slug: string }> }>) {
   const { slug } = await params;
-  const access = await resolveWorkspaceAccess(slug);
+  const [access, requestHeaders] = await Promise.all([resolveWorkspaceAccess(slug), headers()]);
   if (access.status !== "resolved" || !canOpenIntegrationScreen(access.workspace.role)) {
     notFound();
   }
+  const webhookUrl = publicIntegrationUrl(requestHeaders, LANDING_PAGE_ENDPOINT_PATH);
 
   const isOwner = canManageIntegrationSecret(access.workspace.role);
   const connection = isOwner
@@ -79,6 +82,7 @@ export default async function LandingPageIntegrationGuide({
               connection={connection}
               slug={slug}
               surface={LANDING_PAGE_SURFACE}
+              webhookUrl={webhookUrl}
             />
           ) : (
             <IntegrationSecretNotice />

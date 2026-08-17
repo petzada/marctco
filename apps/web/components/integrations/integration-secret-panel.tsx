@@ -20,6 +20,13 @@ export interface IntegrationSecretPanelProps {
   /** Decides which provider the routes below act on, and the wording around them. */
   readonly surface: IntegrationSurface;
   readonly connection: IntegrationConnectionSummaryProps | null;
+  /** Absolute URL the operator pastes into the origin. No HTTP method prefix. */
+  readonly webhookUrl: string;
+  /**
+   * When the secret is shown in the clear, also offer the JSON headers block
+   * that origin expects. Landing page does not use this shape.
+   */
+  readonly headersJsonForToken?: (token: string) => string;
 }
 
 type PendingAction = "generate" | "rotate" | null;
@@ -39,7 +46,9 @@ type ConfirmKind = "rotate" | "disable" | null;
 export function IntegrationSecretPanel({
   slug,
   surface,
-  connection
+  connection,
+  webhookUrl,
+  headersJsonForToken
 }: IntegrationSecretPanelProps) {
   const router = useRouter();
   const [revealed, setRevealed] = useState<{ token: string; token_last4: string } | null>(null);
@@ -83,20 +92,40 @@ export function IntegrationSecretPanel({
       </div>
 
       <div>
-        <p className="text-label text-ink-secondary">URL do webhook</p>
-        <CopyBlock code={`POST https://SEU-CRM.example${surface.endpointPath}`} label="URL" />
+        <p className="text-label text-ink-secondary">{surface.copy.urlFieldLabel}</p>
+        <CopyBlock className="mt-xs" code={webhookUrl} label="URL" />
+        {webhookUrl.startsWith("http") ? null : (
+          <p className="mt-xs text-caption text-warning-ink">
+            O domínio público não veio nesta sessão. Complete a URL com o endereço deste CRM
+            antes de colar.
+          </p>
+        )}
       </div>
 
       {revealed ? (
         <div className="rounded-md border border-warning bg-warning-surface p-md">
           <p className="text-body-strong text-warning-ink">
-            Copie o segredo agora — ele só aparece esta vez
+            Copie o segredo agora. Ele só aparece esta vez
           </p>
           <p className="mt-xs text-body-sm text-warning-ink">
             Depois de sair desta página, só o final do segredo fica visível. Se perder este
             valor, gere um novo.
           </p>
-          <CopyBlock code={revealed.token} label="segredo" />
+          <CopyBlock className="mt-sm" code={revealed.token} label="segredo" />
+          {headersJsonForToken ? (
+            <div className="mt-md">
+              <p className="text-label text-warning-ink">Cabeçalhos (JSON)</p>
+              <p className="mt-xxs text-caption text-warning-ink">
+                Este é o bloco que a Pluga pede no campo Cabeçalhos. O token já
+                está dentro.
+              </p>
+              <CopyBlock
+                className="mt-xs"
+                code={headersJsonForToken(revealed.token)}
+                label="cabeçalhos"
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
