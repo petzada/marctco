@@ -114,22 +114,60 @@ RESET ROLE;
 -- the columns. The migration session reads Auth into a temporary
 -- table; the table owner then updates through a temporary RLS policy. This
 -- keeps auth.users out of marctco_migrator's permanent privilege surface.
+--
+-- Three states have to be told apart, and only one of them is a backfill:
+--
+--   * `auth` absent            — the ephemeral Postgres of CI. Skip, silently.
+--   * `auth` present, unreadable — Supabase. The `RESET ROLE` above returns to
+--     the connection role, which is `marctco_migrator` (ADR-0010 §emenda de
+--     2026-08-05), and that role has no USAGE on `auth`. Skip, loudly.
+--   * `auth` present, readable  — backfill.
+--
+-- The guard cannot be one expression. `to_regclass` resolves the schema
+-- through `LookupExplicitNamespace` and therefore *raises* 42501 when the
+-- schema exists but is forbidden — which is why the first version of this
+-- block, written to defend only against "auth absent", took production's
+-- release pipeline down on 2026-08-14 and kept every later deploy from
+-- shipping. `has_schema_privilege` raises in the mirror-image case, when the
+-- schema is absent. And PostgreSQL does not promise to short-circuit `AND`,
+-- so combining them into one condition would only move the raise around.
+-- Nested IFs are what actually sequence the three questions.
 DO $backfill$
 BEGIN
-  IF to_regclass('auth.users') IS NOT NULL THEN
-    CREATE TEMPORARY TABLE workspace_member_auth_backfill AS
-      SELECT
-        auth_user.id AS user_id,
-        COALESCE(
-          NULLIF(btrim(auth_user.raw_user_meta_data ->> 'full_name'), ''),
-          NULLIF(btrim(auth_user.raw_user_meta_data ->> 'name'), ''),
-          NULLIF(btrim(auth_user.email), '')
-        ) AS display_name,
-        NULLIF(lower(btrim(auth_user.email)), '') AS email
-      FROM auth.users AS auth_user;
-
-    GRANT SELECT ON TABLE workspace_member_auth_backfill TO marctco_migrator;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'auth') THEN
+    RETURN;
   END IF;
+
+  IF NOT has_schema_privilege(current_user, 'auth', 'USAGE') THEN
+    RAISE WARNING
+      'workspace_members backfill skipped: % has no USAGE on schema auth. The migration applies; display_name/email stay null for members created before Equipe. To fill them, run as postgres: GRANT USAGE ON SCHEMA auth TO %; GRANT SELECT ON TABLE auth.users TO %;',
+      current_user, current_user, current_user;
+    RETURN;
+  END IF;
+
+  IF to_regclass('auth.users') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF NOT has_table_privilege(current_user, 'auth.users', 'SELECT') THEN
+    RAISE WARNING
+      'workspace_members backfill skipped: % cannot SELECT auth.users. To fill display_name/email, run as postgres: GRANT SELECT ON TABLE auth.users TO %;',
+      current_user, current_user;
+    RETURN;
+  END IF;
+
+  CREATE TEMPORARY TABLE workspace_member_auth_backfill AS
+    SELECT
+      auth_user.id AS user_id,
+      COALESCE(
+        NULLIF(btrim(auth_user.raw_user_meta_data ->> 'full_name'), ''),
+        NULLIF(btrim(auth_user.raw_user_meta_data ->> 'name'), ''),
+        NULLIF(btrim(auth_user.email), '')
+      ) AS display_name,
+      NULLIF(lower(btrim(auth_user.email)), '') AS email
+    FROM auth.users AS auth_user;
+
+  GRANT SELECT ON TABLE workspace_member_auth_backfill TO marctco_migrator;
 END
 $backfill$;
 
