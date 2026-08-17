@@ -3,6 +3,7 @@ import { resolveWorkspaceAccess } from "../../../lib/workspace-access";
 import { workspaceRoleLabel } from "../../../lib/workspace-role";
 import { canReadTeam } from "../../../lib/team-access";
 import { attendsLeads, seesLeadsTable } from "../../../lib/lead-board-access";
+import { canManageSettings } from "../../../lib/settings-access";
 import { WorkspaceShell } from "./workspace-shell";
 
 export default async function WorkspaceLayout({
@@ -26,6 +27,7 @@ export default async function WorkspaceLayout({
       canManageIntegrations={
         access.workspace.role === "MANAGER" || access.workspace.role === "OWNER"
       }
+      canManageSettings={canManageSettings(access.workspace.role)}
       roleLabel={workspaceRoleLabel(access.workspace.role)}
       slug={slug}
       workspaceName={access.workspace.name}

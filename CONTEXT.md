@@ -175,5 +175,13 @@ Interruptor do catálogo, ligado pela marctco por workspace, que libera capacida
 _Avoid_: Flag por módulo para packaging, interruptor que o gestor edita, variável de ambiente, toggle de UI
 
 **Configuração de workspace**:
-Escolha operacional que o gestor da assessoria edita na tela, alterando o comportamento de uma capacidade que a feature flag já liberou. O que é mera consequência de dado existente (integração conectada, funil jurídico ativo) não é nem flag nem configuração.
-_Avoid_: Feature flag, preferência pessoal do usuário, pré-condição de dado
+Escolha operacional que o gestor da assessoria edita na tela, alterando o comportamento de uma capacidade que a feature flag já liberou. O que é mera consequência de dado existente (integração conectada, funil jurídico ativo) não é nem flag nem configuração. A linha é opcional: workspace que nunca tocou em Configurações usa o padrão do domínio, e ausência nunca desliga o relógio.
+_Avoid_: Feature flag, preferência pessoal do usuário, pré-condição de dado, ausência como desligamento, semear a linha no provisionamento
+
+**SLA de primeiro contato**:
+Limite em minutos, configurável pela Gestão, entre a chegada do lead e a primeira evidência de atendimento. Sem linha no workspace, vale o padrão do domínio. Não é feature flag: não custa dinheiro por uso e não chama terceiro.
+_Avoid_: Parar o relógio na atribuição, horário comercial, flag `auto_primeiro_contato`, `first_contact_trigger`
+
+**Estagnação**:
+Limite em dias, configurável pela Gestão, sem movimento no lead. Sem linha no workspace, vale o padrão do domínio. Mede movimento, não chegada.
+_Avoid_: Contar edição de campo ou leitura como movimento, desligar o relógio por ausência de configuração

@@ -118,6 +118,8 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Motivo de perda | `loss_reason` | — |
 | Tipo da atividade | `ActivityType` | `CALL \| MESSAGE \| MEETING \| TASK`. `MESSAGE` cobre WhatsApp e e-mail sem antecipar a Fase 4; um valor `WHATSAPP` amarraria o tipo ao canal |
 | Situação da atividade | `ActivityStatus` | `OPEN \| DONE \| CANCELED`. Concluir prova atendimento; cancelar não |
+| SLA de primeiro contato | `WorkspaceSettings.first_contact_sla_minutes` | Minutos até a primeira evidência de atendimento. Anulável: nulo (ou linha ausente) resolve para o padrão do domínio, nunca desliga o relógio. Sem `first_contact_trigger` nesta fase |
+| Limite de estagnação | `WorkspaceSettings.stagnation_days` | Dias sem movimento. Anulável pela mesma regra do SLA |
 
 ## Regras
 

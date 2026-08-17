@@ -221,3 +221,13 @@ export {
   type RescheduleActivityInput
 } from "./activities.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 02 — Configurações: SLA and stagnation clocks. Appended at the end
+// so parallel Fase 3 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  getWorkspaceSettings,
+  updateWorkspaceSettings,
+  WorkspaceSettingsWriteError
+} from "./workspace-settings.js";
+

@@ -2,6 +2,7 @@
 
 import { ColumnsIcon } from "@phosphor-icons/react/Columns";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
+import { GlobeSimpleIcon } from "@phosphor-icons/react/GlobeSimple";
 import { HouseIcon } from "@phosphor-icons/react/House";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { SignOutIcon } from "@phosphor-icons/react/SignOut";
@@ -16,6 +17,7 @@ interface WorkspaceShellProps {
   readonly workspaceName: string;
   readonly roleLabel: string;
   readonly canManageIntegrations: boolean;
+  readonly canManageSettings: boolean;
   readonly canReadTeam: boolean;
   /**
    * Whether this profile attends leads. The item is absent for Gestão and
@@ -45,6 +47,7 @@ export function WorkspaceShell({
   roleLabel,
   canReadTeam,
   canManageIntegrations,
+  canManageSettings,
   attendsLeads,
   seesLeadsTable
 }: WorkspaceShellProps) {
@@ -92,6 +95,15 @@ export function WorkspaceShell({
           },
           {
             href: `/workspace/${slug}/integrations/landing-page`,
+            icon: <GlobeSimpleIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Landing page"
+          }
+        ]
+      : []),
+    ...(canManageSettings
+      ? [
+          {
+            href: `/workspace/${slug}/settings`,
             icon: <GearSixIcon aria-hidden="true" size={20} weight="regular" />,
             label: "Configurações"
           }

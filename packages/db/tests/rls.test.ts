@@ -146,6 +146,11 @@ const isolation_cases = [
     write_sql: `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('${workspace_b}', '${randomUUID()}', 'ATTENDANT')`
   },
   {
+    table_name: "workspace_settings",
+    read_sql: "SELECT workspace_id AS tenant_id FROM workspace_settings ORDER BY workspace_id",
+    write_sql: `INSERT INTO workspace_settings (workspace_id, first_contact_sla_minutes, stagnation_days, updated_at) VALUES ('${workspace_b}', 15, 3, CURRENT_TIMESTAMP)`
+  },
+  {
     table_name: "workspaces",
     read_sql: "SELECT id AS tenant_id FROM workspaces ORDER BY id",
     write_sql: `INSERT INTO workspaces (id, slug, name, updated_at) VALUES ('${randomUUID()}', '${randomUUID()}', 'Cross-workspace', CURRENT_TIMESTAMP)`
@@ -415,6 +420,20 @@ beforeAll(async () => {
         { workspace_id: workspace_b, user_id: user_b, tag_id: tag_b }
       ]
     });
+    await transaction.workspaceSettings.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          first_contact_sla_minutes: 30,
+          stagnation_days: 5
+        },
+        {
+          workspace_id: workspace_b,
+          first_contact_sla_minutes: 45,
+          stagnation_days: 9
+        }
+      ]
+    });
   });
   const context = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
   if (!context) {
@@ -473,6 +492,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       "tags",
       "workspace_flags",
       "workspace_members",
+      "workspace_settings",
       "workspaces"
     ]);
     expect(isolation_cases.map((test_case) => test_case.table_name)).toEqual(

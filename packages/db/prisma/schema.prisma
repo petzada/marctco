@@ -173,6 +173,7 @@ model Workspace {
   feature_flags               WorkspaceFlag[]
   tags                        Tag[]
   activities                  Activity[]
+  settings                    WorkspaceSettings?
 
   @@map("workspaces")
 }
@@ -637,4 +638,18 @@ model Activity {
   @@index([workspace_id, due_at, id])
   @@index([workspace_id, opportunity_id, due_at])
   @@map("activities")
+}
+
+/// Optional operational clocks for one workspace. No row means the domain
+/// defaults, never "SLA off". The row is born on the first write from
+/// Configurações — provision_workspace does not create it.
+model WorkspaceSettings {
+  workspace_id                String    @id @db.Uuid
+  first_contact_sla_minutes   Int?
+  stagnation_days             Int?
+  created_at                  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime  @updatedAt @db.Timestamptz(6)
+  workspace                   Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@map("workspace_settings")
 }
