@@ -32,7 +32,7 @@ pnpm check:migrations   passou
 
 ## Não aproveitar tentativa do ticket 04 desta sessão
 
-O ticket 04 chegou a ser despachado em um worktree isolado, mas foi interrompido por decisão humana antes de qualquer integração. **Não faça merge nem cherry-pick dessa tentativa.** Comece o ticket 04 novamente a partir do HEAD deste checkpoint.
+O ticket 04 chegou a ser despachado em um worktree isolado, mas foi interrompido por decisão humana antes de qualquer commit, gate ou integração. O registro do worktree e o branch vazio foram removidos. **Não há commit para aproveitar:** comece o ticket 04 novamente a partir do HEAD deste checkpoint.
 
 ## Próxima fronteira
 
