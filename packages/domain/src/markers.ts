@@ -34,7 +34,7 @@ export interface MarkerReview {
 export function markersFor(
   opportunity: MarkerOpportunity,
   reviews: readonly MarkerReview[],
-  sla: FirstContactSla
+  sla?: FirstContactSla
 ): readonly Marker[] {
   const review_types = new Set(reviews.map((review) => review.type));
   const markers: Marker[] = [];
@@ -48,7 +48,7 @@ export function markersFor(
   if (review_types.has("POSSIBLE_DUPLICATE")) {
     markers.push("POSSIBLE_DUPLICATE");
   }
-  if (sla.state === "BREACHED") {
+  if (sla?.state === "BREACHED") {
     markers.push("FIRST_CONTACT_SLA_BREACHED");
   }
 

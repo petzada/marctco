@@ -48,4 +48,14 @@ describe("markersFor", () => {
     expect(markersFor({ missing_phone: false }, [], pending)).toEqual([]);
     expect(markersFor({ missing_phone: false }, [], met)).toEqual([]);
   });
+
+  it("omits the SLA marker when sla is omitted, so callers from before ticket 03 stay safe", () => {
+    expect(markersFor({ missing_phone: true }, [{ type: "IDENTITY_CONFLICT" }], breached)).toContain(
+      "FIRST_CONTACT_SLA_BREACHED"
+    );
+    expect(markersFor({ missing_phone: true }, [{ type: "IDENTITY_CONFLICT" }])).toEqual([
+      "MISSING_PHONE",
+      "IDENTITY_CONFLICT"
+    ]);
+  });
 });

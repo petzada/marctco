@@ -31,9 +31,10 @@ export interface FirstContactSlaInput {
  *
  * Waiting the full budget (`duration_ms === limit`) is already late. A
  * `WON`/`LOST` lead with no completed activity never counts as attended
- * (`MET`); without a close timestamp (Fase 6) the duration still ends at
- * `now`, because those are the arguments this function is specified to
- * receive.
+ * (`MET`). CONTEXT requires the wait to stop when the lead closes, but the
+ * inputs listed in the Fase 3 spec carry no close instant — only
+ * `first_contact_at` or `now`. Until that instant is decided, duration for
+ * closed leads without contact still ends at `now` (see ticket 03 review).
  */
 export function firstContactSla(input: FirstContactSlaInput): FirstContactSla {
   const end = input.first_contact_at ?? input.now;
@@ -45,8 +46,8 @@ export function firstContactSla(input: FirstContactSlaInput): FirstContactSla {
     return { state: over_limit ? "BREACHED" : "MET", duration_ms };
   }
 
-  // WON/LOST without contact is never MET. Duration still ends at `now`
-  // because these arguments have no close timestamp (Fase 6).
+  // WON/LOST without contact is never MET (CONTEXT). Duration freeze pending
+  // a decided close instant — see module comment above.
   if (input.status === "WON" || input.status === "LOST") {
     return { state: over_limit ? "BREACHED" : "PENDING", duration_ms };
   }
