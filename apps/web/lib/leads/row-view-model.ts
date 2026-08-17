@@ -1,5 +1,11 @@
-import { markersFor, type Marker } from "@marctco/domain";
 import type { FinancingType, LeadListRow, LeadSource } from "@marctco/db";
+import {
+  firstContactSla,
+  markersFor,
+  type FirstContactSla,
+  type Marker,
+  type ResolvedWorkspaceSettings
+} from "@marctco/domain";
 
 /**
  * What the row (and the stacked mobile card) render, built once from the
@@ -17,6 +23,8 @@ export interface LeadRowViewModel {
   readonly campaignLabel: string;
   readonly formLabel: string;
   readonly arrivedAt: Date;
+  readonly waitLabel: string;
+  readonly sla: FirstContactSla;
   readonly markers: readonly Marker[];
 }
 
@@ -35,7 +43,18 @@ const SOURCE_LABELS: Readonly<Record<LeadSource, string>> = {
 
 const EMPTY = "—";
 
-export function buildLeadRowViewModel(row: LeadListRow): LeadRowViewModel {
+export function buildLeadRowViewModel(
+  row: LeadListRow,
+  clock: { readonly settings: ResolvedWorkspaceSettings; readonly now: Date }
+): LeadRowViewModel {
+  const sla = firstContactSla({
+    arrived_at: row.arrived_at,
+    first_contact_at: row.first_contact_at,
+    closed_at: row.closed_at,
+    status: row.status,
+    settings: clock.settings,
+    now: clock.now
+  });
   return {
     opportunity_id: row.opportunity_id,
     name: row.name?.trim() || "Sem nome",
@@ -46,7 +65,9 @@ export function buildLeadRowViewModel(row: LeadListRow): LeadRowViewModel {
     campaignLabel: row.campaign_name?.trim() || EMPTY,
     formLabel: row.form_name?.trim() || EMPTY,
     arrivedAt: row.arrived_at,
-    markers: markersFor({ missing_phone: row.missing_phone }, row.reviews)
+    waitLabel: formatWaitDuration(sla.duration_ms),
+    sla,
+    markers: markersFor({ missing_phone: row.missing_phone }, row.reviews, sla)
   };
 }
 
@@ -100,4 +121,44 @@ export function formatInstallmentAmount(value: string | null): string {
     maximumFractionDigits: 2
   });
   return `R$ ${formatted}`;
+}
+
+/**
+ * Compact wall-clock wait for the table and the card. Numerals stay
+ * tabular at the call site, like the installment column.
+ */
+export function formatWaitDuration(duration_ms: number): string {
+  const total_minutes = Math.floor(Math.max(0, duration_ms) / 60_000);
+  if (total_minutes < 1) {
+    return "< 1 min";
+  }
+  const days = Math.floor(total_minutes / 1_440);
+  const hours = Math.floor((total_minutes % 1_440) / 60);
+  const minutes = total_minutes % 60;
+  const parts: string[] = [];
+  if (days > 0) {
+    parts.push(`${days}d`);
+  }
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0 && days === 0) {
+    parts.push(`${minutes} min`);
+  }
+  return parts.join(" ");
+}
+
+export function waitCaption(input: {
+  readonly sla: FirstContactSla;
+  readonly first_contact_at: Date | null;
+  readonly status: "OPEN" | "WON" | "LOST";
+}): string {
+  const duration = formatWaitDuration(input.sla.duration_ms);
+  if (input.first_contact_at !== null) {
+    return `Primeiro contato em ${duration}`;
+  }
+  if (input.status !== "OPEN") {
+    return `Sem contato em ${duration}`;
+  }
+  return `Esperando há ${duration}`;
 }

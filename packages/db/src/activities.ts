@@ -372,6 +372,17 @@ export async function completeActivity(
           AND opportunity.id = activity.opportunity_id
           ${opportunityScopeSql(context, "opportunity")}
         RETURNING activity.*
+      ),
+      stamped AS (
+        UPDATE opportunities AS opportunity
+        SET
+          first_contact_at = done_rows.completed_at,
+          updated_at = CURRENT_TIMESTAMP
+        FROM done_rows
+        WHERE opportunity.workspace_id = done_rows.workspace_id
+          AND opportunity.id = done_rows.opportunity_id
+          AND opportunity.first_contact_at IS NULL
+        RETURNING opportunity.id
       )
       SELECT ${ACTIVITY_SELECT}
       FROM done_rows AS activity

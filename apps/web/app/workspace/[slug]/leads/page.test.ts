@@ -5,6 +5,7 @@ const listLeads = vi.fn();
 const countLeadsByMarker = vi.fn();
 const listTeam = vi.fn();
 const listLeadAssignmentDestinations = vi.fn();
+const getWorkspaceSettings = vi.fn();
 const redirect = vi.fn((destination: string) => {
   throw new Error(`NEXT_REDIRECT ${destination}`);
 });
@@ -14,7 +15,8 @@ vi.mock("@marctco/db", () => ({
   listLeads,
   countLeadsByMarker,
   listTeam,
-  listLeadAssignmentDestinations
+  listLeadAssignmentDestinations,
+  getWorkspaceSettings
 }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("../../../../lib/workspace-access", () => ({ resolveWorkspaceAccess }));
@@ -39,6 +41,10 @@ describe("Leads table route", () => {
     countLeadsByMarker.mockReset().mockResolvedValue({});
     listTeam.mockReset().mockResolvedValue([]);
     listLeadAssignmentDestinations.mockReset().mockResolvedValue([]);
+    getWorkspaceSettings.mockReset().mockResolvedValue({
+      first_contact_sla_minutes: 120,
+      stagnation_days: 7
+    });
     redirect.mockClear();
     resolveWorkspaceAccess.mockReset();
   });

@@ -81,6 +81,9 @@ async function seedCard(options: SeedCardOptions = {}): Promise<{
     data: { workspace_id: workspace, name: options.name ?? "Lead do quadro" }
   });
   const arrived_at = options.arrived_at ?? nextArrival();
+  const status = options.status ?? "OPEN";
+  const closed_at =
+    status === "OPEN" ? null : new Date(arrived_at.getTime() + 30 * 60_000);
   const opportunity = await seeder.opportunity.create({
     data: {
       workspace_id: workspace,
@@ -88,8 +91,9 @@ async function seedCard(options: SeedCardOptions = {}): Promise<{
       pipeline_id: options.pipeline_id ?? pipeline,
       stage_id: options.stage_id ?? entry_stage,
       area: options.area ?? "COMMERCIAL",
-      status: options.status ?? "OPEN",
+      status,
       arrived_at,
+      closed_at,
       assigned_user_id: options.assigned_user_id ?? null,
       merged_into_opportunity_id: options.merged_into_opportunity_id ?? null
     }

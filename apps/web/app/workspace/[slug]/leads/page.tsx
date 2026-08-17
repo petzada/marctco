@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   countLeadsByMarker,
+  getWorkspaceSettings,
   listLeadAssignmentDestinations,
   listTeam,
   listLeads,
@@ -74,6 +75,7 @@ export default async function LeadsPage({
     limit: PAGE_SIZE
   });
   const countsPromise = countLeadsByMarker(access.workspace.context);
+  const settingsPromise = getWorkspaceSettings(access.workspace.context);
   const teamPromise = access.workspace.role === "ATTENDANT"
     ? Promise.resolve([])
     : listTeam(access.workspace.context);
@@ -113,6 +115,7 @@ export default async function LeadsPage({
               filterQuery={filterParams.toString()}
               isUnassignedView={isUnassignedView}
               rowsPromise={rowsPromise}
+              settingsPromise={settingsPromise}
               slug={slug}
             />
           </Suspense>
@@ -141,6 +144,7 @@ async function CountersSection({
 
 async function TableSection({
   rowsPromise,
+  settingsPromise,
   slug,
   hasActiveFilter,
   isFirstPage,
@@ -153,6 +157,7 @@ async function TableSection({
   isUnassignedView
 }: Readonly<{
   rowsPromise: Promise<LeadListRow[]>;
+  settingsPromise: ReturnType<typeof getWorkspaceSettings>;
   slug: string;
   hasActiveFilter: boolean;
   isFirstPage: boolean;
@@ -164,8 +169,8 @@ async function TableSection({
   filterQuery: string;
   isUnassignedView: boolean;
 }>) {
-  const [rows, members, assignDestinations, reassignDestinations] = await Promise.all([
-    rowsPromise, teamPromise, assignDestinationsPromise, reassignDestinationsPromise
+  const [rows, members, assignDestinations, reassignDestinations, clockSettings] = await Promise.all([
+    rowsPromise, teamPromise, assignDestinationsPromise, reassignDestinationsPromise, settingsPromise
   ]);
   const first = rows[0];
   const last = rows[rows.length - 1];
@@ -186,6 +191,8 @@ async function TableSection({
         assignDestinations={assignDestinations}
         reassignDestinations={reassignDestinations}
         isUnassignedView={isUnassignedView}
+        clockSettings={clockSettings}
+        nowIso={new Date().toISOString()}
         rows={rows}
         slug={slug}
       />

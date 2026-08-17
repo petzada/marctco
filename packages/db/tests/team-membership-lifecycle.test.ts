@@ -49,9 +49,11 @@ async function seedOpportunity(workspace_id: string, status: "OPEN" | "WON" | "L
   const pipeline = await seeder.pipeline.findFirstOrThrow({ where: { workspace_id } });
   const stage = await seeder.stage.findFirstOrThrow({ where: { workspace_id } });
   const person = await seeder.person.create({ data: { workspace_id, name: status } });
+  const arrived_at = new Date();
+  const closed_at = status === "OPEN" ? null : new Date(arrived_at.getTime() + 60_000);
   return seeder.opportunity.create({ data: {
     workspace_id, person_id: person.id, pipeline_id: pipeline.id, stage_id: stage.id,
-    area: "COMMERCIAL", status, arrived_at: new Date(), assigned_user_id: target
+    area: "COMMERCIAL", status, arrived_at, closed_at, assigned_user_id: target
   } });
 }
 

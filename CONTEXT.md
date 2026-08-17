@@ -185,3 +185,15 @@ _Avoid_: Parar o relógio na atribuição, horário comercial, flag `auto_primei
 **Estagnação**:
 Limite em dias, configurável pela Gestão, sem movimento no lead. Sem linha no workspace, vale o padrão do domínio. Mede movimento, não chegada.
 _Avoid_: Contar edição de campo ou leitura como movimento, desligar o relógio por ausência de configuração
+
+**Primeiro contato**:
+Instante em que alguém falou com esta pessoa pela primeira vez. Nesta fase é a primeira Atividade concluída daquele lead; a Fase 4 acrescenta a mensagem de WhatsApp na mesma coluna, sem trocar o significado. Anulável e escrito uma vez: a segunda conclusão não sobrescreve, e atribuir ou mover etapa não preenchem.
+_Avoid_: Parar o relógio na atribuição, inferir do responsável, sobrescrever na segunda conclusão, reconstruir varrendo atividades a cada tela
+
+**Fechamento**:
+Instante em que a Oportunidade deixa de estar em aberto e passa a ganho ou perda. Gravado em `closed_at`, anulável enquanto `status` for `OPEN` e obrigatório quando for `WON` ou `LOST`. Para o relógio de SLA, encerra a espera quando não houve primeiro contato: a duração congela nesse instante e nunca conta como atendimento. A operação nomeada de concluir atendimento da Fase 6 preencherá a coluna; caminhos legados que já fecham o card (como arquivar spam na quarentena) também a gravam.
+_Avoid_: Usar `updated_at` como proxy de fechamento, inferir fechamento de etapa ou atribuição, deixar ganho/perda sem `closed_at`
+
+**Estado de SLA de primeiro contato**:
+Se o lead ainda espera dentro do limite (pendente), se foi atendido dentro do limite (cumprido) ou se estourou o limite (estourado) — com ou sem atendimento tardio. Função pura, relógio corrido. A duração termina em `first_contact_at` quando houve contato, em `closed_at` quando ganho ou perda sem contato, ou em `now` enquanto ainda está aberto sem contato. Ganho e perda sem nenhuma atividade concluída param de esperar atendimento e não contam como atendidos.
+_Avoid_: Horário comercial, feriado, tratar ganho ou perda como atendimento, uma segunda função para a tela e outra para o alerta, deixar o relógio correr após fechamento sem contato

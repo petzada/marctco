@@ -3,19 +3,27 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import type { FinancingType, IdentityConflictResolution, LeadActivity, LeadDetail, LeadReviewDetail } from "@marctco/db";
-import { FINANCING_TYPES, markersFor, type Marker, type PossibleDuplicateResolution } from "@marctco/domain";
+import {
+  FINANCING_TYPES,
+  firstContactSla,
+  markersFor,
+  type Marker,
+  type PossibleDuplicateResolution,
+  type ResolvedWorkspaceSettings
+} from "@marctco/domain";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { FieldError, FieldLabel, TextInput } from "../ui/field";
 import { StatusBadge, type StatusBadgeTone } from "../ui/status-badge";
 import { markerPresentation } from "../../lib/leads/markers";
-import { formatArrivedAt, formatInstallmentAmount } from "../../lib/leads/row-view-model";
+import { formatArrivedAt, formatInstallmentAmount, waitCaption } from "../../lib/leads/row-view-model";
 import { LeadCardActivities, type ActivityAssigneeOption } from "./lead-card-activities";
 
 const MARKER_TONE: Readonly<Record<Marker, StatusBadgeTone>> = {
   MISSING_PHONE: "warning",
   IDENTITY_CONFLICT: "danger",
-  POSSIBLE_DUPLICATE: "info"
+  POSSIBLE_DUPLICATE: "info",
+  FIRST_CONTACT_SLA_BREACHED: "danger"
 };
 
 const FINANCING_TYPE_LABELS: Readonly<Record<FinancingType, string>> = {
@@ -40,6 +48,8 @@ export interface LeadCardContentProps {
   readonly currentUserId: string;
   readonly activities: readonly LeadActivity[];
   readonly assignees: readonly ActivityAssigneeOption[];
+  readonly clockSettings: ResolvedWorkspaceSettings;
+  readonly nowIso: string;
 }
 
 /**
@@ -49,13 +59,29 @@ export interface LeadCardContentProps {
  * identity conflict get resolved; there is no "excluir duplicado" anywhere
  * in this file (ADR-0007).
  */
-export function LeadCardContent({ lead, slug, currentUserId, activities, assignees }: LeadCardContentProps) {
+export function LeadCardContent({
+  lead,
+  slug,
+  currentUserId,
+  activities,
+  assignees,
+  clockSettings,
+  nowIso
+}: LeadCardContentProps) {
   // The same `markersFor` the row and the comparison read from — the card
   // never re-derives "what does this lead have" on its own (ADR-0018). The
   // resolution panels below still read `lead.reviews` directly, because they
   // need the full review record (candidates, related card), not just which
   // marker kind is present.
-  const markers = markersFor({ missing_phone: lead.missing_phone }, lead.reviews);
+  const sla = firstContactSla({
+    arrived_at: lead.arrived_at,
+    first_contact_at: lead.first_contact_at,
+    closed_at: lead.closed_at,
+    status: lead.status,
+    settings: clockSettings,
+    now: new Date(nowIso)
+  });
+  const markers = markersFor({ missing_phone: lead.missing_phone }, lead.reviews, sla);
 
   return (
     <div className="grid gap-lg">
@@ -71,6 +97,11 @@ export function LeadCardContent({ lead, slug, currentUserId, activities, assigne
         </div>
         <p className="mt-xxs text-body-sm text-ink-muted">
           Chegou em <span className="tabular-nums">{formatArrivedAt(lead.arrived_at)}</span>
+        </p>
+        <p className="mt-xxs text-body-sm text-ink-muted">
+          <span className="tabular-nums">
+            {waitCaption({ sla, first_contact_at: lead.first_contact_at, status: lead.status })}
+          </span>
         </p>
       </section>
 

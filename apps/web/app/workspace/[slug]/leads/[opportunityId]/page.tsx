@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLead, listLeadActivities, listTeam } from "@marctco/db";
+import { getLead, getWorkspaceSettings, listLeadActivities, listTeam } from "@marctco/db";
 import { LeadCardContent } from "../../../../../components/leads/lead-card-content";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
@@ -23,10 +23,11 @@ export default async function LeadCardPage({
 
   const context = access.workspace.context;
   try {
-    const [lead, activities, teammates] = await Promise.all([
+    const [lead, activities, teammates, clockSettings] = await Promise.all([
       getLead(context, opportunityId),
       listLeadActivities(context, opportunityId),
-      context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context)
+      context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context),
+      getWorkspaceSettings(context)
     ]);
     return (
       <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
@@ -41,8 +42,10 @@ export default async function LeadCardPage({
                 user_id: member.user_id,
                 display_name: member.display_name?.trim() || member.email || "Sem nome"
               }))}
+              clockSettings={clockSettings}
               currentUserId={context.user_id}
               lead={lead}
+              nowIso={new Date().toISOString()}
               slug={slug}
             />
           </div>

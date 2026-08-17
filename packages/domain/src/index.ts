@@ -78,8 +78,19 @@ export {
   MARKERS,
   type Marker,
   type MarkerOpportunity,
-  type MarkerReview
+  type MarkerReview,
+  type TableMarker
 } from "./markers.js";
+export {
+  FIRST_CONTACT_SLA_STATES,
+  FirstContactSlaError,
+  firstContactSla,
+  type FirstContactSla,
+  type FirstContactSlaInput,
+  type FirstContactSlaOpportunityStatus,
+  type FirstContactSlaRefusal,
+  type FirstContactSlaState
+} from "./first-contact-sla.js";
 export {
   POSSIBLE_DUPLICATE_RESOLUTIONS,
   planPossibleDuplicateResolution,

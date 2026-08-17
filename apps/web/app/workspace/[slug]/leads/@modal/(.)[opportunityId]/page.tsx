@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getLead, listLeadActivities, listTeam } from "@marctco/db";
+import { getLead, getWorkspaceSettings, listLeadActivities, listTeam } from "@marctco/db";
 import { LeadCardContent } from "../../../../../../components/leads/lead-card-content";
 import { LeadCardModalShell } from "../../../../../../components/leads/lead-card-modal-shell";
 import { resolveWorkspaceAccess } from "../../../../../../lib/workspace-access";
@@ -21,10 +21,11 @@ export default async function LeadCardInterceptedModal({
 
   const context = access.workspace.context;
   try {
-    const [lead, activities, teammates] = await Promise.all([
+    const [lead, activities, teammates, clockSettings] = await Promise.all([
       getLead(context, opportunityId),
       listLeadActivities(context, opportunityId),
-      context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context)
+      context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context),
+      getWorkspaceSettings(context)
     ]);
     return (
       <LeadCardModalShell>
@@ -34,8 +35,10 @@ export default async function LeadCardInterceptedModal({
             user_id: member.user_id,
             display_name: member.display_name?.trim() || member.email || "Sem nome"
           }))}
+          clockSettings={clockSettings}
           currentUserId={context.user_id}
           lead={lead}
+          nowIso={new Date().toISOString()}
           slug={slug}
         />
       </LeadCardModalShell>
