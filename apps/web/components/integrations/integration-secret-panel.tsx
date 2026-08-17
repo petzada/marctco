@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { IntegrationSurface } from "../../lib/integration-surfaces";
 import { maskIntegrationSecret } from "../../lib/mask-integration-secret";
+import { pluginRequestHeadersFor } from "../../lib/pluga-templates";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Modal } from "../ui/modal";
@@ -22,11 +23,6 @@ export interface IntegrationSecretPanelProps {
   readonly connection: IntegrationConnectionSummaryProps | null;
   /** Absolute URL the operator pastes into the origin. No HTTP method prefix. */
   readonly webhookUrl: string;
-  /**
-   * When the secret is shown in the clear, also offer the JSON headers block
-   * that origin expects. Landing page does not use this shape.
-   */
-  readonly headersJsonForToken?: (token: string) => string;
 }
 
 type PendingAction = "generate" | "rotate" | null;
@@ -42,13 +38,15 @@ type ConfirmKind = "rotate" | "disable" | null;
  * One component for every origin, parameterised by `surface`. Pluga and
  * landing page each administer their own connection, and the credentials stay
  * separate on purpose: rotating one must not silence the other.
+ *
+ * JSON headers for Pluga are formatted here, not passed in as a callback:
+ * a function prop from the server page 500s the whole screen (digest 2350742981).
  */
 export function IntegrationSecretPanel({
   slug,
   surface,
   connection,
-  webhookUrl,
-  headersJsonForToken
+  webhookUrl
 }: IntegrationSecretPanelProps) {
   const router = useRouter();
   const [revealed, setRevealed] = useState<{ token: string; token_last4: string } | null>(null);
@@ -112,7 +110,7 @@ export function IntegrationSecretPanel({
             valor, gere um novo.
           </p>
           <CopyBlock className="mt-sm" code={revealed.token} label="segredo" />
-          {headersJsonForToken ? (
+          {surface.offersJsonRequestHeaders ? (
             <div className="mt-md">
               <p className="text-label text-warning-ink">Cabeçalhos (JSON)</p>
               <p className="mt-xxs text-caption text-warning-ink">
@@ -121,7 +119,7 @@ export function IntegrationSecretPanel({
               </p>
               <CopyBlock
                 className="mt-xs"
-                code={headersJsonForToken(revealed.token)}
+                code={pluginRequestHeadersFor(revealed.token)}
                 label="cabeçalhos"
               />
             </div>

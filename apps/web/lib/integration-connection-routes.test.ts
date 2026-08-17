@@ -79,6 +79,20 @@ function statusRequest(segment: string, status: string | null): Request {
   });
 }
 
+/** Next.js RSC rejects any function in the props of a `"use client"` island. */
+function clientPropGraphHasFunctions(value: unknown): boolean {
+  if (typeof value === "function") {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.some(clientPropGraphHasFunctions);
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.values(value).some(clientPropGraphHasFunctions);
+  }
+  return false;
+}
+
 describe("integration surfaces", () => {
   it("gives each surface its own provider and its own URL segment", () => {
     const providers = SURFACES.map((surface) => surface.provider);
@@ -88,6 +102,27 @@ describe("integration surfaces", () => {
     expect(new Set(segments).size).toBe(SURFACES.length);
     expect(LANDING_PAGE_SURFACE.provider).toBe("LANDING_PAGE");
     expect(PLUGA_SURFACE.provider).toBe("PLUGA");
+  });
+
+  it("keeps Pluga JSON headers as a boolean flag, not a callback", () => {
+    expect(PLUGA_SURFACE.offersJsonRequestHeaders).toBe(true);
+    expect(LANDING_PAGE_SURFACE.offersJsonRequestHeaders).toBe(false);
+  });
+
+  it("serializes into a client island without functions (Next RSC)", () => {
+    for (const surface of SURFACES) {
+      expect(clientPropGraphHasFunctions(surface)).toBe(false);
+      expect(() => JSON.stringify(surface)).not.toThrow();
+    }
+
+    const plugaPanelProps = {
+      connection: { status: "ACTIVE" as const, token_last4: "9f3a" },
+      slug: SLUG,
+      surface: PLUGA_SURFACE,
+      webhookUrl: "https://web.example/v1/integrations/pluga/leads"
+    };
+    expect(clientPropGraphHasFunctions(plugaPanelProps)).toBe(false);
+    expect(() => JSON.stringify(plugaPanelProps)).not.toThrow();
   });
 });
 

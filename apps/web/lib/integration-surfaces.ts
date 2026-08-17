@@ -28,6 +28,12 @@ export interface IntegrationSurface {
   readonly provider: IntegrationProvider;
   /** Ingestion endpoint the operator pastes into the origin. */
   readonly endpointPath: string;
+  /**
+   * When true, the secret panel also offers the JSON headers block Pluga
+   * pastes. Must stay a boolean: a formatter function cannot cross the RSC
+   * boundary into the client island.
+   */
+  readonly offersJsonRequestHeaders: boolean;
   readonly copy: IntegrationSurfaceCopy;
 }
 
@@ -52,6 +58,7 @@ export const PLUGA_SURFACE: IntegrationSurface = {
   segment: "pluga",
   provider: "PLUGA",
   endpointPath: PLUGA_LEADS_ENDPOINT_PATH,
+  offersJsonRequestHeaders: true,
   copy: {
     panelDescription:
       "Cole a URL de API e o segredo nos cabeçalhos JSON da automação HTTP Request da Pluga.",
@@ -70,6 +77,7 @@ export const LANDING_PAGE_SURFACE: IntegrationSurface = {
   segment: "landing-page",
   provider: "LANDING_PAGE",
   endpointPath: LANDING_PAGE_ENDPOINT_PATH,
+  offersJsonRequestHeaders: false,
   copy: {
     panelDescription:
       "Guarde o segredo no servidor do site: no WordPress, no backend ou nos segredos da função serverless. Ele nunca vai no JavaScript da página.",
