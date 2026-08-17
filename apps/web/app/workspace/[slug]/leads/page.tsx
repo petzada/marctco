@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   countLeadsByMarker,
@@ -16,6 +17,7 @@ import { LeadsFilters } from "../../../../components/leads/leads-filters";
 import { NewLeadsBanner } from "../../../../components/leads/new-leads-banner";
 import { decodeLeadCursor, encodeLeadCursor } from "../../../../lib/leads/cursor";
 import { leadsSearchParamsCache } from "../../../../lib/leads/search-params";
+import { seesLeadsTable } from "../../../../lib/lead-board-access";
 import { resolveWorkspaceAccess } from "../../../../lib/workspace-access";
 
 export const metadata: Metadata = {
@@ -46,6 +48,9 @@ export default async function LeadsPage({
     // The layout above this route already redirects to /login or 404s an
     // unassociated workspace; nothing renders here in that case.
     return null;
+  }
+  if (!seesLeadsTable(access.workspace.role)) {
+    redirect(`/workspace/${slug}/my-leads`);
   }
 
   const { cursor: cursorParam, marker, responsible, team } = await leadsSearchParamsCache.parse(searchParams);
