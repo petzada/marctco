@@ -33,7 +33,7 @@ import {
 } from "../../../../../lib/integration-access";
 import { PLUGA_SURFACE } from "../../../../../lib/integration-surfaces";
 import { formatQuarantineWait } from "../../../../../lib/quarantine-wait-time";
-import { pluginRequestHeadersFor, PLUGA_LEADS_ENDPOINT_PATH } from "../../../../../lib/pluga-templates";
+import { PLUGA_LEADS_ENDPOINT_PATH } from "../../../../../lib/pluga-templates";
 import { publicIntegrationUrl } from "../../../../../lib/public-origin";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
@@ -127,7 +127,6 @@ export default async function PlugaIntegrationPage({
         {isOwner ? (
           <IntegrationSecretPanel
             connection={connection}
-            headersJsonForToken={pluginRequestHeadersFor}
             slug={slug}
             surface={PLUGA_SURFACE}
             webhookUrl={webhookUrl}
