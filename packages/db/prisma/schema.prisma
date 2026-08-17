@@ -502,6 +502,11 @@ model Opportunity {
   /// completed Activity of this lead (Fase 4 will also fill this column from
   /// a WhatsApp message). Assignment and stage moves never write it.
   first_contact_at           DateTime?                  @db.Timestamptz(6)
+  /// Instant the Opportunity became WON or LOST. Null while OPEN; required
+  /// when closed (DB CHECK). Ends the first-contact SLA when there was no
+  /// attendance. Fase 6's close operation fills this; quarantine archive paths
+  /// that already close the card write it too (ticket 03).
+  closed_at                  DateTime?                  @db.Timestamptz(6)
   workspace                  Workspace                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   person                     Person                     @relation(fields: [workspace_id, person_id], references: [workspace_id, id], onDelete: Cascade)
   pipeline                   Pipeline                   @relation(fields: [workspace_id, pipeline_id], references: [workspace_id, id], onDelete: Restrict)

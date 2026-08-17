@@ -948,7 +948,7 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
     // The card advances and is lost, exactly as an operation would move it.
     await seeder.opportunity.update({
       where: { id: applied.opportunity_id },
-      data: { stage_id: default_closing_stage, status: "LOST", assigned_user_id: randomUUID() }
+      data: { stage_id: default_closing_stage, status: "LOST", closed_at: new Date(), assigned_user_id: randomUUID() }
     });
     const before = await seeder.opportunity.findUniqueOrThrow({
       where: { id: applied.opportunity_id }
@@ -1289,6 +1289,8 @@ describe("findOpenOpportunitiesOfPerson", () => {
 
     const open_ids: string[] = [];
     for (const [index, status] of (["OPEN", "OPEN", "WON", "LOST"] as const).entries()) {
+      const arrived_at = new Date(RECEIVED_AT.getTime() + index);
+      const closed_at = status === "OPEN" ? null : new Date(arrived_at.getTime() + 60_000);
       const opportunity = await seeder.opportunity.create({
         data: {
           workspace_id: workspace,
@@ -1297,7 +1299,8 @@ describe("findOpenOpportunitiesOfPerson", () => {
           stage_id: default_entry_stage,
           area: "COMMERCIAL",
           status,
-          arrived_at: new Date(RECEIVED_AT.getTime() + index)
+          arrived_at,
+          closed_at
         }
       });
       if (status === "OPEN") {

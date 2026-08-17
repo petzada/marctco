@@ -241,6 +241,7 @@ async function applyPossibleDuplicateResolution(
       const archived = await transaction.$executeRaw`
         UPDATE opportunities
         SET status = 'LOST',
+            closed_at = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ${plan.opportunity_id}::uuid
           AND workspace_id = ${workspace_id}::uuid

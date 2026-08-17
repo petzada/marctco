@@ -808,6 +808,10 @@ describe("resolveIntakeReview", () => {
       status: "LOST",
       merged_into_opportunity_id: null
     });
+    const archived = await seeder.opportunity.findUniqueOrThrow({
+      where: { id: fixture.reviewed_opportunity_id }
+    });
+    expect(archived.closed_at).not.toBeNull();
     await expect(
       seeder.intakeReview.findUniqueOrThrow({ where: { id: fixture.review_id } })
     ).resolves.toMatchObject({

@@ -1993,4 +1993,17 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       }
     ]);
   });
+
+  it("requires closed_at when status is WON or LOST, and forbids it while OPEN", async () => {
+    const rows = await client.$queryRaw<Array<{ constraint_name: string; check_clause: string }>>`
+      SELECT con.conname::text AS constraint_name, pg_get_constraintdef(con.oid) AS check_clause
+      FROM pg_constraint AS con
+      JOIN pg_class AS rel ON rel.oid = con.conrelid
+      WHERE rel.relname = 'opportunities'
+        AND con.conname = 'opportunities_closed_at_status_check'
+    `;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.check_clause).toContain("closed_at IS NULL");
+    expect(rows[0]?.check_clause).toContain("closed_at IS NOT NULL");
+  });
 });

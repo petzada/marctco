@@ -87,6 +87,10 @@ async function seedOpportunity(options: {
   const person = await seeder.person.create({
     data: { workspace_id, name: "Lead de atividade" }
   });
+  const arrived_at = nextArrival();
+  const status = options.status ?? "OPEN";
+  const closed_at =
+    status === "OPEN" ? null : new Date(arrived_at.getTime() + 30 * 60_000);
   const opportunity = await seeder.opportunity.create({
     data: {
       workspace_id,
@@ -94,8 +98,9 @@ async function seedOpportunity(options: {
       pipeline_id: workspace_id === workspace ? pipeline : neighbour_pipeline,
       stage_id: workspace_id === workspace ? entry_stage : neighbour_entry_stage,
       area: "COMMERCIAL",
-      status: options.status ?? "OPEN",
-      arrived_at: nextArrival(),
+      status,
+      arrived_at,
+      closed_at,
       assigned_user_id: options.assigned_user_id ?? attendant_user,
       merged_into_opportunity_id: options.merged_into_opportunity_id ?? null
     }

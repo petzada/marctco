@@ -4,7 +4,7 @@ import {
   DEFAULT_STAGNATION_DAYS,
   type ResolvedWorkspaceSettings
 } from "./workspace-settings.js";
-import { firstContactSla } from "./first-contact-sla.js";
+import { FirstContactSlaError, firstContactSla } from "./first-contact-sla.js";
 
 const settings: ResolvedWorkspaceSettings = {
   first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
@@ -23,6 +23,7 @@ describe("firstContactSla", () => {
       firstContactSla({
         arrived_at,
         first_contact_at: null,
+        closed_at: null,
         status: "OPEN",
         settings,
         now: atMinutes(119)
@@ -35,6 +36,7 @@ describe("firstContactSla", () => {
       firstContactSla({
         arrived_at,
         first_contact_at: null,
+        closed_at: null,
         status: "OPEN",
         settings,
         now: atMinutes(DEFAULT_FIRST_CONTACT_SLA_MINUTES)
@@ -47,6 +49,7 @@ describe("firstContactSla", () => {
       firstContactSla({
         arrived_at,
         first_contact_at: atMinutes(45),
+        closed_at: null,
         status: "OPEN",
         settings,
         now: atMinutes(400)
@@ -59,6 +62,7 @@ describe("firstContactSla", () => {
       firstContactSla({
         arrived_at,
         first_contact_at: atMinutes(180),
+        closed_at: null,
         status: "OPEN",
         settings,
         now: atMinutes(400)
@@ -75,6 +79,7 @@ describe("firstContactSla", () => {
       firstContactSla({
         arrived_at,
         first_contact_at: atMinutes(30),
+        closed_at: null,
         status: "OPEN",
         settings: tight,
         now: atMinutes(30)
@@ -84,6 +89,7 @@ describe("firstContactSla", () => {
       firstContactSla({
         arrived_at,
         first_contact_at: atMinutes(29),
+        closed_at: null,
         status: "OPEN",
         settings: tight,
         now: atMinutes(29)
@@ -92,36 +98,75 @@ describe("firstContactSla", () => {
   });
 
   it("does not count WON or LOST without contact as attended, even inside the limit", () => {
+    const closed_at = atMinutes(30);
     expect(
       firstContactSla({
         arrived_at,
         first_contact_at: null,
+        closed_at,
         status: "WON",
         settings,
-        now: atMinutes(30)
+        now: atMinutes(400)
       })
     ).toEqual({ state: "PENDING", duration_ms: 30 * 60_000 });
     expect(
       firstContactSla({
         arrived_at,
         first_contact_at: null,
+        closed_at,
         status: "LOST",
         settings,
-        now: atMinutes(30)
+        now: atMinutes(400)
       }).state
     ).toBe("PENDING");
   });
 
-  it("still marks a closed lead without contact BREACHED once the wait has passed the limit", () => {
+  it("still marks a closed lead without contact BREACHED once the wait has passed the limit at close", () => {
+    const closed_at = atMinutes(180);
     expect(
       firstContactSla({
         arrived_at,
         first_contact_at: null,
+        closed_at,
+        status: "LOST",
+        settings,
+        now: atMinutes(400)
+      })
+    ).toEqual({ state: "BREACHED", duration_ms: 180 * 60_000 });
+  });
+
+  it("freezes duration for a closed lead without contact when now advances", () => {
+    const closed_at = atMinutes(30);
+    const at_close = firstContactSla({
+      arrived_at,
+      first_contact_at: null,
+      closed_at,
+      status: "LOST",
+      settings,
+      now: atMinutes(30)
+    });
+    const much_later = firstContactSla({
+      arrived_at,
+      first_contact_at: null,
+      closed_at,
+      status: "LOST",
+      settings,
+      now: atMinutes(400)
+    });
+    expect(at_close).toEqual(much_later);
+  });
+
+  it("refuses WON or LOST without closed_at instead of letting the clock run", () => {
+    expect(() =>
+      firstContactSla({
+        arrived_at,
+        first_contact_at: null,
+        closed_at: null,
         status: "LOST",
         settings,
         now: atMinutes(180)
-      }).state
-    ).toBe("BREACHED");
+      })
+    ).toThrow(FirstContactSlaError);
   });
 
   it("measures wall-clock time: a wait that spans a night still counts every minute", () => {
@@ -130,6 +175,7 @@ describe("firstContactSla", () => {
     const sla = firstContactSla({
       arrived_at: evening,
       first_contact_at: null,
+      closed_at: null,
       status: "OPEN",
       settings,
       now: nextMorning

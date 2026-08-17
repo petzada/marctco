@@ -39,6 +39,7 @@ function row(overrides: Partial<LeadListRow> = {}): LeadListRow {
     form_name: null,
     arrived_at,
     first_contact_at: null,
+    closed_at: null,
     status: "OPEN",
     missing_phone: false,
     assigned_user_id: null,
@@ -155,15 +156,33 @@ describe("formatWaitDuration", () => {
 });
 
 describe("waitCaption", () => {
-  it("says waiting while there is no first contact, and first contact once there is", () => {
+  it("says waiting while there is no first contact on an open lead", () => {
     expect(
-      waitCaption({ sla: { state: "PENDING", duration_ms: 45 * 60_000 }, first_contact_at: null })
+      waitCaption({
+        sla: { state: "PENDING", duration_ms: 45 * 60_000 },
+        first_contact_at: null,
+        status: "OPEN"
+      })
     ).toBe("Esperando há 45 min");
+  });
+
+  it("says first contact once there is attendance", () => {
     expect(
       waitCaption({
         sla: { state: "MET", duration_ms: 45 * 60_000 },
-        first_contact_at: new Date()
+        first_contact_at: new Date(),
+        status: "OPEN"
       })
     ).toBe("Primeiro contato em 45 min");
+  });
+
+  it("does not say waiting on a closed lead that never had contact", () => {
+    expect(
+      waitCaption({
+        sla: { state: "PENDING", duration_ms: 30 * 60_000 },
+        first_contact_at: null,
+        status: "LOST"
+      })
+    ).toBe("Sem contato em 30 min");
   });
 });

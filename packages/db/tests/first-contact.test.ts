@@ -65,10 +65,20 @@ function nextArrival(): Date {
 async function seedOpportunity(options: {
   readonly assigned_user_id?: string | null;
   readonly status?: "OPEN" | "WON" | "LOST";
+  readonly arrived_at?: Date;
+  readonly closed_at?: Date | null;
 } = {}): Promise<string> {
   const person = await seeder.person.create({
     data: { workspace_id: workspace, name: "Lead de primeiro contato" }
   });
+  const arrived_at = options.arrived_at ?? nextArrival();
+  const status = options.status ?? "OPEN";
+  const closed_at =
+    status === "OPEN"
+      ? null
+      : options.closed_at === undefined
+        ? new Date(arrived_at.getTime() + 30 * 60_000)
+        : options.closed_at;
   const opportunity = await seeder.opportunity.create({
     data: {
       workspace_id: workspace,
@@ -76,8 +86,9 @@ async function seedOpportunity(options: {
       pipeline_id: pipeline,
       stage_id: entry_stage,
       area: "COMMERCIAL",
-      status: options.status ?? "OPEN",
-      arrived_at: nextArrival(),
+      status,
+      arrived_at,
+      closed_at,
       assigned_user_id: options.assigned_user_id === undefined ? attendant_user : options.assigned_user_id
     }
   });
@@ -281,7 +292,27 @@ describe("first_contact_at", () => {
     const card = await getLead(manager_context, opportunity_id, app);
     expect(listed?.first_contact_at).not.toBeNull();
     expect(listed?.status).toBe("OPEN");
+    expect(listed?.closed_at).toBeNull();
     expect(card.first_contact_at?.toISOString()).toBe(listed?.first_contact_at?.toISOString());
     expect(card.status).toBe("OPEN");
+    expect(card.closed_at).toBeNull();
+  });
+
+  it("exposes closed_at on the list and the card for a lead closed without contact", async () => {
+    const arrived_at = new Date("2026-08-17T12:00:00.000Z");
+    const closed_at = new Date(arrived_at.getTime() + 45 * 60_000);
+    const opportunity_id = await seedOpportunity({
+      status: "LOST",
+      arrived_at,
+      closed_at,
+      assigned_user_id: attendant_user
+    });
+    const listed = (await listLeads(manager_context, { limit: 200 }, app)).find(
+      (row) => row.opportunity_id === opportunity_id
+    );
+    const card = await getLead(manager_context, opportunity_id, app);
+    expect(listed?.closed_at?.toISOString()).toBe(closed_at.toISOString());
+    expect(card.closed_at?.toISOString()).toBe(closed_at.toISOString());
+    expect(listed?.first_contact_at).toBeNull();
   });
 });

@@ -65,6 +65,7 @@ export interface LeadListRow {
   readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
   readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -104,6 +105,7 @@ interface LeadListRawRow {
   readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
   readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -168,6 +170,7 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
     form_name: row.form_name,
     arrived_at: row.arrived_at,
     first_contact_at: row.first_contact_at,
+    closed_at: row.closed_at,
     status: row.status as LeadListRow["status"],
     missing_phone: row.missing_phone,
     assigned_user_id: row.assigned_user_id,
@@ -247,6 +250,7 @@ export async function listLeads(
         opportunity.form_name,
         opportunity.arrived_at,
         opportunity.first_contact_at,
+        opportunity.closed_at,
         opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
@@ -455,6 +459,7 @@ export interface LeadDetail {
   readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
   readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -478,6 +483,7 @@ interface LeadCoreRawRow {
   readonly form_name: string | null;
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
   readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -545,6 +551,7 @@ export async function getLead(
         opportunity.form_name,
         opportunity.arrived_at,
         opportunity.first_contact_at,
+        opportunity.closed_at,
         opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
@@ -710,6 +717,7 @@ export async function getLead(
       form_name: core.form_name,
       arrived_at: core.arrived_at,
       first_contact_at: core.first_contact_at,
+      closed_at: core.closed_at,
       status: core.status as LeadDetail["status"],
       missing_phone: core.missing_phone,
       assigned_user_id: core.assigned_user_id,

@@ -190,9 +190,10 @@ Escrita em route handler sob `/workspace/:slug/...`; leitura em Server Component
 - `resolved_at` é escrito quando a causa acaba. **Marcar como lida não resolve**, e resolver não exige leitura: são fatos diferentes.
 - Índice parcial `(workspace_id, detected_at DESC) WHERE resolved_at IS NULL`, que é a pergunta do Dashboard.
 
-`Opportunity` ganha duas colunas, ambas anuláveis (expand/contract, [ADR-0010](../../docs/adr/0010-migrations-e-ci-cd.md)):
+`Opportunity` ganha colunas anuláveis (expand/contract, [ADR-0010](../../docs/adr/0010-migrations-e-ci-cd.md)):
 
 - `first_contact_at` — instante da primeira Atividade concluída daquele lead. Escrito **uma vez**, com `WHERE first_contact_at IS NULL` na condição, para que a segunda conclusão não o sobrescreva e para que duas conclusões simultâneas sejam arbitradas pelo banco.
+- `closed_at` — instante em que a Oportunidade passa a `WON` ou `LOST`. Nulo enquanto `OPEN`; obrigatório quando fechada (`CHECK` no banco). Encerra o relógio de SLA quando não houve primeiro contato. A operação de concluir atendimento da Fase 6 preenche; caminhos que já fecham o card (ex.: arquivar spam na quarentena) também gravam. **Decisão ticket 03 (2026-08-17):** adicionada nesta fase porque o relógio não pode continuar correndo após ganho/perda sem atendimento.
 - `last_movement_at` — carimbo do último movimento. Nasce igual a `arrived_at` no backfill da migration, para que lead nunca tocado seja o mais parado e não o menos.
 - Índices parciais só na migration, como os que já existem: `(workspace_id, arrived_at) WHERE first_contact_at IS NULL AND status = 'OPEN' AND merged_into_opportunity_id IS NULL` e `(workspace_id, last_movement_at) WHERE status = 'OPEN' AND merged_into_opportunity_id IS NULL`. O DSL do Prisma não expressa `WHERE` em `@@index`, e declarar índice cheio aqui mentiria sobre o histórico de migrations.
 
@@ -206,7 +207,7 @@ Escrita em route handler sob `/workspace/:slug/...`; leitura em Server Component
 
 Concluir a primeira Atividade de um lead faz três coisas na mesma transação: marca a atividade `DONE` com `completed_at`/`completed_by_user_id`, grava `first_contact_at` se ainda nulo, e carimba `last_movement_at` com um fato `ACTIVITY_COMPLETED` na linha do tempo.
 
-O estado de SLA de um lead é **função pura** em `packages/domain`: recebe `arrived_at`, `first_contact_at`, `status`, a configuração resolvida e o `now`, e devolve `PENDING | MET | BREACHED` com a duração. Ela é a única fonte da resposta, chamada tanto pela listagem quanto pela varredura, para que a tela e o alerta nunca discordem.
+O estado de SLA de um lead é **função pura** em `packages/domain`: recebe `arrived_at`, `first_contact_at`, `closed_at`, `status`, a configuração resolvida e o `now`, e devolve `PENDING | MET | BREACHED` com a duração. A duração termina em `first_contact_at` quando houve contato, em `closed_at` quando `WON`/`LOST` sem contato, ou em `now` enquanto `OPEN` sem contato. `WON`/`LOST` sem `closed_at` é inconsistência de dados: a função recusa em vez de deixar o relógio correr. Ela é a única fonte da resposta, chamada tanto pela listagem quanto pela varredura, para que a tela e o alerta nunca discordem.
 
 O relógio é **corrido**. Horário comercial e feriado exigem um calendário de expediente por workspace que este produto não tem, e a alternativa — assumir 9h às 18h — mente sobre o lead que chega às 19h, que é justamente o lead de anúncio. Registrado como item aberto do plano (ver Further Notes).
 

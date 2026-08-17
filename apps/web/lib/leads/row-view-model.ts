@@ -50,6 +50,7 @@ export function buildLeadRowViewModel(
   const sla = firstContactSla({
     arrived_at: row.arrived_at,
     first_contact_at: row.first_contact_at,
+    closed_at: row.closed_at,
     status: row.status,
     settings: clock.settings,
     now: clock.now
@@ -150,10 +151,14 @@ export function formatWaitDuration(duration_ms: number): string {
 export function waitCaption(input: {
   readonly sla: FirstContactSla;
   readonly first_contact_at: Date | null;
+  readonly status: "OPEN" | "WON" | "LOST";
 }): string {
   const duration = formatWaitDuration(input.sla.duration_ms);
   if (input.first_contact_at !== null) {
     return `Primeiro contato em ${duration}`;
+  }
+  if (input.status !== "OPEN") {
+    return `Sem contato em ${duration}`;
   }
   return `Esperando há ${duration}`;
 }

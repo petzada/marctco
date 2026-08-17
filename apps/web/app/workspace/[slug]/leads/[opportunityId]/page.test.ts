@@ -29,6 +29,7 @@ describe("Lead card page", () => {
       reviews: [],
       arrived_at: new Date("2026-08-17T12:00:00.000Z"),
       first_contact_at: null,
+      closed_at: null,
       status: "OPEN",
       missing_phone: false
     });

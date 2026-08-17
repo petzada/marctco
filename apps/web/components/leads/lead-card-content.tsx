@@ -76,6 +76,7 @@ export function LeadCardContent({
   const sla = firstContactSla({
     arrived_at: lead.arrived_at,
     first_contact_at: lead.first_contact_at,
+    closed_at: lead.closed_at,
     status: lead.status,
     settings: clockSettings,
     now: new Date(nowIso)
@@ -98,7 +99,9 @@ export function LeadCardContent({
           Chegou em <span className="tabular-nums">{formatArrivedAt(lead.arrived_at)}</span>
         </p>
         <p className="mt-xxs text-body-sm text-ink-muted">
-          <span className="tabular-nums">{waitCaption({ sla, first_contact_at: lead.first_contact_at })}</span>
+          <span className="tabular-nums">
+            {waitCaption({ sla, first_contact_at: lead.first_contact_at, status: lead.status })}
+          </span>
         </p>
       </section>
 
