@@ -12,15 +12,15 @@ _Avoid_: Lead como model ou tabela, Lead para card do funil jurídico, segundo s
 
 **Workspace**:
 Tenant SaaS cuja fronteira é a fila de entrada: empresas do mesmo grupo que compartilham campanha compartilham o workspace, e os leads caem numa fila única; campanha separada, com Pluga ou LP próprios, ganha workspace próprio. Isola dados, integrações, trial e feature flags. A mesma Direção pode ser dona de vários. **Outro dono é outro workspace** — não a pessoa jurídica do grupo. Lead da REAL no atendente da ACR, no tenant compartilhado, é atribuição; lead de um cliente terceiro da marctco é vazamento.
-_Avoid_: Conta, tenant solto, organização Clerk, workspace por filial quando a campanha é compartilhada, um workspace automático para o grupo inteiro, tratar a empresa que pagou o anúncio como fronteira de dados, tratar assessoria ou CNPJ como tenant, chamar ACR e REAL de “outra assessoria” quando compartilham a fila
+_Avoid_: Conta, tenant solto, organização Clerk, workspace por filial quando a campanha é compartilhada, um workspace automático para o grupo inteiro, tratar a empresa que pagou o anúncio como fronteira de dados, tratar assessoria ou CNPJ como tenant, chamar ACR e REAL de “outra assessoria” quando compartilham a fila, sub-empresa como tenant ou como escopo da Gestão
 
 **Provisionamento**:
 Nascimento de um Workspace, em ato único e indivisível: o tenant, o vínculo do primeiro membro como dono e o funil comercial padrão com suas etapas passam a existir juntos ou não existem. Acontece no primeiro acesso de quem a marctco marcou com direito a provisionar, nunca por cadastro da Direção nem por edição manual de banco.
-_Avoid_: Criar workspace sem funil, semear funil por script de desenvolvimento em cliente real, workspace válido pela metade, provisionar quem apenas perdeu a associação, provisionar colaborador cadastrado na Equipe
+_Avoid_: Criar workspace sem funil, semear funil por script de desenvolvimento em cliente real, workspace válido pela metade, provisionar quem apenas perdeu a associação, provisionar colaborador cadastrado na Equipe, workspace que nasce no painel do Supabase junto com o login
 
 **Cadastro de colaborador**:
 Ato da Direção, na tela Equipe, que faz nascer juntos o login e o vínculo ao workspace com papel Atendente, Supervisor ou Gestão. Se o e-mail já é um login, só atrela o mesmo usuário a este workspace — não cria segundo auth. Não cria Direção. O colaborador nunca provisiona.
-_Avoid_: Cadastro autônomo, criar atendente no painel do Supabase, convite sem vínculo, segundo login para a mesma pessoa, fila de espera depois do login, segunda Direção pela Equipe
+_Avoid_: Cadastro autônomo, criar atendente no painel do Supabase, convite sem vínculo, segundo login para a mesma pessoa, fila de espera depois do login, segunda Direção pela Equipe, Gestão convidando colaborador
 
 **Desatrelamento**:
 Ato da Gestão ou da Direção, na Equipe daquele workspace, que tira o colaborador só dali. Ele deixa de ver os leads desse tenant e pode continuar em outros. Leads em aberto daquele workspace voltam à fila sem dono; o contexto do card permanece.
@@ -32,11 +32,11 @@ _Avoid_: Excluir usuário, excluir membro, excluir Oportunidade, deixar lead abe
 
 **Distribuição do lead**:
 Como o lead sai da fila e chega em quem atende, em dois níveis. A Gestão (na prática o analista de marketing) abre a fila sem dono e **atribui** o lead ao Supervisor da equipe — `ACTIVE` e com ao menos uma tag —, ou assume o card ela mesma; o Supervisor **reatribui** ao Atendente do seu time. Atendente nunca nasce dono direto da fila. Cada gesto é para **um** destino, um card ou vários de uma vez; em massa é o caminho preferido quando o volume pede. O lote é **parcial**: quem ainda podia ir, vai; quem já tinha dono recusa pelo nome e permanece na vista. A fila sem dono não entra no escopo do Supervisor — ver e atribuir dali é da Gestão e da Direção. Quem atende é decisão de capacidade da operação, nunca da campanha nem da empresa do grupo que pagou o anúncio.
-_Avoid_: Rotear por campanha, tag na oportunidade para dizer de quem é o lead, Supervisor tirando lead de outra equipe, Supervisor vendo ou puxando a fila sem dono, atribuir da fila direto ao Atendente, atribuir da fila a Supervisor sem tag, rateio automático entre pessoas, lote tudo-ou-nada, Gestão precisando saber o organograma para distribuir, tratar reatribuir como se fosse atribuir
+_Avoid_: Rotear por campanha, tag na oportunidade para dizer de quem é o lead, Supervisor tirando lead de outra equipe, Supervisor vendo ou puxando a fila sem dono, atribuir da fila direto ao Atendente, atribuir da fila a Supervisor sem tag, rateio automático entre pessoas, lote tudo-ou-nada, Gestão precisando saber o organograma para distribuir, tratar reatribuir como se fosse atribuir, mapa campanha→equipe, automação Pluga por equipe como roteamento
 
 **Perfil de acesso**:
 O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. São quatro, e nenhum a mais — **Atendente** responde só pelos leads atribuídos a ele: não vê lead de outro atendente, não vê o time, não vê a fila sem dono; **Supervisor**, pelo time (quem compartilha tag no membro e as oportunidades atribuídas a eles, inclusive as que estão no próprio Supervisor); **Gestão**, pela operação inteira, inclusive a fila sem dono; **Direção**, pela operação e pela conta. O escopo é aplicado no servidor, num lugar só. Isolar outro dono é tenant (RLS + workspace), não perfil.
-_Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, Super Admin do SaaS, `ADMIN` global, confundir com tag de time, Supervisor com a fila sem dono no escopo, RLS por papel, motor `can()`, entidade Team, tratar assessoria como se fosse o tenant
+_Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, Super Admin do SaaS, `ADMIN` global, confundir com tag de time, Supervisor com a fila sem dono no escopo, RLS por papel, motor `can()`, entidade Team, tratar assessoria como se fosse o tenant, Gestão recortada por tag, sub-empresa como perfil
 
 **Contexto de acesso**:
 Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e o evento que o originou. Ambas isolam pelo workspace; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
@@ -44,7 +44,7 @@ _Avoid_: Workspace e papel viajando separados, papel como parâmetro que ningué
 
 **Tag**:
 Rótulo configurável no workspace, criado e aplicado na tela Equipe no mesmo ato do cadastro do colaborador. No membro, identifica marca ou time e é o que define o time de um Supervisor. Na oportunidade, se existir, é rótulo operacional (carteira, campanha) digitado à mão — nunca herdado do responsável.
-_Avoid_: Sub-workspace, departamento como tenant, “empresa” no sentido de workspace, copiar a tag do atendente para a oportunidade, computar o time do Supervisor a partir da oportunidade, tela de taxonomia fora da Equipe
+_Avoid_: Sub-workspace, departamento como tenant, “empresa” no sentido de workspace, sub-empresa, catálogo de equipe vazio, tela Nova equipe, copiar a tag do atendente para a oportunidade, computar o time do Supervisor a partir da oportunidade, recortar Gestão por tag, tela de taxonomia fora da Equipe
 
 **Tipo de financiamento**:
 Classificação opcional do contrato de crédito que motivou o contato (veículo, imóvel, empréstimo pessoal ou outro). É dado da Oportunidade e pode ser completado depois; não escolhe nem possui funil.
@@ -144,7 +144,7 @@ _Avoid_: Roteiro espalhado pelo worker, plano com campos opcionais que alguém p
 
 **Superfície de integração**:
 A tela de uma origem somada à conexão que ela administra: o segmento de URL, o provedor, o endereço de ingestão e o texto que difere entre as telas. Existe porque os dois lados já se separaram uma vez — a tela de landing page documentava um token que nenhuma rota sabia emitir, porque a rota da Pluga trazia o provedor fixo dentro do arquivo. Tela e rotas passam a ler o provedor do mesmo lugar. Vive na camada web; não é model nem coluna.
-_Avoid_: Fixar o provedor dentro de uma rota, deixar o segmento de URL divergir da pasta onde a rota mora, misturar texto de tela com o roteamento no mesmo grupo de campos
+_Avoid_: Fixar o provedor dentro de uma rota, deixar o segmento de URL divergir da pasta onde a rota mora, misturar texto de tela com o roteamento no mesmo grupo de campos, um segredo ou conexão Pluga por equipe, tratar automação da Pluga como entidade do CRM
 
 **Evento de integração**:
 Payload bruto recebido de uma origem, persistido transacionalmente como outbox antes da resposta HTTP e reprocessável. Um dispatcher independente o entrega ao BullMQ quando o Redis estiver disponível. É a **única** cópia do payload; o EnvioLead aponta para a transmissão mais recente em vez de repetir o conteúdo.

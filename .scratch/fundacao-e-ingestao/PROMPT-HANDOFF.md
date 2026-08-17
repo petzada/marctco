@@ -1,3 +1,5 @@
+> **Fatia 0–1 fechada.** Não usar este handoff para despachar tickets de ingestão. Os 17 tickets estão implementados. O que resta (manual/prod, modelo Google) está em [a-fazer-geral.md](./a-fazer-geral.md). Fases 0–2: [fechamento-fases-0-2.md](../fechamento-fases-0-2.md).
+
 /implement Continuar a fatia "fundação e ingestão" até os 17 tickets em
 `.scratch/fundacao-e-ingestao/issues/` estarem `Status: done`, com critérios
 marcados e o aceite da fatia em `.scratch/fundacao-e-ingestao/README.md`
@@ -32,8 +34,7 @@ atualizar Status/registro.
   condicional pulado; DB 159/159; Seam 2 19/19; typecheck, lint, build, safety de
   migrations e drift verdes. Re-review independente: Standards 0 findings e
   Spec 0 findings.
-- **Próxima ordem:** `12 · 14 → 15`. A pendência externa do Google continua em
-  `acoes-manuais-pendentes.md`; não é pendência de código desta wave.
+- **Próxima ordem (na época):** `12 · 14 → 15`. **Hoje a fatia está fechada** — ver [a-fazer-geral.md](./a-fazer-geral.md). A pendência externa do Google continua lá; não é pendência de código desta wave.
 
 # Atualização de 2026-08-10 — ticket 09 concluído, o tracer bullet fechou
 
@@ -171,16 +172,16 @@ worker → Person` —, porque não há lead nem workspace lá. Depende da marca
 
 - HEAD inclui tickets **01–06** (código + docs) e recoveries.
 - Migrations de produção: `001` … `009` aplicadas.
-- Issues: **01–06 = done**; **07–17 = ready-for-agent** (17 ainda não despachado).
+- Issues: **01–17 = done** (estado na época desta seção: 01–06 done; 07–17 ainda abertos). **Hoje a fatia está fechada** — ver [a-fazer-geral.md](./a-fazer-geral.md).
 
 ## Próximo despacho exato
 
-**Ticket 17 — Provisionamento de workspace** (antes do 07).
+**Nenhum.** Não despachar tickets de ingestão a partir deste handoff. Pendências manuais e o que resta (modelo Google, imagens) estão em [a-fazer-geral.md](./a-fazer-geral.md).
 
-Ordem canônica restante:
+Ordem canônica **da época** (histórica):
 `17 → 07 → 08 → 09 → (10 · 11 · 13 · 16 em paralelo se worktrees) → 12 · 14 → 15`
 
-Bloqueadores do 17: 03, 04, 05 — todos done. Fronteira: 17.
+Bloqueadores do 17 na época: 03, 04, 05 — todos done. Fronteira então: 17.
 
 ## Descobertas acumuladas (colar no briefing do Composer)
 

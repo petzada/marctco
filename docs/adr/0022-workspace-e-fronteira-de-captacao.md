@@ -8,6 +8,8 @@ O piloto é um grupo: a **Hugs** é a holding, e ACR e REAL são empresas dela. 
 
 **Status:** accepted · 2026-08-12
 
+> **Confirmado em 2026-08-17** no recorte operacional do piloto: um workspace, uma conta Pluga, campanhas exclusivas por equipe. A exclusividade é prática de mídia, não roteamento — a Gestão (workspace inteiro, não recortada por tag) continua atribuindo da fila única. N automações na mesma conta Pluga colam o mesmo webhook e o mesmo segredo; o unique `(workspace_id, provider)` não se quebra. “Sub-empresa” não é termo: é a tag do Supervisor, nascida no convite. Não reabre este ADR nem o [ADR-0015](./0015-perfis-de-acesso-e-escopo.md).
+
 Fecha o recorte do piloto com o grupo Hugs, campanhas mistas e campanhas separadas. Emenda a leitura estrita do [ADR-0002](./0002-workspace-tags-times.md) (“um workspace por grupo”). Não reabre tag na oportunidade ([ADR-0020](./0020-tag-no-membro-define-o-time.md)): “este lead é da equipe X” é atribuir a um membro tagueado X.
 
 `campaign_id`, `campaign_name`, `form_id` e `form_name` do contrato `v1` são persistidos na Oportunidade — **não para rotear a fila**, e sim porque são a atribuição de mídia (a leitura de ROAS que a Fase 7 vai querer) e porque entram no conjunto de discriminadores de possível duplicado (A2). O payload bruto expira em 90 dias ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)): a ingestão é a **única** janela em que esses valores existem para serem gravados.

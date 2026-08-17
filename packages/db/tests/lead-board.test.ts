@@ -194,13 +194,15 @@ describe("getLeadBoard", () => {
     expect(cardNames(board)).not.toContain("Card da fila");
   });
 
-  it("gives the SUPERVISOR the team's assigned cards and never the ownerless queue", async () => {
-    await seedCard({ name: "Card do time", assigned_user_id: team_attendant_user });
+  it("gives the SUPERVISOR only the cards assigned to them — a routed team card leaves the board", async () => {
+    await seedCard({ name: "Ainda comigo", assigned_user_id: supervisor_user });
+    await seedCard({ name: "Já roteado ao time", assigned_user_id: team_attendant_user });
     await seedCard({ name: "Card de outro time", assigned_user_id: other_team_user });
     await seedCard({ name: "Fila sem dono do supervisor", assigned_user_id: null });
 
     const board = await getLeadBoard(supervisor_context, app);
-    expect(cardNames(board)).toContain("Card do time");
+    expect(cardNames(board)).toContain("Ainda comigo");
+    expect(cardNames(board)).not.toContain("Já roteado ao time");
     expect(cardNames(board)).not.toContain("Card de outro time");
     expect(cardNames(board)).not.toContain("Fila sem dono do supervisor");
   });
@@ -236,7 +238,7 @@ describe("getLeadBoard", () => {
   it("drops a card in the column of its stage, carrying who is responsible", async () => {
     const card = await seedCard({
       name: "Card em contato",
-      assigned_user_id: team_attendant_user,
+      assigned_user_id: supervisor_user,
       stage_id: contact_stage
     });
     const board = await getLeadBoard(supervisor_context, app);
@@ -245,8 +247,8 @@ describe("getLeadBoard", () => {
     expect(placed).toMatchObject({
       name: "Card em contato",
       stage_id: contact_stage,
-      assigned_user_id: team_attendant_user,
-      assigned_user_name: "Tato do time"
+      assigned_user_id: supervisor_user,
+      assigned_user_name: "Sofia Supervisora"
     });
   });
 });
@@ -401,8 +403,8 @@ describe("moveLeadStage", () => {
     ).rejects.toMatchObject({ reason: "NOT_VISIBLE" });
   });
 
-  it("lets the SUPERVISOR move a card of their own team", async () => {
-    const card = await seedCard({ assigned_user_id: team_attendant_user });
+  it("lets the SUPERVISOR move a card still assigned to them", async () => {
+    const card = await seedCard({ assigned_user_id: supervisor_user });
     await expect(
       moveLeadStage(
         supervisor_context,
@@ -410,6 +412,17 @@ describe("moveLeadStage", () => {
         app
       )
     ).resolves.toEqual({ opportunity_id: card.opportunity_id, stage_id: contact_stage });
+  });
+
+  it("refuses the SUPERVISOR a card already routed to an attendant", async () => {
+    const card = await seedCard({ assigned_user_id: team_attendant_user });
+    await expect(
+      moveLeadStage(
+        supervisor_context,
+        { opportunity_id: card.opportunity_id, current_stage_id: entry_stage, stage_id: contact_stage },
+        app
+      )
+    ).rejects.toMatchObject({ reason: "NOT_VISIBLE" });
   });
 
   it("refuses the SUPERVISOR a card of another team", async () => {

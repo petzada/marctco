@@ -1,6 +1,8 @@
 # Spec — Operação do lead
 
-Status: ready-for-agent
+Status: done
+
+> **Implementada.** O Problem Statement abaixo descreve o estado **antes** da Fase 2. A Solution e o restante desta spec estão no código. Não reimplementar.
 
 > Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).
@@ -58,7 +60,7 @@ Quem atende ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 
 21. Como Atendente, quero ver só os leads atribuídos a mim, na tabela e no Kanban, para não navegar a carteira da empresa.
 22. Como Supervisor com tag, quero ver na tabela só os leads do meu time — inclusive os que a Gestão atribuiu a mim —, para repartir entre os atendentes. A fila sem dono não é minha.
-23. Como Supervisor com tag, quero que o Kanban **Meus leads** mostre só o time já atribuído — não a fila sem dono —, porque a fila nem entra na minha tabela.
+23. Como Supervisor com tag, quero que o Kanban **Meus leads** mostre só os cards atribuídos a mim — não a fila sem dono e não o que já roteei ao time. O time continua na tabela de Leads.
 24. Como Supervisor sem tag, quero não ter time e não reatribuir, para o alcance não voltar a ser o da Gestão por omissão — e quero que a tela me diga **por que** está vazia, em vez de parecer defeito. A fila sem dono não é o consolo.
 25. Como Atendente sem tag, quero ser destino só de **reatribuição** da Gestão e da Direção, porque não pertenço a time nenhum — e nunca nasço dono direto da fila.
 26. Como Gestão ou Direção, quero ver a operação inteira deste workspace, e da fila atribuir só a um Supervisor ou a mim.
@@ -97,7 +99,7 @@ Quem atende ganha **Meus leads**: Kanban das etapas em aberto, com troca de etap
 
 49. Como atendente, quero um Kanban só dos meus leads em aberto, para conduzir o dia pelas etapas.
 50. Como atendente, quero alternar Kanban e tabela em Meus leads, porque às vezes preciso varrer nomes, não colunas.
-51. Como Supervisor, quero o Kanban do meu time já atribuído, para ver onde parou cada lead da equipe — a fila sem dono não é minha, e nem entra no quadro.
+51. Como Supervisor, quero o Kanban dos leads que ainda são meus, para atender e depois rotear — a fila sem dono não é minha, e o que já passou ao Atendente some do quadro.
 52. Como Gestão ou Direção, **não** quero o quadro: eu distribuo e acompanho, não atendo. O que preciso está na tabela, que é a vista de alto volume.
 53. Como gestor, quero que a lista geral continue sendo tabela paginada, sem Kanban global.
 54. Como atendente, quero arrastar um card em aberto para outra etapa do mesmo funil, e quero que a etapa persista.
@@ -164,7 +166,7 @@ Leads `WON`/`LOST` não voltam à fila.
 
 ### Escopo do Supervisor
 
-Enquanto não existia `MemberTag`, o código tratava `SUPERVISOR` como `MANAGER`. **Essa equivalência acaba nesta fase**, inclusive para Supervisor ainda sem tag: sem tag, time vazio, não reatribui, Kanban vazio, tabela vazia — a fila sem dono não é o consolo ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)).
+Antes de `MemberTag`, o código tratava `SUPERVISOR` como `MANAGER`. **Essa equivalência acabou nesta fase**, inclusive para Supervisor ainda sem tag: sem tag, time vazio, não reatribui, Kanban vazio, tabela vazia — a fila sem dono não é o consolo ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)).
 
 Time = membros `ACTIVE` que compartilham **ao menos uma** tag com o Supervisor, e as Oportunidades atribuídas a eles (o Supervisor está no próprio time). Fila sem dono **não** é time e **não** entra no escopo do Supervisor: só Gestão e Direção a vêem e atribuem.
 
@@ -174,7 +176,7 @@ O time vazio é o estado normal de todo Supervisor no minuto seguinte ao cadastr
 
 ### Atribuição
 
-`assignLead` já existe e já arbitra com `assigned_user_id IS NULL`. Nesta fase ela passa a exigir destino `ACTIVE` neste workspace, a recusar `ATTENDANT` e `SUPERVISOR` como atores — só Gestão e Direção atribuem da fila ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)) — e a recusar destino que não seja um `SUPERVISOR` **com ao menos uma tag** ou o próprio ator ([ADR-0025](../../docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md)). Não atribui a Atendente, nem a Supervisor sem tag, nem a outra Gestão, nem à Direção que não seja quem clicou.
+`assignLead` já existia e já arbitrava com `assigned_user_id IS NULL`. Nesta fase ela passou a exigir destino `ACTIVE` neste workspace, a recusar `ATTENDANT` e `SUPERVISOR` como atores — só Gestão e Direção atribuem da fila ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)) — e a recusar destino que não seja um `SUPERVISOR` **com ao menos uma tag** ou o próprio ator ([ADR-0025](../../docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md)). Não atribui a Atendente, nem a Supervisor sem tag, nem a outra Gestão, nem à Direção que não seja quem clicou.
 
 `reassignLead` é operação nova: `WHERE assigned_user_id = :current`, e grava `previous_assigned_user_id` com o dono que saiu.
 
@@ -194,7 +196,7 @@ O filtro por responsável e por equipe da tabela é parâmetro de busca lido no 
 
 Rota própria de Meus leads, item na barra. Toggle `{component.toggle-segmented}` Lista / Kanban. Colunas = etapas do funil comercial padrão, só `OPEN` não mescladas, no escopo do papel. `@dnd-kit` persiste por route handler que chama `moveLeadStage`. Condição: etapa atual, mesmo `pipeline_id`, `status = OPEN`, não mesclado. Destino tem de ser etapa desse funil. `arrived_at` intocado.
 
-**O quadro é tela de quem atende: `ATTENDANT` vê os seus, `SUPERVISOR` vê o time já atribuído.** Gestão e Direção **não têm o quadro** — não atendem, distribuem e acompanham, e fazem as duas coisas na tabela. Isso resolve a contradição em que a spec anterior tinha caído: dar "todos os leads em aberto" a Gestão dentro de uma tela chamada *Meus leads* criava justamente o Kanban global que o [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md) §4 recusou, sob um nome que mentia. O item some da barra para esses dois papéis e a rota os manda para Leads; **não é recusa de acesso** — nada no quadro está fora do que a tabela já lhes mostra, e é por isso que a matriz do ADR-0015 traz "—" e não um bloqueio.
+**O quadro é tela de quem atende: `ATTENDANT` e `SUPERVISOR` vêem só o que está atribuído a eles.** Depois que o Supervisor roteia ao Atendente, o card some de Meus leads e permanece na tabela de Leads (escopo `time`). Gestão e Direção **não têm o quadro** — não atendem, distribuem e acompanham, e fazem as duas coisas na tabela. Isso resolve a contradição em que a spec anterior tinha caído: dar "todos os leads em aberto" a Gestão dentro de uma tela chamada *Meus leads* criava justamente o Kanban global que o [decisao-features-concorrentes.md](../../decisao-features-concorrentes.md) §4 recusou, sob um nome que mentia. O item some da barra para esses dois papéis e a rota os manda para Leads; **não é recusa de acesso** — nada no quadro está fora do que a tabela já lhes mostra, e é por isso que a matriz do ADR-0015 traz "—" e não um bloqueio.
 
 Ganho, perda, motivo e editor de funil ficam fora. Card do Kanban segue `{component.kanban-card}`: nome, etapa, responsável — sem campo monetário, que saiu da fase.
 
@@ -297,6 +299,6 @@ Os campos de atribuição `adset_*`, `ad_*`, `platform` e `is_organic` do contra
 
 **Corrida no segundo tenant — fechada, não aceita.** Uma versão anterior desta spec deixava dois POSTs simultâneos poderem criar dois workspaces e chamava isso de risco residual. Não precisa ser: o lock consultivo por `owner_user_id` já está na função, e basta trocar o que ele consulta dentro do lock — de "qualquer vínculo deste usuário" para "vínculo `OWNER` num workspace com este nome". Custo zero em superfície nova, e o duplo clique volta a ser idempotente.
 
-**`assignLead` hoje.** A operação já recusa Atendente e já arbitra `IS NULL`. O que falta — destino ativo, time do Supervisor, reatribuição distinta com alcance do Supervisor, filtro na tabela, UI — é esta fase, não um rewrite da arbitragem.
+**`assignLead` na fundação.** A operação já recusava Atendente e já arbitrava `IS NULL`. O que faltava — destino ativo, time do Supervisor, reatribuição distinta com alcance do Supervisor, filtro na tabela, UI — foi esta fase, não um rewrite da arbitragem.
 
 **Por que o Supervisor reatribui.** Foi a correção mais importante desta revisão. A spec anterior punha reatribuir como exclusiva de Gestão para cima e, ao mesmo tempo, descrevia uma operação em que a Gestão entrega o lead ao Supervisor. As duas coisas juntas travam o lead no Supervisor: `assignLead` exige `IS NULL`, o lead já tem dono, e nenhuma operação o move adiante. O segundo nível da distribuição só existe porque `reassignLead` alcança o Supervisor dentro do time.

@@ -1,6 +1,6 @@
 # Spec — Fundação e ingestão de leads
 
-Status: ready-for-agent
+Status: done
 
 > **Emendada pelo [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md):** a resolução da associação para a sessão de navegador é uma quarta exceção pré-contexto, sob executor técnico `NOLOGIN`; a lista, retornos e provas do Seam 3 seguem esse ADR.
 
@@ -296,7 +296,7 @@ Prisma Client é gerado em `packages/db`; o `postinstall` precisa garantir `pris
 
 ### UI
 
-`DESIGN.md` é a lei visual. A tabela de Leads usa o componente de tabela de dados documentado, com numerais tabulares nas colunas de data. **O arquivo de tokens referenciado por `{token.refs}` não existe** e precisa ser criado a partir dos valores já documentados no `DESIGN.md`, antes do primeiro componente — o guia proíbe hex e px inline.
+`DESIGN.md` é a lei visual. A tabela de Leads usa o componente de tabela de dados documentado, com numerais tabulares nas colunas de data. **O arquivo de tokens referenciado por `{token.refs}` foi criado no ticket 02** a partir dos valores já documentados no `DESIGN.md` — o guia proíbe hex e px inline.
 
 **Um lead, um ícone.** Todos os avisos de um lead são alcançados por um único ponto de entrada na linha e no card, que abre a lista; três avisos são um ícone com contagem, nunca três rótulos. Os contadores-filtro continuam no topo e continuam por tipo — são perguntas diferentes. A regra vale para todo aviso que as fases seguintes acrescentarem.
 

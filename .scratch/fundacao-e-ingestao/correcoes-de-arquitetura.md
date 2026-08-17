@@ -4,6 +4,8 @@ Status: accepted · 2026-08-05
 
 > **Emendado pelo [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md):** a exceção sem contexto agora inclui a validação navegador → associação/workspace, totalizando quatro funções, e sua execução sob `FORCE RLS` usa papel técnico `NOLOGIN` com grants/policies mínimos.
 
+> **Histórico (2026-08-05, pré-código).** Os ADRs 0016–0018 nasceram desta grelha e foram implementados na fatia. Não ler como pendência.
+
 > Origem: revisão de arquitetura sobre a especificação, antes de existir código. Os cinco candidatos
 > foram lidos dos ADRs 0004–0015, do [CONTEXT.md](../../CONTEXT.md) e das 17 issues desta fatia.
 > Nenhum deles é refatoração: são módulos que **ainda não existem** e que, como estão especificados,

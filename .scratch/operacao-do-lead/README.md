@@ -1,12 +1,14 @@
 # Fase 2 — Operação do lead
 
-Fonte: [spec.md](./spec.md). Tickets em [issues/](./issues/). Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Retomada: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md) — sem os ADRs 0024–0027 no working tree, o Supervisor volta a ver a fila sem dono.
+Status da fatia: implementada. Tickets em [issues/](./issues/) com `Status: done`.
 
-## O que esta fase abre
+Fonte: [spec.md](./spec.md). Tickets em [issues/](./issues/). Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Fechamento: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md). Os ADRs 0024–0027 estão na árvore e o código os aplica.
 
-O caminho do lead até quem atende, que hoje não existe. A operação é em **dois níveis**: a Gestão abre a fila única de manhã e entrega cada lead ao Supervisor da equipe; o Supervisor reparte entre os atendentes do seu time. Junto vêm a tela Equipe (que faz os papéis existirem), o escopo real do Supervisor, e o quadro de quem atende.
+## O que esta fase entregou
 
-## Ordem e dependências
+O caminho do lead até quem atende. A operação é em **dois níveis**: a Gestão abre a fila única de manhã e entrega cada lead ao Supervisor da equipe; o Supervisor reparte entre os atendentes do seu time. Junto vêm a tela Equipe (que faz os papéis existirem), o escopo real do Supervisor, e o quadro de quem atende.
+
+## Ordem e dependências (mapa histórico de como foi construída)
 
 ```
 01 ─┐                          (independentes, podem ir juntos)
@@ -26,9 +28,9 @@ O caminho do lead até quem atende, que hoje não existe. A operação é em **d
 | [06 — Atribuir e reatribuir](./issues/06-atribuir-e-reatribuir.md) | 03a, 05 | — |
 | [07 — Kanban Meus leads](./issues/07-kanban-meus-leads.md) | 06 | — |
 
-**03a é o gargalo:** cinco dos oito tickets passam por ele. Foi rachado do ticket 03 original justamente por isso — a metade que destrava os outros não precisa esperar pela tela.
+**03a foi o gargalo:** cinco dos oito tickets passaram por ele. Foi rachado do ticket 03 original justamente por isso — a metade que destravava os outros não precisava esperar pela tela.
 
-Retomada: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md). Sem os ADRs 0024–0027 no working tree, o Supervisor volta a ver a fila sem dono.
+Fechamento: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md).
 
 ## Decisões que esta revisão fechou
 
