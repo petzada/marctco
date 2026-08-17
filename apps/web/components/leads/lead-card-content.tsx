@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import type { FinancingType, IdentityConflictResolution, LeadDetail, LeadReviewDetail } from "@marctco/db";
+import type { FinancingType, IdentityConflictResolution, LeadActivity, LeadDetail, LeadReviewDetail } from "@marctco/db";
 import { FINANCING_TYPES, markersFor, type Marker, type PossibleDuplicateResolution } from "@marctco/domain";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -10,6 +10,7 @@ import { FieldError, FieldLabel, TextInput } from "../ui/field";
 import { StatusBadge, type StatusBadgeTone } from "../ui/status-badge";
 import { markerPresentation } from "../../lib/leads/markers";
 import { formatArrivedAt, formatInstallmentAmount } from "../../lib/leads/row-view-model";
+import { LeadCardActivities, type ActivityAssigneeOption } from "./lead-card-activities";
 
 const MARKER_TONE: Readonly<Record<Marker, StatusBadgeTone>> = {
   MISSING_PHONE: "warning",
@@ -36,6 +37,9 @@ const selectClassName =
 export interface LeadCardContentProps {
   readonly lead: LeadDetail;
   readonly slug: string;
+  readonly currentUserId: string;
+  readonly activities: readonly LeadActivity[];
+  readonly assignees: readonly ActivityAssigneeOption[];
 }
 
 /**
@@ -45,7 +49,7 @@ export interface LeadCardContentProps {
  * identity conflict get resolved; there is no "excluir duplicado" anywhere
  * in this file (ADR-0007).
  */
-export function LeadCardContent({ lead, slug }: LeadCardContentProps) {
+export function LeadCardContent({ lead, slug, currentUserId, activities, assignees }: LeadCardContentProps) {
   // The same `markersFor` the row and the comparison read from — the card
   // never re-derives "what does this lead have" on its own (ADR-0018). The
   // resolution panels below still read `lead.reviews` directly, because they
@@ -100,6 +104,14 @@ export function LeadCardContent({ lead, slug }: LeadCardContentProps) {
           <IdentityConflictPanel key={review.id} review={review} slug={slug} />
         )
       )}
+
+      <LeadCardActivities
+        activities={activities}
+        assignees={assignees}
+        currentUserId={currentUserId}
+        opportunityId={lead.opportunity_id}
+        slug={slug}
+      />
 
       <LeadEditForm lead={lead} slug={slug} />
     </div>

@@ -116,6 +116,8 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Identificador do workspace na URL | `Workspace.slug` | UUIDv4, único. Não legível, não enumerável ([ADR-0012](./0012-contexto-de-tenant-na-url.md)) |
 | Origem comercial (handoff) | `source_opportunity_id` | — |
 | Motivo de perda | `loss_reason` | — |
+| Tipo da atividade | `ActivityType` | `CALL \| MESSAGE \| MEETING \| TASK`. `MESSAGE` cobre WhatsApp e e-mail sem antecipar a Fase 4; um valor `WHATSAPP` amarraria o tipo ao canal |
+| Situação da atividade | `ActivityStatus` | `OPEN \| DONE \| CANCELED`. Concluir prova atendimento; cancelar não |
 
 ## Regras
 

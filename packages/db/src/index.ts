@@ -204,3 +204,20 @@ export {
   type MovedLeadStage
 } from "./lead-board.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 01 — Activity on the lead. Appended at the end so parallel Fase 3
+// tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  cancelActivity,
+  completeActivity,
+  createActivity,
+  listLeadActivities,
+  rescheduleActivity,
+  ActivityError,
+  type ActivityRefusal,
+  type CreateActivityInput,
+  type LeadActivity,
+  type RescheduleActivityInput
+} from "./activities.js";
+

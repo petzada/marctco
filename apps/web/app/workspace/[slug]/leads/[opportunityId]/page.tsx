@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLead } from "@marctco/db";
+import { getLead, listLeadActivities, listTeam } from "@marctco/db";
 import { LeadCardContent } from "../../../../../components/leads/lead-card-content";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
@@ -9,9 +9,8 @@ export const metadata: Metadata = { title: "Lead | marctco" };
 
 /**
  * The direct-navigation / shared-link / hard-refresh fallback for a single
- * lead — same `getLead` Server Component read as the intercepted modal
- * (`@modal/(.)[opportunityId]/page.tsx`), rendered full-page instead of as
- * an overlay.
+ * lead — same named-operation reads as the intercepted modal, rendered
+ * full-page instead of as an overlay.
  */
 export default async function LeadCardPage({
   params
@@ -22,8 +21,13 @@ export default async function LeadCardPage({
     notFound();
   }
 
+  const context = access.workspace.context;
   try {
-    const lead = await getLead(access.workspace.context, opportunityId);
+    const [lead, activities, teammates] = await Promise.all([
+      getLead(context, opportunityId),
+      listLeadActivities(context, opportunityId),
+      context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context)
+    ]);
     return (
       <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
         <div className="mx-auto w-full max-w-content">
@@ -31,7 +35,16 @@ export default async function LeadCardPage({
             ← Leads
           </Link>
           <div className="mt-md rounded-xl border border-hairline bg-canvas p-lg md:p-xl">
-            <LeadCardContent lead={lead} slug={slug} />
+            <LeadCardContent
+              activities={activities}
+              assignees={teammates.map((member) => ({
+                user_id: member.user_id,
+                display_name: member.display_name?.trim() || member.email || "Sem nome"
+              }))}
+              currentUserId={context.user_id}
+              lead={lead}
+              slug={slug}
+            />
           </div>
         </div>
       </main>
