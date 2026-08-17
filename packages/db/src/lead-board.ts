@@ -3,6 +3,7 @@ import { decideLeadStageMove, type StageMoveStatus } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { assertUuid } from "./internal/uuid.js";
+import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext } from "./internal/scoped-transaction.js";
 
 const sharedPrisma = createPrismaClient();
@@ -19,50 +20,49 @@ const sharedPrisma = createPrismaClient();
 // ---------------------------------------------------------------------------
 
 /**
- * The board's own scope, deliberately narrower than `opportunityScopeSql`.
+ * The board's scope is the profile scope every Opportunity operation already
+ * uses, minus the two profiles that have no board.
  *
  * `ATTENDANT` sees the cards assigned to them and `SUPERVISOR` the ones
- * already assigned inside their team — never the ownerless queue, which
- * belongs to Gestão and Direção (ADR-0024). Gestão and Direção get the empty
- * set, because the board is the screen of who attends and they do not: the
- * matrix in ADR-0015 records "—" for them, an **absence of scope** and not a
- * refusal, and the whole workspace here would be the global Kanban that
- * `decisao-features-concorrentes.md` §4 turned down, wearing the name "Meus
- * leads". The web route sends those two profiles to Leads, which shows them
- * everything this board would have and more.
+ * already assigned inside their team — the team rule is computed **once**, in
+ * `opportunityScopeSql`, so the board and the Leads table can never drift
+ * apart on who a Supervisor's team is (ADR-0015, ADR-0020). The ownerless
+ * queue reaches neither: `NULL` matches no equality and no `IN`, and the
+ * queue belongs to Gestão and Direção (ADR-0024).
+ *
+ * Gestão and Direção get the empty set instead of the workspace-wide
+ * `Prisma.empty` that scope returns for them. The board is the screen of who
+ * attends and they do not: the matrix in ADR-0015 records "—" for them, an
+ * **absence of scope** and not a refusal, and the whole workspace here would
+ * be the global Kanban that `decisao-features-concorrentes.md` §4 turned
+ * down, wearing the name "Meus leads". The web route sends those two profiles
+ * to Leads, which shows them everything this board would have and more.
  */
 function boardScopeSql(context: UserContext, alias: string): Prisma.Sql {
-  const opportunity = Prisma.raw(alias);
-  switch (context.role) {
-    case "ATTENDANT":
-      return Prisma.sql`AND ${opportunity}.assigned_user_id = ${context.user_id}::uuid`;
-    case "SUPERVISOR":
-      return Prisma.sql`
-        AND ${opportunity}.assigned_user_id IN (
-          SELECT member.user_id
-          FROM workspace_members AS member
-          WHERE member.workspace_id = ${context.workspace_id}::uuid
-            AND member.status = 'ACTIVE'::workspace_member_status
-            AND EXISTS (
-              SELECT 1
-              FROM member_tags AS member_tag
-              JOIN member_tags AS actor_tag
-                ON actor_tag.workspace_id = member_tag.workspace_id
-               AND actor_tag.tag_id = member_tag.tag_id
-              WHERE member_tag.workspace_id = member.workspace_id
-                AND member_tag.user_id = member.user_id
-                AND actor_tag.user_id = ${context.user_id}::uuid
-            )
-        )
-      `;
-    case "MANAGER":
-    case "OWNER":
-      return Prisma.sql`AND false`;
-    default: {
-      const unknownRole: never = context.role;
-      throw new Error(`Unknown workspace role, refusing board access: ${JSON.stringify(unknownRole)}`);
-    }
+  if (context.role === "MANAGER" || context.role === "OWNER") {
+    return Prisma.sql`AND false`;
   }
+  return opportunityScopeSql(context, alias);
+}
+
+/**
+ * The board is built out of the default commercial pipeline and nothing else
+ * ("colunas = etapas do funil comercial padrão"), so the write surface is
+ * pinned to the same funnel: a card sitting in some other pipeline is not on
+ * anybody's board and this operation is not the door to it. Fase 6's legal
+ * board is a different screen and will bring its own scope.
+ */
+function boardPipelineSql(alias: string): Prisma.Sql {
+  const opportunity = Prisma.raw(alias);
+  return Prisma.sql`
+    AND EXISTS (
+      SELECT 1 FROM pipelines AS board_pipeline
+      WHERE board_pipeline.workspace_id = ${opportunity}.workspace_id
+        AND board_pipeline.id = ${opportunity}.pipeline_id
+        AND board_pipeline.type = 'COMMERCIAL'::pipeline_type
+        AND board_pipeline.is_default = true
+    )
+  `;
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +248,7 @@ export async function moveLeadStage(
       WHERE opportunity.id = ${input.opportunity_id}::uuid
         AND opportunity.workspace_id = ${context.workspace_id}::uuid
         ${boardScopeSql(context, "opportunity")}
+        ${boardPipelineSql("opportunity")}
     `);
     const card = cardRows[0];
     if (!card) {
@@ -283,6 +284,7 @@ export async function moveLeadStage(
         AND opportunity.status = 'OPEN'::opportunity_status
         AND opportunity.merged_into_opportunity_id IS NULL
         ${boardScopeSql(context, "opportunity")}
+        ${boardPipelineSql("opportunity")}
     `);
     if (moved === 0) {
       throw new LeadStageMoveError("STAGE_CHANGED");

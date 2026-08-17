@@ -25,6 +25,7 @@ const contact_stage = randomUUID();
 const closing_stage = randomUUID();
 const legal_pipeline = randomUUID();
 const legal_stage = randomUUID();
+const legal_closing_stage = randomUUID();
 
 const attendant_user = randomUUID();
 const other_attendant_user = randomUUID();
@@ -69,6 +70,7 @@ interface SeedCardOptions {
   readonly status?: "OPEN" | "WON" | "LOST";
   readonly merged_into_opportunity_id?: string | null;
   readonly arrived_at?: Date;
+  readonly area?: "COMMERCIAL" | "LEGAL";
 }
 
 async function seedCard(options: SeedCardOptions = {}): Promise<{
@@ -85,7 +87,7 @@ async function seedCard(options: SeedCardOptions = {}): Promise<{
       person_id: person.id,
       pipeline_id: options.pipeline_id ?? pipeline,
       stage_id: options.stage_id ?? entry_stage,
-      area: "COMMERCIAL",
+      area: options.area ?? "COMMERCIAL",
       status: options.status ?? "OPEN",
       arrived_at,
       assigned_user_id: options.assigned_user_id ?? null,
@@ -129,7 +131,7 @@ beforeAll(async () => {
         stages: {
           create: [
             { id: legal_stage, label: "Analise", position: 1, role: "ENTRY" },
-            { label: "Encerrado", position: 2, role: "CLOSING" }
+            { id: legal_closing_stage, label: "Encerrado", position: 2, role: "CLOSING" }
           ]
         }
       }
@@ -285,6 +287,56 @@ describe("moveLeadStage", () => {
 
     const row = await seeder.opportunity.findUniqueOrThrow({ where: { id: card.opportunity_id } });
     expect(row.stage_id).toBe(contact_stage);
+  });
+
+  it("produces exactly one winner when two drags of the same card race", async () => {
+    const card = await seedCard({ name: "Corrida", assigned_user_id: attendant_user });
+
+    const outcomes = await Promise.allSettled([
+      moveLeadStage(
+        attendant_context,
+        { opportunity_id: card.opportunity_id, current_stage_id: entry_stage, stage_id: contact_stage },
+        app
+      ),
+      moveLeadStage(
+        attendant_context,
+        { opportunity_id: card.opportunity_id, current_stage_id: entry_stage, stage_id: closing_stage },
+        app
+      )
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    const loser = outcomes.find((outcome) => outcome.status === "rejected");
+    expect(loser?.reason).toMatchObject({ reason: "STAGE_CHANGED" });
+
+    // The row holds the winner's stage, and nothing in between.
+    const row = await seeder.opportunity.findUniqueOrThrow({ where: { id: card.opportunity_id } });
+    expect([contact_stage, closing_stage]).toContain(row.stage_id);
+  });
+
+  it("refuses a card that is not on the board's pipeline at all", async () => {
+    const card = await seedCard({
+      name: "Card do juridico",
+      assigned_user_id: attendant_user,
+      pipeline_id: legal_pipeline,
+      stage_id: legal_stage,
+      area: "LEGAL"
+    });
+
+    await expect(
+      moveLeadStage(
+        attendant_context,
+        {
+          opportunity_id: card.opportunity_id,
+          current_stage_id: legal_stage,
+          stage_id: legal_closing_stage
+        },
+        app
+      )
+    ).rejects.toMatchObject({ reason: "NOT_VISIBLE" });
+
+    const row = await seeder.opportunity.findUniqueOrThrow({ where: { id: card.opportunity_id } });
+    expect(row.stage_id).toBe(legal_stage);
   });
 
   it("refuses a won card", async () => {

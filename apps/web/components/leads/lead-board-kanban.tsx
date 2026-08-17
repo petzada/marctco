@@ -18,12 +18,14 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { LeadBoard as LeadBoardData, LeadBoardCard, LeadBoardColumn } from "@marctco/db";
+import type { LeadBoard, LeadBoardCard, LeadBoardColumn } from "@marctco/db";
 import { boardEmptyState, buildBoardCardViewModel } from "../../lib/leads/board-view-model";
+import { IconButton } from "../ui/button";
 import { EmptyState } from "../ui/empty-state";
+import { StatusBadge } from "../ui/status-badge";
 
-export interface LeadBoardProps {
-  readonly board: LeadBoardData;
+export interface LeadBoardKanbanProps {
+  readonly board: LeadBoard;
   readonly slug: string;
   readonly isSupervisorWithoutTeam: boolean;
 }
@@ -34,7 +36,7 @@ interface StageMove {
   readonly stage_id: string;
 }
 
-export function LeadBoard(props: LeadBoardProps) {
+export function LeadBoardKanban(props: LeadBoardKanbanProps) {
   const [queryClient] = useState(() => new QueryClient());
   return (
     <QueryClientProvider client={queryClient}>
@@ -55,13 +57,17 @@ export function LeadBoard(props: LeadBoardProps) {
  * reason in plain PT-BR. What arbitrates is `moveLeadStage`'s `WHERE`, never
  * this cache.
  */
-function InteractiveLeadBoard({ board, slug, isSupervisorWithoutTeam }: LeadBoardProps) {
+function InteractiveLeadBoard({ board, slug, isSupervisorWithoutTeam }: LeadBoardKanbanProps) {
   const router = useRouter();
   const cache = useQueryClient();
-  const snapshot = board.columns
+  // Every card and the column it sits in, serialized. It is the query key
+  // because a `router.refresh()` that changed nothing must land on the same
+  // key (and keep the optimistic move), while one that moved a card must land
+  // on a fresh one (and take the server's word for it).
+  const serverPlacement = board.columns
     .flatMap((column) => column.cards.map((card) => `${card.opportunity_id}:${column.stage_id}`))
     .join(",");
-  const queryKey = ["lead-board", slug, snapshot] as const;
+  const queryKey = ["lead-board", slug, serverPlacement] as const;
   const { data: columns = board.columns } = useQuery({
     queryKey,
     queryFn: () => Promise.resolve(board.columns),
@@ -212,15 +218,14 @@ function DraggableBoardCard({
     <div className={isDragging ? "opacity-40" : ""} ref={setNodeRef}>
       <BoardCardSurface
         handle={
-          <button
-            aria-label={`Mover ${model.name} de etapa`}
-            className="inline-flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-md text-ink-muted hover:bg-surface-inset hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus pointer-coarse:h-11 pointer-coarse:w-11"
-            type="button"
+          <IconButton
+            className="shrink-0 cursor-grab"
+            label={`Mover ${model.name} de etapa`}
             {...attributes}
             {...listeners}
           >
             <span aria-hidden="true">⠿</span>
-          </button>
+          </IconButton>
         }
         model={model}
         slug={slug}
@@ -258,9 +263,7 @@ function BoardCardSurface({
         {handle}
       </div>
       <p className="mt-xs flex flex-wrap items-center gap-xs text-body-sm text-ink-muted">
-        <span className="inline-flex items-center rounded-pill bg-surface-inset px-xs py-0.5 text-caption font-medium text-ink-muted">
-          {model.stageLabel}
-        </span>
+        <StatusBadge tone="neutral">{model.stageLabel}</StatusBadge>
         <span className="truncate">{model.responsibleLabel}</span>
       </p>
     </article>

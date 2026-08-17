@@ -48,10 +48,7 @@ export function boardEmptyState(
   input: Readonly<{ isSupervisorWithoutTeam: boolean }>
 ): { readonly title: string; readonly description: string } {
   if (input.isSupervisorWithoutTeam) {
-    return {
-      title: "Seu time ainda não aparece no quadro",
-      description: supervisorTeamEmptyState("leads").description
-    };
+    return supervisorTeamEmptyState("board");
   }
   return {
     title: "Nenhum lead no seu quadro",

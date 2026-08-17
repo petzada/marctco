@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getLeadBoard, listTeam } from "@marctco/db";
-import { LeadBoard } from "../../../../components/leads/lead-board";
+import { LeadBoardKanban } from "../../../../components/leads/lead-board-kanban";
 import { LeadBoardList } from "../../../../components/leads/lead-board-list";
 import { ToggleSegmented } from "../../../../components/ui/toggle-segmented";
 import { attendsLeads } from "../../../../lib/lead-board-access";
+import { boardSearchParamsCache } from "../../../../lib/leads/search-params";
 import { resolveWorkspaceAccess } from "../../../../lib/workspace-access";
 
 export const metadata: Metadata = {
@@ -40,11 +41,17 @@ export default async function MyLeadsPage({
     redirect(`/workspace/${slug}/leads`);
   }
 
-  const { view } = await searchParams;
-  const isList = view === "lista";
-  const board = await getLeadBoard(access.workspace.context);
-  const isSupervisorWithoutTeam =
-    access.workspace.role === "SUPERVISOR" && (await listTeam(access.workspace.context)).length === 0;
+  const { view } = await boardSearchParamsCache.parse(searchParams);
+  const isList = view === "list";
+
+  // Both reads leave together (ADR-0013). `listTeam` refuses an ATTENDANT and
+  // would tell them nothing anyway: only a Supervisor's board can be empty
+  // for want of a tag.
+  const [board, team] = await Promise.all([
+    getLeadBoard(access.workspace.context),
+    access.workspace.role === "SUPERVISOR" ? listTeam(access.workspace.context) : Promise.resolve([])
+  ]);
+  const isSupervisorWithoutTeam = access.workspace.role === "SUPERVISOR" && team.length === 0;
 
   return (
     <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
@@ -58,7 +65,7 @@ export default async function MyLeadsPage({
             label="Forma de ver os leads"
             options={[
               { label: "Kanban", href: `/workspace/${slug}/my-leads`, selected: !isList },
-              { label: "Lista", href: `/workspace/${slug}/my-leads?view=lista`, selected: isList }
+              { label: "Lista", href: `/workspace/${slug}/my-leads?view=list`, selected: isList }
             ]}
           />
         </header>
@@ -71,7 +78,11 @@ export default async function MyLeadsPage({
               slug={slug}
             />
           ) : (
-            <LeadBoard board={board} isSupervisorWithoutTeam={isSupervisorWithoutTeam} slug={slug} />
+            <LeadBoardKanban
+              board={board}
+              isSupervisorWithoutTeam={isSupervisorWithoutTeam}
+              slug={slug}
+            />
           )}
         </div>
       </div>
