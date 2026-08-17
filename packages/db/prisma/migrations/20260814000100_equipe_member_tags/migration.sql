@@ -114,21 +114,47 @@ RESET ROLE;
 -- the columns. The migration session reads Auth into a temporary
 -- table; the table owner then updates through a temporary RLS policy. This
 -- keeps auth.users out of marctco_migrator's permanent privilege surface.
+-- `to_regclass('auth.users')` is NOT the guard it looks like. It returns NULL
+-- for a name that does not exist, but when the schema exists and the caller
+-- lacks USAGE on it — exactly the managed Supabase case — it *raises*
+-- `permission denied for schema auth`. The guard was the line that failed, and
+-- it failed on the first production deploy of this migration while passing
+-- locally and in CI, where `auth` is absent or permissive.
+--
+-- The catalog answers "does it exist" without touching the schema, and
+-- `has_*_privilege` answers "may I read it" without raising. The two are
+-- nested rather than ANDed because Postgres does not promise to short-circuit
+-- AND, and `has_table_privilege` on a missing table does raise.
 DO $backfill$
 BEGIN
-  IF to_regclass('auth.users') IS NOT NULL THEN
-    CREATE TEMPORARY TABLE workspace_member_auth_backfill AS
-      SELECT
-        auth_user.id AS user_id,
-        COALESCE(
-          NULLIF(btrim(auth_user.raw_user_meta_data ->> 'full_name'), ''),
-          NULLIF(btrim(auth_user.raw_user_meta_data ->> 'name'), ''),
-          NULLIF(btrim(auth_user.email), '')
-        ) AS display_name,
-        NULLIF(lower(btrim(auth_user.email)), '') AS email
-      FROM auth.users AS auth_user;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS catalog_class
+    JOIN pg_catalog.pg_namespace AS catalog_namespace
+      ON catalog_namespace.oid = catalog_class.relnamespace
+    WHERE catalog_namespace.nspname = 'auth'
+      AND catalog_class.relname = 'users'
+  ) THEN
+    IF has_schema_privilege('auth', 'USAGE')
+       AND has_table_privilege('auth.users', 'SELECT') THEN
+      CREATE TEMPORARY TABLE workspace_member_auth_backfill AS
+        SELECT
+          auth_user.id AS user_id,
+          COALESCE(
+            NULLIF(btrim(auth_user.raw_user_meta_data ->> 'full_name'), ''),
+            NULLIF(btrim(auth_user.raw_user_meta_data ->> 'name'), ''),
+            NULLIF(btrim(auth_user.email), '')
+          ) AS display_name,
+          NULLIF(lower(btrim(auth_user.email)), '') AS email
+        FROM auth.users AS auth_user;
 
-    GRANT SELECT ON TABLE workspace_member_auth_backfill TO marctco_migrator;
+      GRANT SELECT ON TABLE workspace_member_auth_backfill TO marctco_migrator;
+    ELSE
+      -- Skipping is safe and visible: the columns are nullable, and the Equipe
+      -- screen shows the OWNER's row blank until someone fills it. Losing the
+      -- migration — and with it every table Fase 2 needs — is not safe.
+      RAISE WARNING 'auth.users is not readable by %; workspace_members backfill skipped', current_user;
+    END IF;
   END IF;
 END
 $backfill$;

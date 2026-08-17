@@ -7,7 +7,13 @@ const forbidden = [
   { name: "TRUNCATE", pattern: /\bTRUNCATE(?:\s+TABLE)?\b/i },
   { name: "DROP COLUMN", pattern: /\bDROP\s+COLUMN\b/i },
   { name: "DROP TABLE", pattern: /\bDROP\s+TABLE\b/i },
-  { name: "destructive type change", pattern: /\bALTER\s+COLUMN\s+[^;]+\s+TYPE\s+/i }
+  { name: "destructive type change", pattern: /\bALTER\s+COLUMN\s+[^;]+\s+TYPE\s+/i },
+  // `to_regclass` reads like an existence check and is not one: on a schema the
+  // caller lacks USAGE on it raises `permission denied` instead of returning
+  // NULL. Against `auth`, which only exists on managed Supabase, that turns a
+  // guard into the statement that kills the migration — and it passes locally
+  // and in CI, where `auth` is absent. Use pg_catalog plus has_*_privilege.
+  { name: "to_regclass on the auth schema", pattern: /\bto_regclass\s*\(\s*'auth\./i }
 ];
 
 // On a managed Postgres the migrations run as a non-superuser that owns
