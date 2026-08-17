@@ -114,3 +114,17 @@ export {
   type StageMoveOpportunity,
   type StageMoveStatus
 } from "./lead-stage-move.js";
+export {
+  DEFAULT_FIRST_CONTACT_SLA_MINUTES,
+  DEFAULT_STAGNATION_DAYS,
+  MAX_FIRST_CONTACT_SLA_MINUTES,
+  MAX_STAGNATION_DAYS,
+  canWriteWorkspaceSettings,
+  parseWorkspaceSettingsWrite,
+  resolveWorkspaceSettings,
+  workspaceSettingsWriteSchema,
+  type ResolvedWorkspaceSettings,
+  type StoredWorkspaceSettings,
+  type WorkspaceSettingsWrite,
+  type WorkspaceSettingsWriteParse
+} from "./workspace-settings.js";

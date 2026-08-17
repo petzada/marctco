@@ -172,6 +172,7 @@ model Workspace {
   opportunity_timeline_events OpportunityTimelineEvent[]
   feature_flags               WorkspaceFlag[]
   tags                        Tag[]
+  settings                    WorkspaceSettings?
 
   @@map("workspaces")
 }
@@ -581,4 +582,18 @@ model OpportunityTimelineEvent {
   @@index([workspace_id, lead_submission_id])
   @@index([workspace_id, integration_event_id])
   @@map("opportunity_timeline_events")
+}
+
+/// Optional operational clocks for one workspace. No row means the domain
+/// defaults, never "SLA off". The row is born on the first write from
+/// Configurações — provision_workspace does not create it.
+model WorkspaceSettings {
+  workspace_id                String    @id @db.Uuid
+  first_contact_sla_minutes   Int?
+  stagnation_days             Int?
+  created_at                  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime  @updatedAt @db.Timestamptz(6)
+  workspace                   Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+  @@map("workspace_settings")
 }

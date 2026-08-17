@@ -116,6 +116,8 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Identificador do workspace na URL | `Workspace.slug` | UUIDv4, único. Não legível, não enumerável ([ADR-0012](./0012-contexto-de-tenant-na-url.md)) |
 | Origem comercial (handoff) | `source_opportunity_id` | — |
 | Motivo de perda | `loss_reason` | — |
+| SLA de primeiro contato | `WorkspaceSettings.first_contact_sla_minutes` | Minutos até a primeira evidência de atendimento. Anulável: nulo (ou linha ausente) resolve para o padrão do domínio, nunca desliga o relógio. Sem `first_contact_trigger` nesta fase |
+| Limite de estagnação | `WorkspaceSettings.stagnation_days` | Dias sem movimento. Anulável pela mesma regra do SLA |
 
 ## Regras
 
