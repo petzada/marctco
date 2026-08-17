@@ -63,27 +63,11 @@ export async function updateWorkspaceSettings(
     throw new WorkspaceSettingsWriteError("INVALID");
   }
 
-  return withAccessContext(prisma, context, async (transaction) => {
-    const currentRows = await transaction.$queryRaw<WorkspaceSettingsRow[]>`
-      SELECT first_contact_sla_minutes, stagnation_days
-      FROM workspace_settings
-      WHERE workspace_id = ${context.workspace_id}::uuid
-    `;
-    const current = toStored(currentRows[0]) ?? {
-      first_contact_sla_minutes: null,
-      stagnation_days: null
-    };
-    const next: StoredWorkspaceSettings = {
-      first_contact_sla_minutes:
-        parsed.value.first_contact_sla_minutes !== undefined
-          ? parsed.value.first_contact_sla_minutes
-          : current.first_contact_sla_minutes,
-      stagnation_days:
-        parsed.value.stagnation_days !== undefined
-          ? parsed.value.stagnation_days
-          : current.stagnation_days
-    };
+  const update_first_contact_sla_minutes =
+    parsed.value.first_contact_sla_minutes !== undefined;
+  const update_stagnation_days = parsed.value.stagnation_days !== undefined;
 
+  return withAccessContext(prisma, context, async (transaction) => {
     await transaction.$executeRaw`
       INSERT INTO workspace_settings (
         workspace_id,
@@ -93,18 +77,29 @@ export async function updateWorkspaceSettings(
         updated_at
       ) VALUES (
         ${context.workspace_id}::uuid,
-        ${next.first_contact_sla_minutes},
-        ${next.stagnation_days},
+        ${update_first_contact_sla_minutes ? parsed.value.first_contact_sla_minutes : null},
+        ${update_stagnation_days ? parsed.value.stagnation_days : null},
         CURRENT_TIMESTAMP,
         CURRENT_TIMESTAMP
       )
       ON CONFLICT (workspace_id) DO UPDATE SET
-        first_contact_sla_minutes = EXCLUDED.first_contact_sla_minutes,
-        stagnation_days = EXCLUDED.stagnation_days,
+        first_contact_sla_minutes = CASE
+          WHEN ${update_first_contact_sla_minutes} THEN EXCLUDED.first_contact_sla_minutes
+          ELSE workspace_settings.first_contact_sla_minutes
+        END,
+        stagnation_days = CASE
+          WHEN ${update_stagnation_days} THEN EXCLUDED.stagnation_days
+          ELSE workspace_settings.stagnation_days
+        END,
         updated_at = CURRENT_TIMESTAMP
     `;
 
-    return resolveWorkspaceSettings(next);
+    const rows = await transaction.$queryRaw<WorkspaceSettingsRow[]>`
+      SELECT first_contact_sla_minutes, stagnation_days
+      FROM workspace_settings
+      WHERE workspace_id = ${context.workspace_id}::uuid
+    `;
+    return resolveWorkspaceSettings(toStored(rows[0]));
   });
 }
 
