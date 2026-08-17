@@ -14,6 +14,9 @@ function appRoleDatabaseUrl(database_url: string): string {
 }
 
 export default defineConfig({
+  // apps/web keeps `jsx: "preserve"` for Next's own compiler; Vitest has no
+  // compiler after it, so it needs the runtime transform spelled out here.
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@marctco/domain/feature-flags": fileURLToPath(
@@ -47,7 +50,7 @@ export default defineConfig({
             "packages/db/src/provision-workspace.test.ts",
             "packages/db/src/runtime-database-url.test.ts",
             "packages/db/src/workspace-context.test.ts",
-            "packages/db/tests/{boot-check,feature-flags,intake,intake-review-resolution,integration-connection-operations,leads,outbox-recovery,person-candidates,quarantine,rls,team,team-membership-lifecycle}.test.ts"
+            "packages/db/tests/{boot-check,feature-flags,intake,intake-review-resolution,integration-connection-operations,lead-board,leads,outbox-recovery,person-candidates,quarantine,rls,team,team-membership-lifecycle}.test.ts"
           ],
           fileParallelism: false
         }

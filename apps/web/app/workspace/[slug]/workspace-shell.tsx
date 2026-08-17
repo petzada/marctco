@@ -1,5 +1,6 @@
 "use client";
 
+import { ColumnsIcon } from "@phosphor-icons/react/Columns";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { HouseIcon } from "@phosphor-icons/react/House";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
@@ -16,6 +17,12 @@ interface WorkspaceShellProps {
   readonly roleLabel: string;
   readonly canManageIntegrations: boolean;
   readonly canReadTeam: boolean;
+  /**
+   * Whether this profile attends leads. The item is absent for Gestão and
+   * Direção because their scope on that board is empty, not because the route
+   * refuses them — it redirects (ADR-0015).
+   */
+  readonly attendsLeads: boolean;
 }
 
 interface NavigationProps {
@@ -31,7 +38,8 @@ export function WorkspaceShell({
   workspaceName,
   roleLabel,
   canReadTeam,
-  canManageIntegrations
+  canManageIntegrations,
+  attendsLeads
 }: WorkspaceShellProps) {
   const pathname = usePathname();
   const mobileMenu = useRef<HTMLDetailsElement>(null);
@@ -46,6 +54,15 @@ export function WorkspaceShell({
       icon: <UsersIcon aria-hidden="true" size={20} weight="regular" />,
       label: "Leads"
     },
+    ...(attendsLeads
+      ? [
+          {
+            href: `/workspace/${slug}/my-leads`,
+            icon: <ColumnsIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Meus leads"
+          }
+        ]
+      : []),
     ...(canReadTeam
       ? [
           {

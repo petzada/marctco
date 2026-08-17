@@ -107,3 +107,10 @@ export {
   type AssignmentMember,
   type AssignmentRole
 } from "./lead-assignment.js";
+export {
+  decideLeadStageMove,
+  type StageMoveDecision,
+  type StageMoveDestination,
+  type StageMoveOpportunity,
+  type StageMoveStatus
+} from "./lead-stage-move.js";
