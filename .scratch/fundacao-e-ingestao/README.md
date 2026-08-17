@@ -1,9 +1,9 @@
 # Fundação e ingestão de leads
 
-Fatia vertical cobrindo as **Fases 0 e 1** de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
+Fatia vertical cobrindo as **Fases 0 e 1** de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). **Entregue.** Não começar por [PROMPT-INICIAL.md](../../PROMPT-INICIAL.md) — é histórico.
 
-- **Começar aqui:** [PROMPT-INICIAL.md](../../PROMPT-INICIAL.md) — na raiz do repo; prompt para abrir a sessão de implementação
-- **Spec:** [spec.md](./spec.md)
+- **Fechamento 0–2:** [fechamento-fases-0-2.md](../fechamento-fases-0-2.md)
+- **Spec:** [spec.md](./spec.md) — `Status: done`
 - **Tickets:** [issues/](./issues/) — 17 na fatia original, mais o **18**, que a
   auditoria de 2026-08-12 revelou: a conexão de landing page não tinha
   superfície para nascer

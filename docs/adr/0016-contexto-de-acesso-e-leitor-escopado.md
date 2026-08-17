@@ -73,12 +73,12 @@ Vale também para o [ADR-0006 regra 11](./0006-rls-duas-camadas-guc-worker.md): 
 
 - **Manter o client cru e cobrir com lint e revisão de código.** É a disciplina que o ADR-0006 já declarou frágil, aplicada ao ponto onde não há segunda camada. Mantém a promessa do ADR-0015 como comentário.
 - **Um repositório por model (`OpportunityRepository`, `PersonRepository`).** Módulo raso: a interface fica tão larga quanto o client, com o mesmo problema de escopo e uma indireção a mais. O que este ADR quer não é envolver o Prisma — é que a unidade exposta seja a **consulta que a tela precisa**, com o escopo já dentro.
-- **Resolver por policy de RLS por papel, keiando num segundo GUC.** Duas fontes de verdade para escopo, e o ADR-0006 recusa isso pelo mesmo motivo que recusou policies em `auth.jwt()`. Além disso o escopo do `SUPERVISOR` depende de tags, que a Fase 2 ainda vai definir; migrar policy é caro, mudar uma função não.
+- **Resolver por policy de RLS por papel, keiando num segundo GUC.** Duas fontes de verdade para escopo, e o ADR-0006 recusa isso pelo mesmo motivo que recusou policies em `auth.jwt()`. Além disso o escopo do `SUPERVISOR` depende de tags — à época a Fase 2 ainda ia definir tags; hoje o escopo vive na operação nomeada, não em policy. Migrar policy é caro, mudar uma função não.
 
 ## Consequences
 
 Cada leitura nova exige uma função nova em `packages/db` — não dá para "só escrever um `findMany` na tela". É o pedágio que torna o escopo verificável, e nesta fatia a lista tem treze operações: oito leituras e cinco escritas.
 
-Em troca, três coisas deixam de depender de alguém lembrar: o escopo do `ATTENDANT`, o cursor keyset e o índice parcial de cada contador. Quando o `SUPERVISOR` ganhar escopo real na Fase 2, ele entra numa função e vale em toda tela que já existe — que é a razão pela qual o ADR-0015 quis o lugar único antes da matriz.
+Em troca, três coisas deixam de depender de alguém lembrar: o escopo do `ATTENDANT`, o cursor keyset e o índice parcial de cada contador. O escopo do `SUPERVISOR` entrou nas operações nomeadas na Fase 2 e vale em toda tela que já existe — que é a razão pela qual o ADR-0015 quis o lugar único antes da matriz.
 
 O ADR-0013 é **emendado**: continua valendo que Server Component lê chamando `packages/db` direto, sem endpoint por tela; muda o que a chamada devolve.

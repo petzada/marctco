@@ -11,9 +11,11 @@
 
 Os 17 tickets estão implementados, o **18** fechou a única lacuna de código
 que a auditoria encontrou, e o item 1 fechou a prova em produção em
-2026-08-12. **Nada conhecido bloqueia o MVP no código nem no encanamento.**
-O que resta é o modelo Google (item 4, conta Pluga paga) e o tamanho das
-imagens (item 5).
+2026-08-12. A Fase 2 (operação do lead) também está no código; o tracker
+fechou em 2026-08-17. **Nada conhecido de código bloqueia a Fase 3.**
+O que resta desta fatia é o modelo Google (item 4, conta Pluga paga) e o
+tamanho das imagens (item 5). Fechamento das Fases 0–2 e ações manuais
+pendentes: [fechamento-fases-0-2.md](../fechamento-fases-0-2.md).
 
 ## O que já foi conferido — não reabrir
 

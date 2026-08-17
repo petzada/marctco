@@ -20,7 +20,7 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 ## Implementação
 
-Começa em [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) — prompt para abrir a sessão. Spec e 17 tickets em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/).
+Fases 0–2 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1) e [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2). Fechamento e ações manuais: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md). Próximo: plano Fase 3. [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) é histórico da fatia que já fechou.
 
 ## Ordem de construção
 

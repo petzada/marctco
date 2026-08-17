@@ -784,9 +784,11 @@ function assignmentDenial(decision: { readonly allowed: boolean; readonly reason
  * The condition arbitrates, never a prior read (ADR-0013): the `WHERE
  * assigned_user_id IS NULL` is what makes two gestores clicking the same
  * lead at once produce one winner and a clean failure for the other, instead
- * of the last write winning silently. UI wiring for this is Fase 2 (ADR-0015
- * "Atribuir · reatribuir"); it is built now because ADR-0016 lists it among
- * the operations this slice's accounting requires to exist.
+ * of the last write winning silently. UI wiring shipped in Fase 2 at
+ * apps/web/app/workspace/[slug]/leads/assignment/route.ts (ADR-0015
+ * "Atribuir · reatribuir"); the named operation exists here because
+ * ADR-0016 lists it among the operations this slice's accounting
+ * requires to exist.
  */
 export async function assignLead(
   context: UserContext,
