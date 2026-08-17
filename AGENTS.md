@@ -20,7 +20,11 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 ## Implementação
 
-Fases 0–2 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1) e [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2). Fechamento e ações manuais: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md). Próximo: plano Fase 3. [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) é histórico da fatia que já fechou.
+Fases 0–2 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1) e [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2). Fechamento e ações manuais: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md).
+
+**Fase 3 (Tempo) está especificada e não implementada:** [.scratch/tempo/](./.scratch/tempo/) — spec, dez tickets `ready-for-agent` e o mapa de dependências. Ela exige duas emendas de ADR (0019 e 0016) antes da primeira migration do ticket 09.
+
+[PROMPT-INICIAL.md](./PROMPT-INICIAL.md) é histórico da fatia que já fechou.
 
 ## Ordem de construção
 
