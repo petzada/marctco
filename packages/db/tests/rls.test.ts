@@ -624,6 +624,28 @@ describe("Seam 3: RLS and schema invariants", () => {
     ]);
   });
 
+  it("indexes activities for agenda, card and open-by-responsible lookups", async () => {
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname IN (
+        'activities_workspace_id_due_at_id_idx',
+        'activities_workspace_id_opportunity_id_due_at_idx',
+        'activities_workspace_id_assigned_user_id_due_at_open_idx'
+      )
+      ORDER BY class.relname
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "activities_workspace_id_assigned_user_id_due_at_open_idx",
+        predicate: "(status = 'OPEN'::activity_status)"
+      },
+      { index_name: "activities_workspace_id_due_at_id_idx", predicate: null },
+      { index_name: "activities_workspace_id_opportunity_id_due_at_idx", predicate: null }
+    ]);
+  });
+
   it("has one partial index per marker, serving both the row filter and the counter", async () => {
     const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
       SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate

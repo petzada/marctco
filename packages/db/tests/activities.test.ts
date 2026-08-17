@@ -464,4 +464,56 @@ describe("listLeadActivities", () => {
     });
     expect(await listLeadActivities(manager_context, foreign, app)).toEqual([]);
   });
+
+  it("scopes read by the Opportunity, not by who is responsible for the activity", async () => {
+    const opportunity_id = await seedOpportunity({ assigned_user_id: attendant_user });
+    await createActivity(
+      manager_context,
+      {
+        opportunity_id,
+        type: "TASK",
+        title: "Gestão marcou para si",
+        due_at: dueAt(4),
+        assigned_user_id: manager_user
+      },
+      app
+    );
+    const visible = await listLeadActivities(attendant_context, opportunity_id, app);
+    expect(visible).toHaveLength(1);
+    expect(visible[0]?.assigned_user_id).toBe(manager_user);
+  });
+
+  it("keeps an overdue open activity in the list instead of hiding it", async () => {
+    const opportunity_id = await seedOpportunity({ assigned_user_id: attendant_user });
+    await createActivity(
+      attendant_context,
+      {
+        opportunity_id,
+        type: "CALL",
+        title: "Vencida em aberto",
+        due_at: dueAt(-3)
+      },
+      app
+    );
+    const rows = await listLeadActivities(attendant_context, opportunity_id, app);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe("OPEN");
+    expect(rows[0]?.title).toBe("Vencida em aberto");
+  });
+});
+
+describe("activity schema invariants", () => {
+  it("refuses an orphan row at the database — every activity belongs to a lead", async () => {
+    await expect(
+      seeder.$executeRawUnsafe(`
+        INSERT INTO activities (
+          id, workspace_id, assigned_user_id, type, title, due_at, status,
+          created_by_user_id, updated_at
+        ) VALUES (
+          '${randomUUID()}', '${workspace}', '${attendant_user}', 'TASK',
+          'Sem lead', CURRENT_TIMESTAMP, 'OPEN', '${attendant_user}', CURRENT_TIMESTAMP
+        )
+      `)
+    ).rejects.toThrow(/23502|null value in column "opportunity_id"|violates not-null constraint/i);
+  });
 });
