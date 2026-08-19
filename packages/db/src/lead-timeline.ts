@@ -42,12 +42,21 @@ interface TimelineRow {
   readonly id: string;
   readonly type: string;
   readonly occurred_at: Date;
-  readonly previous_assigned_user_name: string | null;
-  readonly assigned_user_name: string | null;
   readonly activity_title: string | null;
   readonly activity_type: string | null;
   readonly activity_actor_name: string | null;
   readonly ingestion_source: string | null;
+}
+
+interface OpportunityAssignmentTail {
+  readonly assigned_user_id: string | null;
+  readonly previous_assigned_user_id: string | null;
+}
+
+interface WorkspaceMemberNameRow {
+  readonly user_id: string;
+  readonly display_name: string | null;
+  readonly email: string | null;
 }
 
 const MEMBER_NAME = Prisma.sql`
@@ -57,18 +66,84 @@ const MEMBER_NAME = Prisma.sql`
   )
 `;
 
-function asFact(row: TimelineRow): LeadTimelineFact {
+function memberDisplayName(row: WorkspaceMemberNameRow): string | null {
+  const display = row.display_name?.trim();
+  if (display) {
+    return display;
+  }
+  const email = row.email?.trim();
+  return email || null;
+}
+
+function asFact(
+  row: TimelineRow,
+  assignment: Pick<LeadTimelineFact, "previous_assigned_user_name" | "assigned_user_name">
+): LeadTimelineFact {
   return {
     id: row.id,
     type: row.type as OpportunityTimelineEventType,
     occurred_at: row.occurred_at,
-    previous_assigned_user_name: row.previous_assigned_user_name,
-    assigned_user_name: row.assigned_user_name,
+    previous_assigned_user_name: assignment.previous_assigned_user_name,
+    assigned_user_name: assignment.assigned_user_name,
     activity_title: row.activity_title,
     activity_type: row.activity_type !== null && isActivityType(row.activity_type) ? row.activity_type : null,
     activity_actor_name: row.activity_actor_name,
     ingestion_source: row.ingestion_source as PrismaLeadSource | null
   };
+}
+
+/**
+ * Assignment facts never stored user ids on the row. Replay the chain from the
+ * Opportunity tail backwards through each fact's instant instead of reading
+ * today's owner off the card (CONTEXT.md).
+ */
+function enrichAssignmentNames(
+  facts: readonly LeadTimelineFact[],
+  tail: OpportunityAssignmentTail,
+  nameByUserId: ReadonlyMap<string, string | null>
+): LeadTimelineFact[] {
+  const lookup = (user_id: string | null): string | null =>
+    user_id === null ? null : nameByUserId.get(user_id) ?? null;
+
+  let nextAssigneeId = tail.assigned_user_id;
+  let previousForOlder = tail.previous_assigned_user_id;
+  const enriched = facts.map((fact) => ({ ...fact }));
+
+  for (let index = enriched.length - 1; index >= 0; index -= 1) {
+    const fact = enriched[index]!;
+    switch (fact.type) {
+      case "REASSIGNED":
+        enriched[index] = {
+          ...fact,
+          assigned_user_name: lookup(nextAssigneeId),
+          previous_assigned_user_name: lookup(previousForOlder)
+        };
+        nextAssigneeId = previousForOlder;
+        previousForOlder = null;
+        break;
+      case "ASSIGNED":
+        enriched[index] = {
+          ...fact,
+          assigned_user_name: lookup(nextAssigneeId),
+          previous_assigned_user_name: null
+        };
+        nextAssigneeId = null;
+        break;
+      case "RETURNED_TO_QUEUE":
+        enriched[index] = {
+          ...fact,
+          previous_assigned_user_name: lookup(previousForOlder),
+          assigned_user_name: null
+        };
+        nextAssigneeId = null;
+        previousForOlder = null;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return enriched;
 }
 
 /**
@@ -90,33 +165,26 @@ export async function listLeadTimeline(
   }
 
   return withAccessContext(prisma, context, async (transaction) => {
+    const tailRows = await transaction.$queryRaw<OpportunityAssignmentTail[]>(Prisma.sql`
+      SELECT
+        opportunity.assigned_user_id,
+        opportunity.previous_assigned_user_id
+      FROM opportunities AS opportunity
+      WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.id = ${opportunity_id}::uuid
+        AND opportunity.merged_into_opportunity_id IS NULL
+        ${opportunityScopeSql(context, "opportunity")}
+    `);
+    const tail = tailRows[0];
+    if (!tail) {
+      return { facts: [], has_more: false };
+    }
+
     const rows = await transaction.$queryRaw<TimelineRow[]>(Prisma.sql`
       SELECT
         event.id,
         event.type::text AS type,
         event.occurred_at,
-        CASE
-          WHEN event.type IN (
-            'REASSIGNED'::opportunity_timeline_event_type,
-            'RETURNED_TO_QUEUE'::opportunity_timeline_event_type
-          )
-          THEN COALESCE(
-            NULLIF(BTRIM(previous_member.display_name), ''),
-            NULLIF(BTRIM(previous_member.email), '')
-          )
-          ELSE NULL
-        END AS previous_assigned_user_name,
-        CASE
-          WHEN event.type IN (
-            'ASSIGNED'::opportunity_timeline_event_type,
-            'REASSIGNED'::opportunity_timeline_event_type
-          )
-          THEN COALESCE(
-            NULLIF(BTRIM(assigned_member.display_name), ''),
-            NULLIF(BTRIM(assigned_member.email), '')
-          )
-          ELSE NULL
-        END AS assigned_user_name,
         CASE
           WHEN event.type = 'ACTIVITY_CREATED'::opportunity_timeline_event_type
           THEN created_activity.title
@@ -150,12 +218,6 @@ export async function listLeadTimeline(
       JOIN opportunities AS opportunity
         ON opportunity.workspace_id = event.workspace_id
        AND opportunity.id = event.opportunity_id
-      LEFT JOIN workspace_members AS previous_member
-        ON previous_member.workspace_id = opportunity.workspace_id
-       AND previous_member.user_id = opportunity.previous_assigned_user_id
-      LEFT JOIN workspace_members AS assigned_member
-        ON assigned_member.workspace_id = opportunity.workspace_id
-       AND assigned_member.user_id = opportunity.assigned_user_id
       LEFT JOIN LATERAL (
         SELECT
           activity.title,
@@ -199,11 +261,25 @@ export async function listLeadTimeline(
       LIMIT ${limit + 1}
     `);
 
+    const memberRows = await transaction.$queryRaw<WorkspaceMemberNameRow[]>(Prisma.sql`
+      SELECT user_id, display_name, email
+      FROM workspace_members
+      WHERE workspace_id = ${context.workspace_id}::uuid
+    `);
+    const nameByUserId = new Map(
+      memberRows.map((member) => [member.user_id, memberDisplayName(member)] as const)
+    );
+
     const has_more = rows.length > limit;
     const window = has_more ? rows.slice(0, limit) : rows;
-    return {
-      facts: window.slice().reverse().map(asFact),
-      has_more
-    };
+    const facts = enrichAssignmentNames(
+      window
+        .slice()
+        .reverse()
+        .map((row) => asFact(row, { previous_assigned_user_name: null, assigned_user_name: null })),
+      tail,
+      nameByUserId
+    );
+    return { facts, has_more };
   });
 }

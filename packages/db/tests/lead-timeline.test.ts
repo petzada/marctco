@@ -237,6 +237,9 @@ describe("listLeadTimeline", () => {
       "ACTIVITY_CREATED",
       "ACTIVITY_COMPLETED"
     ]);
+    const assigned = page.facts[0];
+    expect(assigned?.assigned_user_name).toBe("Sofia Supervisora");
+    expect(assigned?.assigned_user_name).not.toMatch(UUID_PATTERN);
     const reassigned = page.facts[1];
     expect(reassigned?.previous_assigned_user_name).toBe("Sofia Supervisora");
     expect(reassigned?.assigned_user_name).toBe("Ana Atendente");
@@ -314,6 +317,34 @@ describe("listLeadTimeline", () => {
       })
     ]);
     expect(page.facts[0]?.assigned_user_name).not.toMatch(UUID_PATTERN);
+  });
+
+  it("replays assignment names from the fact chain instead of today's card owner", async () => {
+    const opportunity_id = await seedOpportunity({ assigned_user_id: supervisor_user });
+    await reassignLead(
+      supervisor_context,
+      { opportunity_id, current_user_id: supervisor_user, user_id: attendant_user },
+      app
+    );
+    await reassignLead(
+      manager_context,
+      { opportunity_id, current_user_id: attendant_user, user_id: other_attendant_user },
+      app
+    );
+
+    const page = await listLeadTimeline(manager_context, opportunity_id, {}, app);
+    expect(page.facts.map((fact) => fact.type)).toEqual(["REASSIGNED", "REASSIGNED"]);
+    expect(page.facts[1]).toMatchObject({
+      type: "REASSIGNED",
+      previous_assigned_user_name: "Ana Atendente",
+      assigned_user_name: "Bruno Colega"
+    });
+    expect(page.facts[0]).toMatchObject({
+      type: "REASSIGNED",
+      assigned_user_name: "Ana Atendente"
+    });
+    expect(page.facts[0]?.previous_assigned_user_name).not.toBe("Ana Atendente");
+    expect(page.facts[0]?.previous_assigned_user_name).not.toBe("Bruno Colega");
   });
 
   it("names who left when a lead returns to the queue", async () => {
