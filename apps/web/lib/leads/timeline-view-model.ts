@@ -1,5 +1,5 @@
 import type { LeadTimelineFact, OpportunityTimelineEventType } from "@marctco/db";
-import { formatArrivedAt } from "./row-view-model.js";
+import { formatArrivedAt } from "./row-view-model";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
