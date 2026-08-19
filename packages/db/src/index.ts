@@ -86,7 +86,8 @@ export {
   type GeneratedIntegrationToken,
   type IntegrationConnectionStatus,
   type IntegrationProvider,
-  type ResolvedIntegrationWorkspace
+  type ResolvedIntegrationWorkspace,
+  type WhatsAppPairingState
 } from "./integration-connection.js";
 
 // --- Ticket 12: the Leads screen's named operations -----------------------
@@ -304,4 +305,19 @@ export {
   type UnresolvedNotification,
   type UnresolvedNotificationList
 } from "./notifications.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 02 — Canal: WhatsMiau connection. Appended at the end so parallel
+// Fase 4 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  WhatsAppConnectionError,
+  commitWhatsAppWebhookSecret,
+  createWhatsAppConnection,
+  getWhatsAppConnection,
+  setWhatsAppPairingState,
+  type CreatedWhatsAppConnection,
+  type WhatsAppConnectionView,
+  type WhatsAppWebhookSecretCommit
+} from "./whatsapp-connection.js";
 

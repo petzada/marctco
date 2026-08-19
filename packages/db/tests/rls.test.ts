@@ -1190,6 +1190,81 @@ describe("Seam 3: RLS and schema invariants", () => {
     await client.pipeline.delete({ where: { id: legal_pipeline.id } });
   });
 
+  it("keeps at most one live WhatsMiau connection per workspace without restoring global provider uniqueness", async () => {
+    const indexes = await client.$queryRaw<
+      Array<{ index_name: string; is_unique: boolean; predicate: string | null }>
+    >`
+      SELECT
+        class.relname::text AS index_name,
+        index.indisunique AS is_unique,
+        pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'integration_connections_one_live_whatsmiau_per_workspace_idx'
+    `;
+    expect(indexes).toEqual([
+      {
+        index_name: "integration_connections_one_live_whatsmiau_per_workspace_idx",
+        is_unique: true,
+        predicate:
+          "((provider = 'WHATSMIAU'::integration_provider) AND (status <> 'DISABLED'::integration_connection_status))"
+      }
+    ]);
+
+    const global_unique = await client.$queryRaw<Array<{ present: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'public.integration_connections'::regclass
+          AND conname = 'integration_connections_workspace_id_provider_key'
+      ) AS present
+    `;
+    expect(global_unique).toEqual([{ present: true }]);
+
+    await expect(
+      client.integrationConnection.create({
+        data: {
+          workspace_id: workspace_a,
+          provider: "WHATSMIAU",
+          token_hash: createHash("sha256")
+            .update(`mtco_whatsmiau_missing_${randomUUID()}`, "utf8")
+            .digest("hex"),
+          token_last4: "miss"
+        }
+      })
+    ).rejects.toThrow(/whatsmiau_instance_and_pairing/i);
+
+    const live = await client.integrationConnection.create({
+      data: {
+        workspace_id: workspace_a,
+        provider: "WHATSMIAU",
+        token_hash: createHash("sha256")
+          .update(`mtco_whatsmiau_live_${randomUUID()}`, "utf8")
+          .digest("hex"),
+        token_last4: "live",
+        instance_name: `marctco_${workspace_a.replaceAll("-", "")}`,
+        pairing_state: "DISCONNECTED"
+      }
+    });
+
+    await expect(
+      client.integrationConnection.create({
+        data: {
+          workspace_id: workspace_a,
+          provider: "WHATSMIAU",
+          token_hash: createHash("sha256")
+            .update(`mtco_whatsmiau_second_${randomUUID()}`, "utf8")
+            .digest("hex"),
+          token_last4: "scnd",
+          instance_name: `marctco_second_${workspace_a.replaceAll("-", "")}`,
+          pairing_state: "DISCONNECTED"
+        }
+      })
+    ).rejects.toThrow(/unique/i);
+
+    await client.integrationConnection.delete({ where: { id: live.id } });
+  });
+
   it("prevents a targeted commercial pipeline from becoming legal later", async () => {
     const target_pipeline = await client.pipeline.create({
       data: {

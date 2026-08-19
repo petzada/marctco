@@ -1,6 +1,6 @@
 # Fase 4 — Canal
 
-Status da fatia: **especificada; tickets 00 e 01 fechados.** Spec em [spec.md](./spec.md), tickets em [issues/](./issues/). Próximo: [02](./issues/02-conexao-whatsmiau.md) em paralelo com o que o 01 já destravou ([03a](./issues/03a-tentativa-outbound-e-outbox.md)).
+Status da fatia: **especificada; tickets 00, 01 e 02 fechados.** Spec em [spec.md](./spec.md), tickets em [issues/](./issues/). Próximo: [03a](./issues/03a-tentativa-outbound-e-outbox.md) (já destravado pelo 01); o 02 destravou [03b](./issues/03b-dispatcher-worker-e-adapter.md), [03c](./issues/03c-disparo-na-atribuicao.md), [04](./issues/04-gatilho-na-chegada-e-quarentena.md) e [05](./issues/05-webhook-de-entrada.md) no grafo.
 
 Fase 4 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Estado de partida: Fases 0–3 entregues — [PROMPT-HANDOFF da Fase 3](../tempo/PROMPT-HANDOFF.md).
 

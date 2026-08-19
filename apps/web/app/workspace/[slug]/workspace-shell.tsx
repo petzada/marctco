@@ -9,6 +9,7 @@ import { HouseIcon } from "@phosphor-icons/react/House";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { SignOutIcon } from "@phosphor-icons/react/SignOut";
 import { UsersIcon } from "@phosphor-icons/react/Users";
+import { WhatsappLogoIcon } from "@phosphor-icons/react/WhatsappLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, type ReactNode } from "react";
@@ -101,6 +102,11 @@ export function WorkspaceShell({
             href: `/workspace/${slug}/integrations/pluga`,
             icon: <PlugsConnectedIcon aria-hidden="true" size={20} weight="regular" />,
             label: "Pluga"
+          },
+          {
+            href: `/workspace/${slug}/integrations/whatsapp`,
+            icon: <WhatsappLogoIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "WhatsApp"
           },
           {
             href: `/workspace/${slug}/integrations/landing-page`,

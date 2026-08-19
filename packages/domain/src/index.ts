@@ -202,6 +202,20 @@ export {
   type FirstContactTrigger
 } from "./first-contact.js";
 export {
+  WHATSAPP_PAIRING_STATES,
+  WHATSMIAU_CREATE_INSTANCE_DEFAULTS,
+  WHATSMIAU_WEBHOOK_EVENTS,
+  buildWhatsMiauCreateInstanceBody,
+  buildWhatsMiauWebhookSetBody,
+  isPublicHttpsWebhookUrl,
+  isWhatsAppPairingState,
+  parseWhatsAppConnectPayload,
+  parseWhatsAppPairingState,
+  whatsAppInstanceNameFor,
+  type WhatsAppConnectReading,
+  type WhatsAppPairingState
+} from "./whatsapp-pairing.js";
+export {
   CATEGORICAL_CHART_COLOR_COUNT,
   OPERATIONAL_DASHBOARD_RECENT_DAYS,
   OPERATIONAL_DASHBOARD_TILE_IDS,

@@ -54,8 +54,23 @@ enum StageRole {
 enum IntegrationProvider {
   PLUGA
   LANDING_PAGE
+  WHATSMIAU
 
   @@map("integration_provider")
+}
+
+/// Local normalization of Whatsmiau Cloud API v2 pairing. Distinct from
+/// IntegrationConnectionStatus (ACTIVE / DISABLED). ERROR is ours, never a
+/// provider value (ADR-0005).
+enum WhatsAppPairingState {
+  DISCONNECTED
+  CONNECTING
+  QR_PENDING
+  CONNECTED
+  SUSPENDED
+  ERROR
+
+  @@map("whatsapp_pairing_state")
 }
 
 enum IntegrationConnectionStatus {
@@ -282,6 +297,10 @@ model IntegrationConnection {
   token_last4        String                      @db.Char(4)
   status             IntegrationConnectionStatus @default(ACTIVE)
   target_pipeline_id String?                     @db.Uuid
+  /// Public WhatsMiau instanceName. Null on Pluga and landing page.
+  instance_name      String?                     @unique
+  /// Pairing with the provider. Null on Pluga and landing page.
+  pairing_state      WhatsAppPairingState?
   created_at         DateTime                    @default(now()) @db.Timestamptz(6)
   updated_at         DateTime                    @updatedAt @db.Timestamptz(6)
   workspace          Workspace                   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
@@ -293,6 +312,13 @@ model IntegrationConnection {
   @@index([workspace_id])
   @@map("integration_connections")
 }
+
+// Ticket 02 of Canal: at most one live WhatsMiau connection per workspace is a
+// migration-only partial unique index
+// (`provider = WHATSMIAU AND status <> DISABLED`). Prisma's @@index cannot
+// express WHERE, and restoring UNIQUE(workspace_id, provider) as the only
+// rule would contradict ADR-0031. The global unique above still exists until
+// ticket 19 drops it; the partial is the WhatsMiau exception that survives.
 
 model IntegrationEvent {
   id                          String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

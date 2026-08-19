@@ -52,7 +52,9 @@ export interface ConnectedLead {
  * and Google arrives with ticket 13 declaring `source` explicitly — which is
  * why the published mapping template puts `source` in it.
  */
-const PROVIDER_DEFAULT_SOURCE: Readonly<Record<IntegrationProvider, LeadSource>> = {
+const PROVIDER_DEFAULT_SOURCE: Readonly<
+  Record<Exclude<IntegrationProvider, "WHATSMIAU">, LeadSource>
+> = {
   PLUGA: "META_LEAD_ADS",
   LANDING_PAGE: "LANDING_PAGE"
 };
@@ -61,6 +63,9 @@ const PROVIDER_DEFAULT_SOURCE: Readonly<Record<IntegrationProvider, LeadSource>>
 export function connectLeadSource(input: LeadSourceConnectorInput): ConnectedLead {
   if (typeof input.integration_event_id !== "string" || input.integration_event_id === "") {
     throw new Error("A v1 connector needs the id of the event it is interpreting");
+  }
+  if (input.provider === "WHATSMIAU") {
+    throw new Error("WhatsMiau is not a lead source");
   }
 
   const reading = readLeadPayload(input.raw);

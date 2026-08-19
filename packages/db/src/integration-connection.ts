@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type {
   IntegrationConnectionStatus as PrismaIntegrationConnectionStatus,
   IntegrationProvider as PrismaIntegrationProvider,
+  WhatsAppPairingState as PrismaWhatsAppPairingState,
   PrismaClient
 } from "@prisma/client";
 import { createPrismaClient } from "./client.js";
@@ -15,6 +16,7 @@ const sharedPrisma = createPrismaClient();
 export type IntegrationProvider = PrismaIntegrationProvider;
 /** Re-exported for the same reason: enable/disable never invents its own values. */
 export type IntegrationConnectionStatus = PrismaIntegrationConnectionStatus;
+export type WhatsAppPairingState = PrismaWhatsAppPairingState;
 
 export interface GeneratedIntegrationToken {
   /** Return this secret to the caller once; never persist or log it. */

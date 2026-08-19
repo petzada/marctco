@@ -165,4 +165,10 @@ describe("connectLeadSource", () => {
       /needs the id/i
     );
   });
+
+  it("refuses WhatsMiau as a lead origin", () => {
+    expect(() =>
+      connectLeadSource({ raw: {}, integration_event_id, provider: "WHATSMIAU" })
+    ).toThrow(/not a lead source/i);
+  });
 });
