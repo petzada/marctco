@@ -157,8 +157,11 @@ propor mudança — e traga a proposta a mim em vez de mudar por conta própria.
 - Quatro perfis, e nenhum a mais: ATTENDANT, SUPERVISOR, MANAGER, OWNER. Uma regra
   nesta fatia: atendente só enxerga oportunidade atribuída a si.
 - `AccessContext` é união: `UserContext` (workspace + usuário + papel) no app,
-  `JobContext` (workspace + evento) no worker. NÃO invente papel para o job
-  preencher campo, e NÃO torne `role` opcional (ADR-0016).
+  `JobContext` (workspace + origem do trabalho) no worker e nas passadas
+  agendadas do web. NÃO invente papel para o job preencher campo, e NÃO torne
+  `role` opcional (ADR-0016). **Supersessão 2026-08-19:** a forma "workspace +
+  evento" no topo virou `JobOrigin` (evento de integração real **ou** passada
+  agendada nomeada); não há terceiro tipo de contexto.
 - `packages/db` NÃO exporta o client do Prisma. Exporta operações nomeadas que
   recebem `AccessContext` — `listLeads`, `countLeadsByMarker`, `applyIntakePlan`.
   O client cru é interno e o CI reprova import de fora (ADR-0016).

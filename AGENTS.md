@@ -22,7 +22,7 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 Fases 0–2 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1) e [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2). Fechamento e ações manuais: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md).
 
-**Fase 3 (Tempo) está em implementação:** tickets 01, 02, 03 e 06 aceitos e integrados; retomar pelo ticket 04 no [handoff](./.scratch/tempo/PROMPT-HANDOFF.md). Spec, tickets e mapa em [.scratch/tempo/](./.scratch/tempo/). Ela exige duas emendas de ADR (0019 e 0016) antes da primeira migration do ticket 09.
+**Fase 3 (Tempo) está em implementação:** tickets 01, 02, 03 e 06 aceitos e integrados; retomar pelo ticket 04 no [handoff](./.scratch/tempo/PROMPT-HANDOFF.md). Spec, tickets e mapa em [.scratch/tempo/](./.scratch/tempo/). As duas emendas de ADR (0019 e 0016) que a fase exigia antes da migration do ticket 09 foram registradas em 2026-08-19.
 
 [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) é histórico da fatia que já fechou.
 
@@ -52,7 +52,7 @@ Fases 0–2 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/funda
 | [0016](./docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md) | **Contexto de acesso e leitor escopado** — `packages/db` não devolve o client do Prisma |
 | [0017](./docs/adr/0017-ingestao-como-decisao-e-plano.md) | **Ingestão é decisão pura; o plano de escrita é dado** — `IntakePlan`, dois chamadores |
 | [0018](./docs/adr/0018-marcador-como-modulo.md) | Marcador é módulo de domínio: `markersFor` responde "o que este lead tem" |
-| [0019](./docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) | Resolução pré-contexto: lista fechada de funções privadas (quatro, cinco desde o ticket 15), executor `NOLOGIN` sob `FORCE RLS`, `UserContext` único |
+| [0019](./docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) | Resolução pré-contexto: lista fechada de funções privadas (seis desde a Fase 3; era quatro, depois cinco no ticket 15), executor `NOLOGIN` sob `FORCE RLS`, `UserContext` único |
 | [0020](./docs/adr/0020-tag-no-membro-define-o-time.md) | **Tag no membro define o time;** tag na oportunidade não se herda |
 | [0021](./docs/adr/0021-dois-caminhos-de-nascimento-login-fechado.md) | **Dois caminhos de nascimento;** login fechado — marctco provisiona, Direção cadastra colaborador |
 | [0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) | **Workspace é fronteira de captação;** mesma Direção em vários; tag em membro é a marca/time |

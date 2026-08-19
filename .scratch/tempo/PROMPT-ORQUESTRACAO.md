@@ -101,14 +101,14 @@ pnpm db:drift        # schema.prisma contra o banco migrado
 
 Fatia que mexe em migration roda também `pnpm check:migrations`. `test:seam2` só é exigido de quem toca ingestão — **nesta fase, ninguém deveria tocar**; se uma fatia precisar dele, isso é sinal de que ela saiu do escopo, e vale a pergunta antes do código.
 
-## Parada obrigatória antes do ticket 09
+## Parada humana do ticket 09 — cumprida em 2026-08-19
 
-O ticket 09 exige **duas emendas de ADR** e você **não as despacha sem aprovação humana**:
+O ticket 09 exigia **duas emendas de ADR** antes da migration, e elas **já estão registradas**. Não reapresente ao humano nem as despache de novo:
 
-1. **ADR-0019** — a lista fechada de funções `SECURITY DEFINER` passa de cinco para seis. O Seam 3 reprova a sexta hoje, de propósito.
-2. **ADR-0016 e `CONTEXT.md`** — a origem do `JobContext` vira união (evento de integração **ou** passada agendada), porque a varredura de SLA não tem evento para ancorar.
+1. **ADR-0019** — a lista fechada de funções `SECURITY DEFINER` passa de cinco para seis: `private.claim_overdue_opportunity_workspaces`. O Seam 3 ainda espera cinco no código; o ticket 09 é quem materializa a sexta e atualiza a contagem.
+2. **ADR-0016 e `CONTEXT.md`** — a origem do `JobContext` é união (evento de integração **ou** passada agendada nomeada). O tipo TypeScript ainda carrega `integration_event_id` no topo; o ticket 09 é quem troca o construtor.
 
-Quando a rodada chegar no 09, **pare, apresente as duas emendas ao humano e espere.** Emendar ADR é decisão de arquitetura, não tarefa de implementação — e fazê-las depois da migration significa reescrever teste de Seam 3 e tipo de contexto com código em cima.
+Quando a rodada chegar no 09, implemente contra esses textos. Emendar ADR depois da migration significaria reescrever teste de Seam 3 e tipo de contexto com código em cima.
 
 ## O que você reporta ao humano
 

@@ -36,11 +36,11 @@ O relógio. `arrived_at` está gravado desde a Fase 1 e nenhuma leitura o compar
 
 **04 depende de 03 por um motivo mecânico, não conceitual:** os dois estendem `markersFor` e a união de tipos do marcador, e em paralelo colidem exatamente ali.
 
-## O que precisa de mão humana antes do código
+## O que precisava de mão humana antes do código
 
-Duas emendas de ADR, ambas dentro do ticket 09 e ambas **antes** da primeira migration dele:
+Duas emendas de ADR, ambas **antes** da primeira migration do ticket 09. Registradas em 2026-08-19; o ticket 09 implementa contra elas, sem reabrir a parada humana:
 
-- **ADR-0019** — a lista fechada de funções `SECURITY DEFINER` vai de cinco para seis. A descoberta "quais workspaces têm lead vencido" acontece antes de existir tenant, como a da expiração de payload.
+- **ADR-0019** — a lista fechada de funções `SECURITY DEFINER` vai de cinco para seis. A descoberta "quais workspaces têm lead vencido" acontece antes de existir tenant, como a da expiração de payload: `private.claim_overdue_opportunity_workspaces` devolve só `workspace_id`.
 - **ADR-0016 e CONTEXT.md** — a origem do `JobContext` vira união. Trabalho agendado sem evento de origem existe: a varredura de payload já era esse caso e o contornou com uma âncora que a varredura de SLA não tem como fabricar.
 
 ## Decisões que a spec fechou
