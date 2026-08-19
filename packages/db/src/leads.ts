@@ -10,7 +10,9 @@ import {
   normalizeDecimalAmount,
   normalizeEmail,
   readPhone,
+  resolveWorkspaceSettings,
   type AssignmentRole,
+  type LeadClockFilter,
   type TableMarker
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
@@ -87,6 +89,12 @@ export interface ListLeadsOptions {
   readonly after?: LeadListCursor;
   /** Filters the table in place — the same question a counter answers. */
   readonly marker?: TableMarker;
+  /**
+   * SLA-breached or stagnant — the Dashboard tile's destination filter.
+   * Uses the same workspace clocks as `firstContactSla` / `stagnation`.
+   */
+  readonly clock?: LeadClockFilter;
+  readonly now?: Date;
   readonly responsible_user_id?: string;
   readonly unassigned?: boolean;
   readonly team?: string;
@@ -153,6 +161,60 @@ function markerFilterSql(marker: TableMarker | undefined): Prisma.Sql {
     default: {
       const unhandled: never = marker;
       throw new Error(`Unhandled marker filter: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
+interface SettingsRow {
+  readonly first_contact_sla_minutes: number | null;
+  readonly stagnation_days: number | null;
+}
+
+function toStoredSettings(row: SettingsRow | undefined): {
+  first_contact_sla_minutes: number | null;
+  stagnation_days: number | null;
+} | null {
+  if (!row) {
+    return null;
+  }
+  return {
+    first_contact_sla_minutes: row.first_contact_sla_minutes,
+    stagnation_days: row.stagnation_days
+  };
+}
+
+/**
+ * SQL mirror of `firstContactSla` / `stagnation` for OPEN leads so the
+ * Dashboard tile and the paginated table answer the same question.
+ */
+function clockFilterSql(
+  clock: LeadClockFilter,
+  settings: { readonly first_contact_sla_minutes: number; readonly stagnation_days: number },
+  now: Date
+): Prisma.Sql {
+  switch (clock) {
+    case "sla-breached":
+      return Prisma.sql`
+        AND opportunity.status = 'OPEN'::opportunity_status
+        AND (
+          (
+            opportunity.first_contact_at IS NULL
+            AND opportunity.arrived_at <= ${now}::timestamptz - (${settings.first_contact_sla_minutes} * interval '1 minute')
+          )
+          OR (
+            opportunity.first_contact_at IS NOT NULL
+            AND opportunity.first_contact_at - opportunity.arrived_at >= (${settings.first_contact_sla_minutes} * interval '1 minute')
+          )
+        )
+      `;
+    case "stagnant":
+      return Prisma.sql`
+        AND opportunity.status = 'OPEN'::opportunity_status
+        AND COALESCE(opportunity.last_movement_at, opportunity.arrived_at) <= ${now}::timestamptz - (${settings.stagnation_days} * interval '1 day')
+      `;
+    default: {
+      const unhandled: never = clock;
+      throw new Error(`Unhandled clock filter: ${JSON.stringify(unhandled)}`);
     }
   }
 }
@@ -237,8 +299,23 @@ export async function listLeads(
     ? Prisma.sql`AND (opportunity.arrived_at, opportunity.id) < (${after.arrived_at}::timestamptz, ${after.id}::uuid)`
     : Prisma.empty;
 
-  const rows = await withAccessContext(prisma, context, async (transaction) =>
-    transaction.$queryRaw<LeadListRawRow[]>(Prisma.sql`
+  const rows = await withAccessContext(prisma, context, async (transaction) => {
+    let clockClause = Prisma.empty;
+    if (options.clock) {
+      const now = options.now ?? new Date();
+      if (Number.isNaN(now.getTime())) {
+        throw new Error("now must be a valid instant when filtering by clock");
+      }
+      const settingsRows = await transaction.$queryRaw<SettingsRow[]>`
+        SELECT first_contact_sla_minutes, stagnation_days
+        FROM workspace_settings
+        WHERE workspace_id = ${context.workspace_id}::uuid
+      `;
+      const settings = resolveWorkspaceSettings(toStoredSettings(settingsRows[0]));
+      clockClause = clockFilterSql(options.clock, settings, now);
+    }
+
+    return transaction.$queryRaw<LeadListRawRow[]>(Prisma.sql`
       SELECT
         opportunity.id AS opportunity_id,
         opportunity.person_id,
@@ -297,12 +374,13 @@ export async function listLeads(
         ${opportunityScopeSql(context, "opportunity")}
         ${cursorClause}
         ${markerFilterSql(options.marker)}
+        ${clockClause}
         ${responsibleFilter}
         ${teamFilter}
       ORDER BY opportunity.arrived_at DESC, opportunity.id DESC
       LIMIT ${limit}::integer
-    `)
-  );
+    `);
+  });
 
   return rows.map(toLeadListRow);
 }

@@ -31,7 +31,8 @@ export default async function AgendaPage({
 
   const parsed = await agendaSearchParamsCache.parse(searchParams);
   const query = resolveAgendaQuery(parsed);
-  const options = agendaListOptions(query);
+  const now = new Date();
+  const options = agendaListOptions(query, now);
   const context = access.workspace.context;
   const [agenda, leads, members] = await Promise.all([
     listAgenda(context, options),

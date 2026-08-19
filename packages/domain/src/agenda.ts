@@ -11,6 +11,19 @@ export const MAX_AGENDA_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const AGENDA_VIEWS = ["day", "week"] as const;
 export type AgendaViewKind = (typeof AGENDA_VIEWS)[number];
 
+/** Dashboard tile lands on `?due=overdue` — every open activity past due_at. */
+export const AGENDA_DUE_FILTERS = ["overdue"] as const;
+export type AgendaDueFilter = (typeof AGENDA_DUE_FILTERS)[number];
+
+export function parseAgendaDueFilter(
+  value: string | null | undefined
+): AgendaDueFilter | undefined {
+  if (value && (AGENDA_DUE_FILTERS as readonly string[]).includes(value)) {
+    return value as AgendaDueFilter;
+  }
+  return undefined;
+}
+
 export type AgendaIntervalRefusal = "INVALID_RANGE" | "RANGE_TOO_LONG";
 
 export type AgendaIntervalDecision =

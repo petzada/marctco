@@ -1,5 +1,5 @@
 import { createSearchParamsCache, parseAsString, parseAsStringLiteral } from "nuqs/server";
-import { MARKERS } from "@marctco/domain";
+import { LEAD_CLOCK_FILTERS, MARKERS } from "@marctco/domain";
 
 /**
  * Filter, cursor and active marker live in the URL via `nuqs` (ticket 12
@@ -10,6 +10,7 @@ import { MARKERS } from "@marctco/domain";
 export const leadsSearchParams = {
   cursor: parseAsString,
   marker: parseAsStringLiteral(MARKERS),
+  clock: parseAsStringLiteral(LEAD_CLOCK_FILTERS),
   responsible: parseAsString,
   team: parseAsString
 };

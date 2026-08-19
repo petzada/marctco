@@ -23,6 +23,9 @@ export interface ListAgendaOptions {
   readonly responsible_user_id?: string;
   readonly tag_id?: string;
   readonly pipeline_id?: string;
+  /** When true, returns every overdue OPEN activity in scope, ignoring the interval. */
+  readonly overdue_only?: boolean;
+  readonly now?: Date;
 }
 
 export interface AgendaItem {
@@ -150,6 +153,20 @@ export async function listAgenda(
     ? Prisma.sql`AND opportunity.pipeline_id = ${options.pipeline_id}::uuid`
     : Prisma.empty;
 
+  const now = options.now ?? new Date();
+  if (options.overdue_only && Number.isNaN(now.getTime())) {
+    throw new Error("now must be a valid instant when filtering overdue activities");
+  }
+  const dueFilter = options.overdue_only
+    ? Prisma.sql`
+        AND activity.status = 'OPEN'::activity_status
+        AND activity.due_at < ${now}::timestamptz
+      `
+    : Prisma.sql`
+        AND activity.due_at >= ${interval.from}
+        AND activity.due_at < ${interval.to}
+      `;
+
   return withAccessContext(prisma, context, async (transaction) => {
     const items = await transaction.$queryRaw<AgendaItemRow[]>(Prisma.sql`
         SELECT
@@ -190,8 +207,7 @@ export async function listAgenda(
         WHERE activity.workspace_id = ${context.workspace_id}::uuid
           AND opportunity.merged_into_opportunity_id IS NULL
           AND activity.status <> 'CANCELED'::activity_status
-          AND activity.due_at >= ${interval.from}
-          AND activity.due_at < ${interval.to}
+          ${dueFilter}
           ${opportunityScopeSql(context, "opportunity")}
           ${responsibleFilter}
           ${tagFilter}
