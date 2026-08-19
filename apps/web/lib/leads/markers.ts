@@ -10,7 +10,7 @@ import type { Marker } from "@marctco/domain";
  */
 export interface MarkerPresentation {
   readonly label: string;
-  readonly icon: "phone-off" | "user-question" | "copy" | "clock";
+  readonly icon: "phone-off" | "user-question" | "copy" | "clock" | "pause";
 }
 
 export function markerPresentation(marker: Marker): MarkerPresentation {
@@ -23,6 +23,8 @@ export function markerPresentation(marker: Marker): MarkerPresentation {
       return { label: "Possível duplicado", icon: "copy" };
     case "FIRST_CONTACT_SLA_BREACHED":
       return { label: "SLA estourado", icon: "clock" };
+    case "STAGNANT":
+      return { label: "Parado", icon: "pause" };
     default: {
       const unhandled: never = marker;
       throw new Error(`Unhandled marker: ${JSON.stringify(unhandled)}`);

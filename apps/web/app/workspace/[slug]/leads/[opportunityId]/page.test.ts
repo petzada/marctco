@@ -30,6 +30,7 @@ describe("Lead card page", () => {
       arrived_at: new Date("2026-08-17T12:00:00.000Z"),
       first_contact_at: null,
       closed_at: null,
+      last_movement_at: null,
       status: "OPEN",
       missing_phone: false
     });

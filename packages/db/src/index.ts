@@ -246,3 +246,8 @@ export {
   type ListAgendaOptions
 } from "./agenda.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 04 — stagnation clock and movement facts. No new named operation:
+// existing writes stamp last_movement_at and record the fact internally.
+// ---------------------------------------------------------------------------
+

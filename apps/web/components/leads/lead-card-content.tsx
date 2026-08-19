@@ -7,6 +7,7 @@ import {
   FINANCING_TYPES,
   firstContactSla,
   markersFor,
+  stagnation,
   type Marker,
   type PossibleDuplicateResolution,
   type ResolvedWorkspaceSettings
@@ -23,7 +24,8 @@ const MARKER_TONE: Readonly<Record<Marker, StatusBadgeTone>> = {
   MISSING_PHONE: "warning",
   IDENTITY_CONFLICT: "danger",
   POSSIBLE_DUPLICATE: "info",
-  FIRST_CONTACT_SLA_BREACHED: "danger"
+  FIRST_CONTACT_SLA_BREACHED: "danger",
+  STAGNANT: "warning"
 };
 
 const FINANCING_TYPE_LABELS: Readonly<Record<FinancingType, string>> = {
@@ -81,7 +83,15 @@ export function LeadCardContent({
     settings: clockSettings,
     now: new Date(nowIso)
   });
-  const markers = markersFor({ missing_phone: lead.missing_phone }, lead.reviews, sla);
+  const idle = stagnation({
+    arrived_at: lead.arrived_at,
+    last_movement_at: lead.last_movement_at,
+    status: lead.status,
+    merged_into_opportunity_id: null,
+    settings: clockSettings,
+    now: new Date(nowIso)
+  });
+  const markers = markersFor({ missing_phone: lead.missing_phone }, lead.reviews, sla, idle);
 
   return (
     <div className="grid gap-lg">

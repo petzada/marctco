@@ -155,8 +155,8 @@ Payload bruto recebido de uma origem, persistido transacionalmente como outbox a
 _Avoid_: Confundir com EnvioLead (que já é lead interpretado), publicar no Redis antes do commit, descartar o bruto antes de processar, guardar o mesmo payload em dois lugares
 
 **Evento da linha do tempo da Oportunidade**:
-Fato imutável que aconteceu com uma Oportunidade e precisa continuar visível depois de reprocessamento ou mesclagem. Nesta fatia há somente reenvio recebido e EnvioLead absorvido como reentrada; atividade, mensagem e documento entram nas fases que os possuem. Quando uma Oportunidade é mesclada, seus eventos são transferidos para a canônica — nenhuma leitura segue a lápide.
-_Avoid_: Reconstituir evento a partir do estado atual do card, gravar texto de UI no domínio, anexar evento novo à Oportunidade absorvida, transformar a linha do tempo mínima em model genérico das fases futuras
+Fato imutável que aconteceu com uma Oportunidade e precisa continuar visível depois de reprocessamento ou mesclagem. A ingestão grava reenvio recebido e EnvioLead absorvido como reentrada, e estes dois continuam deduplicando pelo evento de integração. A Fase 3 acrescenta os fatos de movimento — mudança de etapa, atribuição, reatribuição, retorno à fila, atividade marcada e atividade concluída — que não têm evento de integração e não deduplicam: dois movimentos iguais em instantes diferentes são dois fatos. Quando uma Oportunidade é mesclada, seus eventos são transferidos para a canônica — nenhuma leitura segue a lápide.
+_Avoid_: Reconstituir evento a partir do estado atual do card, gravar texto de UI no domínio, anexar evento novo à Oportunidade absorvida, transformar a linha do tempo em model genérico das fases futuras, deixar a retransmissão inerte reanimar o relógio de estagnação
 
 **Expiração do payload**:
 Passados 90 dias, o conteúdo bruto do Evento de integração é apagado e a linha permanece: some o dado pessoal, fica o fato de que aquele lead chegou, de onde, quando e no que deu. Evento em quarentena não expira enquanto estiver em quarentena, porque é justamente o payload que o gestor precisa ler para completar.
@@ -183,8 +183,16 @@ Limite em minutos, configurável pela Gestão, entre a chegada do lead e a prime
 _Avoid_: Parar o relógio na atribuição, horário comercial, flag `auto_primeiro_contato`, `first_contact_trigger`
 
 **Estagnação**:
-Limite em dias, configurável pela Gestão, sem movimento no lead. Sem linha no workspace, vale o padrão do domínio. Mede movimento, não chegada.
-_Avoid_: Contar edição de campo ou leitura como movimento, desligar o relógio por ausência de configuração
+Limite em dias, configurável pela Gestão, sem movimento no lead. Sem linha no workspace, vale o padrão do domínio. Mede movimento, não chegada. O âncora é o último movimento; quando ainda não houve nenhum, é a chegada — assim o lead nunca tocado é o mais parado, não o menos. Ganho, perda e mesclado nunca contam como parados.
+_Avoid_: Contar edição de campo, leitura ou retransmissão inerte como movimento, desligar o relógio por ausência de configuração, tratar ganho ou perda como parado
+
+**Último movimento**:
+Instante da última operação que mexeu no lead — mover etapa, atribuir, reatribuir, devolver à fila, criar ou concluir atividade. Gravado em `last_movement_at` na mesma transação do fato na linha do tempo. Ausência ancora a estagnação na chegada.
+_Avoid_: Inferir do `updated_at`, carimbar na edição de campo ou na retransmissão inerte, apagar `previous_assigned_user_id` porque a linha do tempo existe
+
+**Estado de estagnação**:
+Se o lead ainda anda dentro do limite (em movimento) ou se passou do limite sem movimento (parado). Função pura, relógio corrido em dias de 24 horas. Ganho, perda e mesclado nunca saem como parados.
+_Avoid_: Horário comercial, uma segunda função para a tela e outra para o alerta, contar fechado como parado
 
 **Primeiro contato**:
 Instante em que alguém falou com esta pessoa pela primeira vez. Nesta fase é a primeira Atividade concluída daquele lead; a Fase 4 acrescenta a mensagem de WhatsApp na mesma coluna, sem trocar o significado. Anulável e escrito uma vez: a segunda conclusão não sobrescreve, e atribuir ou mover etapa não preenchem.

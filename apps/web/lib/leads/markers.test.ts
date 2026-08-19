@@ -8,7 +8,8 @@ describe("markerPresentation", () => {
       "MISSING_PHONE",
       "IDENTITY_CONFLICT",
       "POSSIBLE_DUPLICATE",
-      "FIRST_CONTACT_SLA_BREACHED"
+      "FIRST_CONTACT_SLA_BREACHED",
+      "STAGNANT"
     ];
     const presentations = markers.map((marker) => markerPresentation(marker));
 
@@ -16,7 +17,8 @@ describe("markerPresentation", () => {
       { label: "Sem telefone", icon: "phone-off" },
       { label: "Identidade em conflito", icon: "user-question" },
       { label: "Possível duplicado", icon: "copy" },
-      { label: "SLA estourado", icon: "clock" }
+      { label: "SLA estourado", icon: "clock" },
+      { label: "Parado", icon: "pause" }
     ]);
     // One entry per marker, one icon each — never two markers sharing a
     // presentation, which would defeat "one icon reads what this lead has".

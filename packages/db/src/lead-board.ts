@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { decideLeadStageMove, type StageMoveStatus } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { stampOpportunityMovement } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
 import { withAccessContext } from "./internal/scoped-transaction.js";
 
@@ -290,6 +291,12 @@ export async function moveLeadStage(
     if (moved === 0) {
       throw new LeadStageMoveError("STAGE_CHANGED");
     }
+
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: [input.opportunity_id],
+      type: "STAGE_CHANGED"
+    });
 
     return { opportunity_id: input.opportunity_id, stage_id: input.stage_id };
   });

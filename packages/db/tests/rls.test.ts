@@ -2006,4 +2006,96 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
     expect(rows[0]?.check_clause).toContain("closed_at IS NULL");
     expect(rows[0]?.check_clause).toContain("closed_at IS NOT NULL");
   });
+
+  it("keeps last_movement_at nullable and indexes open unmerged leads by it, only in the migration", async () => {
+    const columns = await client.$queryRaw<
+      Array<{ column_name: string; is_nullable: string }>
+    >`
+      SELECT column_name, is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'opportunities'
+        AND column_name = 'last_movement_at'
+    `;
+    expect(columns).toEqual([{ column_name: "last_movement_at", is_nullable: "YES" }]);
+
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'opportunities_workspace_id_last_movement_at_open_idx'
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "opportunities_workspace_id_last_movement_at_open_idx",
+        predicate:
+          "((status = 'OPEN'::opportunity_status) AND (merged_into_opportunity_id IS NULL))"
+      }
+    ]);
+  });
+
+  it("deduplicates only the two ingestion timeline variants, and allows repeated movement facts", async () => {
+    const indexes = await client.$queryRaw<
+      Array<{ index_name: string; is_unique: boolean; predicate: string | null }>
+    >`
+      SELECT
+        class.relname::text AS index_name,
+        index.indisunique AS is_unique,
+        pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'opportunity_timeline_events_ingestion_dedupe_idx'
+    `;
+    expect(indexes).toEqual([
+      {
+        index_name: "opportunity_timeline_events_ingestion_dedupe_idx",
+        is_unique: true,
+        predicate:
+          "((type = ANY (ARRAY['RETRANSMISSION_RECEIVED'::opportunity_timeline_event_type, 'SUBMISSION_REENTERED'::opportunity_timeline_event_type])) AND (integration_event_id IS NOT NULL))"
+      }
+    ]);
+
+    const table_unique = await client.$queryRaw<Array<{ constraint_name: string }>>`
+      SELECT con.conname::text AS constraint_name
+      FROM pg_constraint AS con
+      JOIN pg_class AS rel ON rel.oid = con.conrelid
+      WHERE rel.relname = 'opportunity_timeline_events'
+        AND con.contype = 'u'
+    `;
+    expect(table_unique).toEqual([]);
+
+    await expect(
+      client.opportunityTimelineEvent.create({
+        data: {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "RETRANSMISSION_RECEIVED",
+          lead_submission_id: lead_submission_a,
+          integration_event_id: integration_event_a,
+          occurred_at: new Date()
+        }
+      })
+    ).rejects.toThrow(/unique/i);
+
+    await client.opportunityTimelineEvent.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "STAGE_CHANGED",
+          occurred_at: new Date("2026-08-18T10:00:00.000Z")
+        },
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "STAGE_CHANGED",
+          occurred_at: new Date("2026-08-18T11:00:00.000Z")
+        }
+      ]
+    });
+    const movement = await client.opportunityTimelineEvent.count({
+      where: { opportunity_id: opportunity_a, type: "STAGE_CHANGED" }
+    });
+    expect(movement).toBe(2);
+  });
 });

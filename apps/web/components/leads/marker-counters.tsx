@@ -14,7 +14,8 @@ const TONE_BY_MARKER: Readonly<Record<Marker, StatusBadgeTone>> = {
   MISSING_PHONE: "warning",
   IDENTITY_CONFLICT: "danger",
   POSSIBLE_DUPLICATE: "info",
-  FIRST_CONTACT_SLA_BREACHED: "danger"
+  FIRST_CONTACT_SLA_BREACHED: "danger",
+  STAGNANT: "warning"
 };
 
 /**

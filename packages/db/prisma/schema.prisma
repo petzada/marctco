@@ -145,11 +145,18 @@ enum IdentityConflictResolution {
   @@map("identity_conflict_resolution")
 }
 
-/// The two ingestion facts this slice must expose on an Opportunity timeline.
-/// Later channel/activity phases add their own event kinds deliberately.
+/// Ingestion facts this slice must expose on an Opportunity timeline, plus
+/// the movement facts Fase 3 records. Movement kinds have no integration
+/// event and do not deduplicate.
 enum OpportunityTimelineEventType {
   RETRANSMISSION_RECEIVED
   SUBMISSION_REENTERED
+  STAGE_CHANGED
+  ASSIGNED
+  REASSIGNED
+  RETURNED_TO_QUEUE
+  ACTIVITY_CREATED
+  ACTIVITY_COMPLETED
 
   @@map("opportunity_timeline_event_type")
 }
@@ -507,6 +514,9 @@ model Opportunity {
   /// attendance. Fase 6's close operation fills this; quarantine archive paths
   /// that already close the card write it too (ticket 03).
   closed_at                  DateTime?                  @db.Timestamptz(6)
+  /// Instant of the last movement. Nullable; backfilled to arrived_at so a
+  /// lead that was never touched is the most stagnant, not the least.
+  last_movement_at           DateTime?                  @db.Timestamptz(6)
   workspace                  Workspace                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   person                     Person                     @relation(fields: [workspace_id, person_id], references: [workspace_id, id], onDelete: Cascade)
   pipeline                   Pipeline                   @relation(fields: [workspace_id, pipeline_id], references: [workspace_id, id], onDelete: Restrict)
@@ -536,6 +546,9 @@ model Opportunity {
   // `(workspace_id, arrived_at) WHERE first_contact_at IS NULL AND status =
   // 'OPEN' AND merged_into_opportunity_id IS NULL` — the Prisma schema DSL
   // cannot express a WHERE predicate on @@index.
+  // Ticket 04 (stagnation) adds a migration-only partial index on
+  // `(workspace_id, last_movement_at) WHERE status = 'OPEN' AND
+  // merged_into_opportunity_id IS NULL`.
   @@unique([workspace_id, id])
   @@index([workspace_id])
   @@index([workspace_id, person_id])
@@ -578,23 +591,29 @@ model IntakeReview {
   @@map("intake_reviews")
 }
 
-/// The minimum durable timeline needed by ingestion. A resend and a
-/// submission absorbed as re-entry are facts, not mutable Opportunity fields.
+/// Durable timeline of an Opportunity. Ingestion facts keep an integration
+/// event and continue to deduplicate; movement facts do not.
 model OpportunityTimelineEvent {
   id                   String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id         String                       @db.Uuid
   opportunity_id       String                       @db.Uuid
   type                 OpportunityTimelineEventType
-  lead_submission_id   String                       @db.Uuid
-  integration_event_id String                       @db.Uuid
+  /// Present on the two ingestion variants; null on a movement fact.
+  lead_submission_id   String?                      @db.Uuid
+  /// Present on the two ingestion variants; null on a movement fact.
+  integration_event_id String?                      @db.Uuid
   occurred_at          DateTime                     @db.Timestamptz(6)
   created_at           DateTime                     @default(now()) @db.Timestamptz(6)
   workspace            Workspace                    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   opportunity          Opportunity                  @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
-  lead_submission      LeadSubmission               @relation(fields: [workspace_id, lead_submission_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
-  integration_event    IntegrationEvent             @relation(fields: [workspace_id, integration_event_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  lead_submission      LeadSubmission?              @relation(fields: [workspace_id, lead_submission_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  integration_event    IntegrationEvent?            @relation(fields: [workspace_id, integration_event_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([workspace_id, type, integration_event_id])
+  // Uniqueness `(workspace_id, type, integration_event_id)` is a partial
+  // unique index on the two ingestion variants only, declared in the
+  // ticket 04 migration. Prisma's @@unique cannot express a WHERE predicate;
+  // writing one here would claim a full unique index that would reject two
+  // identical movement facts.
   @@index([workspace_id])
   @@index([workspace_id, opportunity_id, occurred_at(sort: Desc), id(sort: Desc)])
   @@index([workspace_id, lead_submission_id])

@@ -15,6 +15,7 @@ import {
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { stampOpportunityMovement } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
 import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
@@ -66,6 +67,7 @@ export interface LeadListRow {
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
   readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
   readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -106,6 +108,7 @@ interface LeadListRawRow {
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
   readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
   readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -171,6 +174,7 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
     arrived_at: row.arrived_at,
     first_contact_at: row.first_contact_at,
     closed_at: row.closed_at,
+    last_movement_at: row.last_movement_at,
     status: row.status as LeadListRow["status"],
     missing_phone: row.missing_phone,
     assigned_user_id: row.assigned_user_id,
@@ -251,6 +255,7 @@ export async function listLeads(
         opportunity.arrived_at,
         opportunity.first_contact_at,
         opportunity.closed_at,
+        opportunity.last_movement_at,
         opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
@@ -460,6 +465,7 @@ export interface LeadDetail {
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
   readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
   readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -484,6 +490,7 @@ interface LeadCoreRawRow {
   readonly arrived_at: Date;
   readonly first_contact_at: Date | null;
   readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
   readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
@@ -552,6 +559,7 @@ export async function getLead(
         opportunity.arrived_at,
         opportunity.first_contact_at,
         opportunity.closed_at,
+        opportunity.last_movement_at,
         opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
@@ -718,6 +726,7 @@ export async function getLead(
       arrived_at: core.arrived_at,
       first_contact_at: core.first_contact_at,
       closed_at: core.closed_at,
+      last_movement_at: core.last_movement_at,
       status: core.status as LeadDetail["status"],
       missing_phone: core.missing_phone,
       assigned_user_id: core.assigned_user_id,
@@ -871,6 +880,11 @@ export async function assignLeads(
       RETURNING opportunity.id AS opportunity_id
     `);
     const claimedIds = new Set(claimed.map((row) => row.opportunity_id));
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: claimed.map((row) => row.opportunity_id),
+      type: "ASSIGNED"
+    });
     const refusedIds = opportunity_ids.filter((id) => !claimedIds.has(id));
     const current = refusedIds.length === 0 ? [] : await transaction.$queryRaw<Array<{
       opportunity_id: string; assigned_user_id: string | null; assigned_user_name: string | null;
@@ -1002,6 +1016,11 @@ export async function reassignLeads(
       RETURNING opportunity.id AS opportunity_id
     `);
     const claimedIds = new Set(claimed.map((row) => row.opportunity_id));
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: claimed.map((row) => row.opportunity_id),
+      type: "REASSIGNED"
+    });
     const conflicted = eligible.filter((item) => !claimedIds.has(item.opportunity_id));
     const current = conflicted.length === 0 ? [] : await transaction.$queryRaw<Array<{
       opportunity_id: string; assigned_user_id: string | null; assigned_user_name: string | null;
