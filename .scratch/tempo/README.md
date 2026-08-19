@@ -6,7 +6,7 @@ Fase 3 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Esta
 
 ## O que esta fase entregou
 
-O relógio. `arrived_at` está gravado desde a Fase 1 e nenhuma leitura o compara com o presente; a Atividade — que o plano chama de "keystone escondida do MVP" — não existe. Depois desta fase o atendente registra o que faz, a Agenda mostra o dia, o SLA de primeiro contato e a estagnação viram estado visível, o gestor é avisado sem precisar procurar, e o Dashboard responde "o que está queimando agora".
+O relógio visível na operação: o atendente registra o que faz, a Agenda mostra o dia, o SLA de primeiro contato e a estagnação viram estado visível, o gestor é avisado sem precisar procurar, e o Dashboard responde "o que está queimando agora". Antes dela, `arrived_at` já estava gravado desde a Fase 1 sem leitura comparando com o presente, e a Atividade — keystone escondida do MVP — não existia.
 
 ## Ordem e dependências (mapa histórico de como foi construída)
 

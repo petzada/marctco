@@ -107,8 +107,8 @@ Fatia que mexe em migration roda também `pnpm check:migrations`. `test:seam2` s
 
 O ticket 09 exigia **duas emendas de ADR** antes da migration, e elas **já estão registradas**. Não reapresente ao humano nem as despache de novo:
 
-1. **ADR-0019** — a lista fechada de funções `SECURITY DEFINER` passa de cinco para seis: `private.claim_overdue_opportunity_workspaces`. O Seam 3 ainda espera cinco no código; o ticket 09 é quem materializa a sexta e atualiza a contagem.
-2. **ADR-0016 e `CONTEXT.md`** — a origem do `JobContext` é união (evento de integração **ou** passada agendada nomeada). O tipo TypeScript ainda carrega `integration_event_id` no topo; o ticket 09 é quem troca o construtor.
+1. **ADR-0019** — a lista fechada de funções `SECURITY DEFINER` passou de cinco para seis: `private.claim_overdue_opportunity_workspaces`. O ticket 09 materializou a sexta função e atualizou a contagem no Seam 3.
+2. **ADR-0016 e `CONTEXT.md`** — a origem do `JobContext` virou união (evento de integração **ou** passada agendada nomeada). O ticket 09 trocou o construtor do `JobContext` para refletir essa origem.
 
 A rodada do 09 implementou contra esses textos (`3adc7e7`). Emendar ADR depois da migration significaria reescrever teste de Seam 3 e tipo de contexto com código em cima. Não reabra a parada.
 
