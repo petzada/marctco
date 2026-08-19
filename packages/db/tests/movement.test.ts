@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createUserContextFromResolvedMembership } from "../src/access-context.js";
 import { cancelActivity, completeActivity, createActivity, rescheduleActivity } from "../src/activities.js";
+import { resolveIntakeReview } from "../src/intake-review.js";
 import { moveLeadStage } from "../src/lead-board.js";
 import {
   assignLead,
@@ -14,6 +17,27 @@ import {
   updateLeadDetails
 } from "../src/leads.js";
 import { detachWorkspaceMember } from "../src/team.js";
+
+const LAST_MOVEMENT_MIGRATION_SQL = readFileSync(
+  fileURLToPath(
+    new URL("../prisma/migrations/20260817010400_opportunity_last_movement_at/migration.sql", import.meta.url)
+  ),
+  "utf8"
+);
+
+const ROLLBACK_BACKFILL_FIXTURE = "rollback last_movement_at backfill fixture";
+
+/** The ADD COLUMN + UPDATE that the reserved migration runs, not a copy. */
+function lastMovementBackfillStatements(sql: string): readonly [string, string] {
+  const add = sql.match(/ALTER TABLE "opportunities" ADD COLUMN "last_movement_at" TIMESTAMPTZ\(6\);/);
+  const update = sql.match(
+    /UPDATE "opportunities"\s+SET "last_movement_at" = "arrived_at"\s+WHERE "last_movement_at" IS NULL;/
+  );
+  if (!add?.[0] || !update?.[0]) {
+    throw new Error("last_movement_at backfill statements missing from the reserved migration");
+  }
+  return [add[0], update[0]];
+}
 
 const database_url = process.env.DATABASE_URL;
 if (!database_url) {
@@ -62,14 +86,19 @@ function nextArrival(): Date {
 
 async function seedOpportunity(options: {
   readonly assigned_user_id?: string | null;
+  readonly person_id?: string;
 } = {}): Promise<string> {
-  const person = await seeder.person.create({
-    data: { workspace_id: workspace, name: "Lead de movimento" }
-  });
+  const person_id =
+    options.person_id ??
+    (
+      await seeder.person.create({
+        data: { workspace_id: workspace, name: "Lead de movimento" }
+      })
+    ).id;
   const opportunity = await seeder.opportunity.create({
     data: {
       workspace_id: workspace,
-      person_id: person.id,
+      person_id,
       pipeline_id: pipeline,
       stage_id: entry_stage,
       area: "COMMERCIAL",
@@ -299,5 +328,105 @@ describe("last_movement_at and movement facts", () => {
     const card = await getLead(manager_context, opportunity_id, app);
     expect(listed?.last_movement_at).not.toBeNull();
     expect(card.last_movement_at?.toISOString()).toBe(listed?.last_movement_at?.toISOString());
+  });
+
+  it("backfills last_movement_at to arrived_at for a row that existed before the column", async () => {
+    const arrived_at = new Date("2026-07-01T08:00:00.000Z");
+    const person = await seeder.person.create({
+      data: { workspace_id: workspace, name: "Lead anterior a last_movement_at" }
+    });
+    const opportunity_id = randomUUID();
+    const [addColumn, backfill] = lastMovementBackfillStatements(LAST_MOVEMENT_MIGRATION_SQL);
+    try {
+      await seeder.$transaction(
+        async (transaction) => {
+          await transaction.$executeRawUnsafe(
+            `DROP INDEX IF EXISTS "opportunities_workspace_id_last_movement_at_open_idx"`
+          );
+          await transaction.$executeRawUnsafe(
+            `ALTER TABLE "opportunities" DROP COLUMN "last_movement_at"`
+          );
+          await transaction.$executeRaw(Prisma.sql`
+            INSERT INTO opportunities (
+              id, workspace_id, person_id, pipeline_id, stage_id,
+              area, status, arrived_at, updated_at
+            ) VALUES (
+              ${opportunity_id}::uuid,
+              ${workspace}::uuid,
+              ${person.id}::uuid,
+              ${pipeline}::uuid,
+              ${entry_stage}::uuid,
+              'COMMERCIAL',
+              'OPEN',
+              ${arrived_at}::timestamptz,
+              CURRENT_TIMESTAMP
+            )
+          `);
+          await transaction.$executeRawUnsafe(addColumn);
+          await transaction.$executeRawUnsafe(backfill);
+          const rows = await transaction.$queryRaw<
+            Array<{ last_movement_at: Date; arrived_at: Date }>
+          >(Prisma.sql`
+            SELECT last_movement_at, arrived_at
+            FROM opportunities
+            WHERE id = ${opportunity_id}::uuid
+          `);
+          expect(rows).toHaveLength(1);
+          expect(rows[0]?.last_movement_at.toISOString()).toBe(arrived_at.toISOString());
+          expect(rows[0]?.arrived_at.toISOString()).toBe(arrived_at.toISOString());
+          throw new Error(ROLLBACK_BACKFILL_FIXTURE);
+        },
+        { maxWait: 10_000, timeout: 20_000 }
+      );
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== ROLLBACK_BACKFILL_FIXTURE) {
+        throw error;
+      }
+    }
+  });
+
+  it("transfers movement facts to the canonical card on merge, and active reads ignore the tombstone", async () => {
+    const person = await seeder.person.create({
+      data: { workspace_id: workspace, name: "Pessoa com dois cards" }
+    });
+    const canonical_id = await seedOpportunity({ person_id: person.id });
+    const absorbed_id = await seedOpportunity({ person_id: person.id });
+    await moveLeadStage(
+      attendant_context,
+      { opportunity_id: absorbed_id, current_stage_id: entry_stage, stage_id: contact_stage },
+      app
+    );
+    const review = await seeder.intakeReview.create({
+      data: {
+        workspace_id: workspace,
+        opportunity_id: absorbed_id,
+        type: "POSSIBLE_DUPLICATE",
+        related_opportunity_id: canonical_id
+      }
+    });
+    await resolveIntakeReview(
+      manager_context,
+      {
+        review_id: review.id,
+        resolution: "SAME_FINANCING",
+        reason: "Mesma operacao de credito",
+        resolved_at: new Date("2026-08-18T12:00:00.000Z")
+      },
+      app
+    );
+
+    expect((await movementFacts(canonical_id)).map((fact) => fact.type)).toEqual(["STAGE_CHANGED"]);
+    expect(await movementFacts(absorbed_id)).toEqual([]);
+    const listed_ids = (await listLeads(manager_context, { limit: 200 }, app)).map(
+      (row) => row.opportunity_id
+    );
+    expect(listed_ids).toContain(canonical_id);
+    expect(listed_ids).not.toContain(absorbed_id);
+    await expect(getLead(manager_context, absorbed_id, app)).rejects.toThrow(
+      /Lead not found in this workspace/
+    );
+    await expect(getLead(manager_context, canonical_id, app)).resolves.toMatchObject({
+      opportunity_id: canonical_id
+    });
   });
 });

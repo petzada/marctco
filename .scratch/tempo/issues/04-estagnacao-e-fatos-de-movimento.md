@@ -15,7 +15,9 @@ O lead que nunca teve movimento nenhum ancora na chegada, e é assim que o mais 
 **Antes da migration:** os tipos novos de evento entram no mapeamento do [ADR-0005](../../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md). O [CONTEXT.md](../../../CONTEXT.md) já autoriza a expansão — *"atividade, mensagem e documento entram nas fases que os possuem"* —, e esta é a fase que possui atividade.
 
 - [x] `Opportunity.last_movement_at` existe, anulável, com **backfill** para `arrived_at` na mesma migration — nenhum lead antigo nasce parado desde 1970 nem movido agora
-- [x] `OpportunityTimelineEventType` ganha `STAGE_CHANGED | ASSIGNED | REASSIGNED | RETURNED_TO_QUEUE | ACTIVITY_COMPLETED`
+- [x] `OpportunityTimelineEventType` ganha `STAGE_CHANGED | ASSIGNED | REASSIGNED | RETURNED_TO_QUEUE | ACTIVITY_CREATED | ACTIVITY_COMPLETED`
+
+> **Supersessão.** A lista original deste checkbox omitia `ACTIVITY_CREATED`. Criar atividade é movimento e concluir é outro fato; o mapeamento já aceito em [CONTEXT.md](../../../CONTEXT.md) e [ADR-0005](../../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md) inclui os dois. Esta linha segue esses documentos.
 - [x] `integration_event_id` do evento de linha do tempo passa a ser anulável, e a unicidade `(workspace_id, type, integration_event_id)` vira índice parcial sobre as **duas** variantes de ingestão — que continuam deduplicando exatamente como antes
 - [x] Fato de movimento **não** deduplica: dois movimentos iguais em instantes diferentes são dois fatos
 - [x] Mover etapa, atribuir (1 a 1 e em massa), reatribuir (1 a 1 e em massa), devolver à fila no desatrelamento, criar atividade e concluir atividade carimbam `last_movement_at` e gravam o fato, tudo na transação que a operação já abre
