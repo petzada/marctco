@@ -43,6 +43,8 @@ ScheduledSweepName = PAYLOAD_EXPIRY | OPPORTUNITY_CLOCK
 
 `PAYLOAD_EXPIRY` é a retenção de 90 dias ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)). `OPPORTUNITY_CLOCK` é a varredura dos relógios de SLA e estagnação (Fase 3). A lista de nomes é fechada: passada nova entra aqui antes de nascer no código.
 
+O ticket 09 da Fase 3 materializa o tipo `JobOrigin` e a varredura `OPPORTUNITY_CLOCK` com origem `scheduled_sweep`. A varredura de payload já implementada pode continuar abrindo transação com evento âncora até migrar para `PAYLOAD_EXPIRY` — fora do escopo do ticket 09; os dois mecanismos coexistem enquanto o código da retenção não acompanha o tipo ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)).
+
 A forma original desta tabela carregava `workspace_id` + `integration_event_id` e dizia que o contexto nascia só em `apps/worker`. Isso era verdade para a ingestão e ficou incompleto quando o ticket 15 colocou a varredura de payload no processo web, preenchendo o campo com um evento âncora. A âncora era um contorno para não criar um terceiro tipo de `AccessContext`. **Esse contorno não se estende:** um lead liberado da quarentena, e amanhã um lead criado à mão, não têm evento de integração para apontar. Fabricar um grava no banco uma causalidade que não existe.
 
 O `kind` do `AccessContext` continua sendo `"user" | "job"`. `type` na origem evita colidir com esse discriminante. Não nasce `MaintenanceContext`, `SweepContext` nem `role` opcional no job.

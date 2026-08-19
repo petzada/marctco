@@ -1,6 +1,6 @@
 # Resolução pré-contexto e executor privado sob `FORCE RLS`
 
-Uma sessão de navegador resolve a associação entre o usuário autenticado e o `slug` da URL por `private.resolve_user_workspaces`, a quarta e última função sem `AccessContext`. A função roda como um papel técnico `NOLOGIN`, sem `BYPASSRLS`, que as policies permitem apenas para as tabelas e os comandos indispensáveis às quatro funções privadas. `UserContext` nasce somente do resolvedor nomeado que consome esse resultado; o `SET LOCAL app.workspace_id` acontece só depois da validação.
+Uma sessão de navegador resolve a associação entre o usuário autenticado e o `slug` da URL por `private.resolve_user_workspaces` — a quarta função da lista fechada original, hoje a quarta de seis (ver §1). A função roda como um papel técnico `NOLOGIN`, sem `BYPASSRLS`, que as policies permitem apenas para as tabelas e os comandos indispensáveis às funções privadas enumeradas na lista fechada. `UserContext` nasce somente do resolvedor nomeado que consome esse resultado; o `SET LOCAL app.workspace_id` acontece só depois da validação.
 
 **Status:** accepted · 2026-08-05
 
@@ -48,7 +48,7 @@ O `authenticated_user_id` vem exclusivamente de uma verificação server-side da
 
 ### 2. Executor técnico, não bypass de processo
 
-`resolve_user_workspaces` é de propriedade de `marctco_private_definer`, papel técnico com `NOLOGIN`, `NOSUPERUSER`, `NOBYPASSRLS` e sem associação que `marctco_app` ou `marctco_worker` possam assumir. Ele não é connection string, não executa jobs e não é papel de migrations. Cada uma das outras três funções, quando materializada, precisa de executor técnico com as mesmas propriedades, grants e policies mínimos; pode reutilizar ou não esse papel somente se o Seam 3 provar a mesma contenção. Esta decisão não congela prematuramente o ownership dessas funções ainda inexistentes.
+`resolve_user_workspaces` é de propriedade de `marctco_private_definer`, papel técnico com `NOLOGIN`, `NOSUPERUSER`, `NOBYPASSRLS` e sem associação que `marctco_app` ou `marctco_worker` possam assumir. Ele não é connection string, não executa jobs e não é papel de migrations. Cada uma das demais funções da lista fechada, quando materializada, precisa de executor técnico com as mesmas propriedades, grants e policies mínimos; pode reutilizar ou não esse papel somente se o Seam 3 provar a mesma contenção. Esta decisão não congela prematuramente o ownership dessas funções ainda inexistentes.
 
 Para cada tabela/comando que uma função privada realmente usa, a migration concede ao seu executor técnico apenas o privilégio SQL correspondente e cria policy explícita para esse papel. As policies normais de `marctco_app` e `marctco_worker` continuam usando somente `app.workspace_id`; não nasce `app.user_id`, policy baseada em JWT, nem bypass amplo. O papel técnico não pode fazer login, e o único caminho que o aciona são as funções enumeradas na lista fechada — seis desde a emenda de 2026-08-19.
 
