@@ -89,7 +89,16 @@ export function ClockIcon({ className = "h-4 w-4" }: IconProps) {
   );
 }
 
-export function MarkerIcon({ icon, className = "h-4 w-4" }: IconProps & { readonly icon: "phone-off" | "user-question" | "copy" | "clock" }) {
+export function PauseIcon({ className = "h-4 w-4" }: IconProps) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+      <rect x="7" y="6" width="3" height="12" rx="0.5" />
+      <rect x="14" y="6" width="3" height="12" rx="0.5" />
+    </svg>
+  );
+}
+
+export function MarkerIcon({ icon, className = "h-4 w-4" }: IconProps & { readonly icon: "phone-off" | "user-question" | "copy" | "clock" | "pause" }) {
   switch (icon) {
     case "phone-off":
       return <PhoneOffIcon className={className} />;
@@ -99,6 +108,8 @@ export function MarkerIcon({ icon, className = "h-4 w-4" }: IconProps & { readon
       return <CopyWarningIcon className={className} />;
     case "clock":
       return <ClockIcon className={className} />;
+    case "pause":
+      return <PauseIcon className={className} />;
     default: {
       const unhandled: never = icon;
       throw new Error(`Unhandled marker icon: ${JSON.stringify(unhandled)}`);

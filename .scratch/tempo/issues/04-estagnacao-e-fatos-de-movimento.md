@@ -14,15 +14,15 @@ O lead que nunca teve movimento nenhum ancora na chegada, e é assim que o mais 
 
 **Antes da migration:** os tipos novos de evento entram no mapeamento do [ADR-0005](../../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md). O [CONTEXT.md](../../../CONTEXT.md) já autoriza a expansão — *"atividade, mensagem e documento entram nas fases que os possuem"* —, e esta é a fase que possui atividade.
 
-- [ ] `Opportunity.last_movement_at` existe, anulável, com **backfill** para `arrived_at` na mesma migration — nenhum lead antigo nasce parado desde 1970 nem movido agora
-- [ ] `OpportunityTimelineEventType` ganha `STAGE_CHANGED | ASSIGNED | REASSIGNED | RETURNED_TO_QUEUE | ACTIVITY_COMPLETED`
-- [ ] `integration_event_id` do evento de linha do tempo passa a ser anulável, e a unicidade `(workspace_id, type, integration_event_id)` vira índice parcial sobre as **duas** variantes de ingestão — que continuam deduplicando exatamente como antes
-- [ ] Fato de movimento **não** deduplica: dois movimentos iguais em instantes diferentes são dois fatos
-- [ ] Mover etapa, atribuir (1 a 1 e em massa), reatribuir (1 a 1 e em massa), devolver à fila no desatrelamento, criar atividade e concluir atividade carimbam `last_movement_at` e gravam o fato, tudo na transação que a operação já abre
-- [ ] Editar campo do card e retransmissão inerte **não** carimbam — teste explícito para os dois
-- [ ] O estado de estagnação é **função pura** em `packages/domain`, ancorando em `arrived_at` quando não houve movimento, e chamada tanto pela tela quanto pela varredura do ticket 09
-- [ ] Lead `WON`, `LOST` ou mesclado nunca conta como parado
-- [ ] `markersFor` ganha o marcador de lead parado, ao lado do de SLA que o ticket 03 acrescentou
-- [ ] `previous_assigned_user_id` **permanece**: é a resposta barata numa linha de tabela; a linha do tempo é a resposta cara e completa, e uma não substitui a outra
-- [ ] Índice parcial só na migration: `(workspace_id, last_movement_at) WHERE status = 'OPEN' AND merged_into_opportunity_id IS NULL`
-- [ ] Seam 3 continua verde com o índice de unicidade reformulado, e o drift check passa
+- [x] `Opportunity.last_movement_at` existe, anulável, com **backfill** para `arrived_at` na mesma migration — nenhum lead antigo nasce parado desde 1970 nem movido agora
+- [x] `OpportunityTimelineEventType` ganha `STAGE_CHANGED | ASSIGNED | REASSIGNED | RETURNED_TO_QUEUE | ACTIVITY_COMPLETED`
+- [x] `integration_event_id` do evento de linha do tempo passa a ser anulável, e a unicidade `(workspace_id, type, integration_event_id)` vira índice parcial sobre as **duas** variantes de ingestão — que continuam deduplicando exatamente como antes
+- [x] Fato de movimento **não** deduplica: dois movimentos iguais em instantes diferentes são dois fatos
+- [x] Mover etapa, atribuir (1 a 1 e em massa), reatribuir (1 a 1 e em massa), devolver à fila no desatrelamento, criar atividade e concluir atividade carimbam `last_movement_at` e gravam o fato, tudo na transação que a operação já abre
+- [x] Editar campo do card e retransmissão inerte **não** carimbam — teste explícito para os dois
+- [x] O estado de estagnação é **função pura** em `packages/domain`, ancorando em `arrived_at` quando não houve movimento, e chamada tanto pela tela quanto pela varredura do ticket 09
+- [x] Lead `WON`, `LOST` ou mesclado nunca conta como parado
+- [x] `markersFor` ganha o marcador de lead parado, ao lado do de SLA que o ticket 03 acrescentou
+- [x] `previous_assigned_user_id` **permanece**: é a resposta barata numa linha de tabela; a linha do tempo é a resposta cara e completa, e uma não substitui a outra
+- [x] Índice parcial só na migration: `(workspace_id, last_movement_at) WHERE status = 'OPEN' AND merged_into_opportunity_id IS NULL`
+- [x] Seam 3 continua verde com o índice de unicidade reformulado, e o drift check passa

@@ -2,6 +2,7 @@ import type { FinancingType, LeadListRow, LeadSource } from "@marctco/db";
 import {
   firstContactSla,
   markersFor,
+  stagnation,
   type FirstContactSla,
   type Marker,
   type ResolvedWorkspaceSettings
@@ -55,6 +56,14 @@ export function buildLeadRowViewModel(
     settings: clock.settings,
     now: clock.now
   });
+  const idle = stagnation({
+    arrived_at: row.arrived_at,
+    last_movement_at: row.last_movement_at,
+    status: row.status,
+    merged_into_opportunity_id: null,
+    settings: clock.settings,
+    now: clock.now
+  });
   return {
     opportunity_id: row.opportunity_id,
     name: row.name?.trim() || "Sem nome",
@@ -67,7 +76,7 @@ export function buildLeadRowViewModel(
     arrivedAt: row.arrived_at,
     waitLabel: formatWaitDuration(sla.duration_ms),
     sla,
-    markers: markersFor({ missing_phone: row.missing_phone }, row.reviews, sla)
+    markers: markersFor({ missing_phone: row.missing_phone }, row.reviews, sla, idle)
   };
 }
 

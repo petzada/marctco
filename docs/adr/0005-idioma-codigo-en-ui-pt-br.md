@@ -74,7 +74,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Motivo da resolução | `IntakeReview.resolution_reason` | Texto obrigatório nas três resoluções; nunca substitui a enumeração da decisão |
 | Oportunidade mesclada | `Opportunity.merged_into_opportunity_id` | Resultado de `SAME_FINANCING`; sai das vistas ativas sem exclusão física |
 | Pessoa mesclada | `Person.merged_into_person_id` | Resultado da resolução de `IDENTITY_CONFLICT`; preserva histórico e identificadores |
-| Evento da linha do tempo da Oportunidade | `OpportunityTimelineEvent` | Fato imutável; nesta fatia somente `RETRANSMISSION_RECEIVED \| SUBMISSION_REENTERED` |
+| Evento da linha do tempo da Oportunidade | `OpportunityTimelineEvent` | Fato imutável. Ingestão: `RETRANSMISSION_RECEIVED \| SUBMISSION_REENTERED`. Movimento (Fase 3 ticket 04): `STAGE_CHANGED \| ASSIGNED \| REASSIGNED \| RETURNED_TO_QUEUE \| ACTIVITY_CREATED \| ACTIVITY_COMPLETED`. Fato de movimento não tem evento de integração e não deduplica |
 | Handoff | `Handoff` | — |
 | Score de cabimento | `EligibilityScore` | "Cabimento" = admissibilidade da revisional |
 | Feature flag | `FeatureFlag` / `WorkspaceFlag` | Tabela `workspace_flags` |
@@ -125,6 +125,13 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Estado de SLA de primeiro contato | `FirstContactSlaState: PENDING \| MET \| BREACHED` | Função pura `firstContactSla` em `packages/domain`. Relógio corrido. `WON`/`LOST` sem contato nunca é `MET` |
 | Duração da espera de primeiro contato | `FirstContactSla.duration_ms` | Milissegundos corridos de `arrived_at` até `first_contact_at`, ou até `closed_at` quando `WON`/`LOST` sem contato, ou até `now` enquanto `OPEN` sem contato |
 | Marcador de SLA estourado | `Marker = … \| FIRST_CONTACT_SLA_BREACHED` | `markersFor` passa a receber o estado de SLA e devolve o estourado como mais um marcador. Os contadores do topo da tabela **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
+| Último movimento | `Opportunity.last_movement_at` | Carimbo do último movimento do lead. Anulável; backfill para `arrived_at` na migration, para que lead nunca tocado seja o mais parado e não o menos. Editar campo, ler o lead e retransmissão inerte **não** escrevem |
+| Fato de ingestão na linha do tempo | `OpportunityTimelineEvent.integration_event_id` | Obrigatório só nas duas variantes de ingestão. Anulável a partir do ticket 04: fato de movimento nasce sem evento de integração. A unicidade `(workspace_id, type, integration_event_id)` é índice parcial sobre `RETRANSMISSION_RECEIVED` e `SUBMISSION_REENTERED` |
+| Envio do fato de ingestão | `OpportunityTimelineEvent.lead_submission_id` | Obrigatório só nas duas variantes de ingestão. Anulável no fato de movimento, que não tem EnvioLead |
+| Tipo do fato de movimento | `OpportunityTimelineEventType` | `STAGE_CHANGED` (mover etapa), `ASSIGNED` (atribuir), `REASSIGNED` (reatribuir), `RETURNED_TO_QUEUE` (devolver à fila no desatrelamento), `ACTIVITY_CREATED` (marcar atividade nova — movimento sem ser atendimento), `ACTIVITY_COMPLETED` (concluir atividade) |
+| Estado de estagnação | `StagnationState: MOVING \| STAGNANT` | Função pura `stagnation` em `packages/domain`. Ancora em `arrived_at` quando `last_movement_at` é nulo. `WON`/`LOST`/mesclado nunca é `STAGNANT` |
+| Duração sem movimento | `Stagnation.duration_ms` | Milissegundos corridos do âncora (`last_movement_at` ou `arrived_at`) até `now` |
+| Marcador de lead parado | `Marker = … \| STAGNANT` | `markersFor` recebe o estado de estagnação ao lado do de SLA e devolve o parado como mais um marcador. Os contadores do topo **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
 
 ## Regras
 

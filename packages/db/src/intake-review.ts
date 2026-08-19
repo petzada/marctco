@@ -6,6 +6,7 @@ import {
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { ingestionTimelineConflictTarget } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
 import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
@@ -355,7 +356,7 @@ async function mergeOpportunities(
     FROM lead_submissions AS submission
     WHERE submission.workspace_id = ${workspace_id}::uuid
       AND submission.opportunity_id = ${plan.absorbed_opportunity_id}::uuid
-    ON CONFLICT (workspace_id, type, integration_event_id) DO NOTHING
+    ${ingestionTimelineConflictTarget}
   `;
   await transaction.$executeRaw`
     UPDATE lead_submissions

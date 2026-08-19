@@ -40,6 +40,7 @@ function row(overrides: Partial<LeadListRow> = {}): LeadListRow {
     arrived_at,
     first_contact_at: null,
     closed_at: null,
+    last_movement_at: null,
     status: "OPEN",
     missing_phone: false,
     assigned_user_id: null,
@@ -113,6 +114,15 @@ describe("buildLeadRowViewModel", () => {
       "POSSIBLE_DUPLICATE",
       "FIRST_CONTACT_SLA_BREACHED"
     ]);
+  });
+
+  it("adds the stagnant marker when the lead has been still longer than the limit", () => {
+    const nineDaysAgo = new Date(nowInside.getTime() - 9 * 24 * 60 * 60 * 1000);
+    const model = buildLeadRowViewModel(
+      row({ arrived_at: nineDaysAgo, last_movement_at: null }),
+      clockInside
+    );
+    expect(model.markers).toEqual(["FIRST_CONTACT_SLA_BREACHED", "STAGNANT"]);
   });
 
   it("shows the wait with the same duration the SLA function decided", () => {

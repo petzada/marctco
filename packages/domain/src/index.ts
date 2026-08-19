@@ -92,6 +92,14 @@ export {
   type FirstContactSlaState
 } from "./first-contact-sla.js";
 export {
+  STAGNATION_STATES,
+  stagnation,
+  type Stagnation,
+  type StagnationInput,
+  type StagnationOpportunityStatus,
+  type StagnationState
+} from "./stagnation.js";
+export {
   POSSIBLE_DUPLICATE_RESOLUTIONS,
   planPossibleDuplicateResolution,
   type PlanPossibleDuplicateResolutionInput,

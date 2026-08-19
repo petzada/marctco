@@ -9,6 +9,7 @@ import {
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { stampOpportunityMovement } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
 import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
@@ -306,6 +307,11 @@ export async function createActivity(
     if (!created) {
       throw new ActivityError("OPPORTUNITY_NOT_VISIBLE");
     }
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: [input.opportunity_id],
+      type: "ACTIVITY_CREATED"
+    });
     return asActivity(created);
   });
 }
@@ -400,6 +406,11 @@ export async function completeActivity(
     if (!completed) {
       return refuseFailedTransition(transaction, context, activity_id);
     }
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: [completed.opportunity_id],
+      type: "ACTIVITY_COMPLETED"
+    });
     return asActivity(completed);
   });
 }

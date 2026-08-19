@@ -1,4 +1,5 @@
 import type { FirstContactSla } from "./first-contact-sla.js";
+import type { Stagnation } from "./stagnation.js";
 
 /**
  * The domain warnings that one UI entry point presents for a commercial
@@ -7,12 +8,13 @@ import type { FirstContactSla } from "./first-contact-sla.js";
  * array at the call site, which is how a marker added here and forgotten
  * there stays invisible to every screen but this module.
  *
- * `FIRST_CONTACT_SLA_BREACHED` is a marker for "what this lead has", not a
- * table-top counter: counting SLA is a different question (ADR-0018).
+ * `FIRST_CONTACT_SLA_BREACHED` and `STAGNANT` are markers for "what this
+ * lead has", not table-top counters: counting SLA or stagnation is a
+ * different question (ADR-0018).
  */
 export const MARKERS = ["MISSING_PHONE", "IDENTITY_CONFLICT", "POSSIBLE_DUPLICATE"] as const;
 export type TableMarker = (typeof MARKERS)[number];
-export type Marker = TableMarker | "FIRST_CONTACT_SLA_BREACHED";
+export type Marker = TableMarker | "FIRST_CONTACT_SLA_BREACHED" | "STAGNANT";
 
 export interface MarkerOpportunity {
   /** Means one thing only: there is no phone call or WhatsApp path. */
@@ -28,13 +30,15 @@ export interface MarkerReview {
  * loaded. Criteria and order belong to the domain; labels and icons belong to
  * the UI. Multiple reviews of one type still produce one marker entry.
  *
- * The SLA state comes from `firstContactSla` — the same function the listing
- * and the later sweep call — so the icon and the alert cannot disagree.
+ * The SLA and stagnation states come from `firstContactSla` and
+ * `stagnation` — the same functions the listing and the later sweep call —
+ * so the icon and the alert cannot disagree.
  */
 export function markersFor(
   opportunity: MarkerOpportunity,
   reviews: readonly MarkerReview[],
-  sla?: FirstContactSla
+  sla?: FirstContactSla,
+  stagnationState?: Stagnation
 ): readonly Marker[] {
   const review_types = new Set(reviews.map((review) => review.type));
   const markers: Marker[] = [];
@@ -50,6 +54,9 @@ export function markersFor(
   }
   if (sla?.state === "BREACHED") {
     markers.push("FIRST_CONTACT_SLA_BREACHED");
+  }
+  if (stagnationState?.state === "STAGNANT") {
+    markers.push("STAGNANT");
   }
 
   return markers;

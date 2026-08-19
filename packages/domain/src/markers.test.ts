@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { FirstContactSla } from "./first-contact-sla.js";
 import { markersFor } from "./markers.js";
+import type { Stagnation } from "./stagnation.js";
 
 const pending: FirstContactSla = { state: "PENDING", duration_ms: 1_000 };
 const met: FirstContactSla = { state: "MET", duration_ms: 1_000 };
 const breached: FirstContactSla = { state: "BREACHED", duration_ms: 1_000 };
+const moving: Stagnation = { state: "MOVING", duration_ms: 1_000 };
+const stagnant: Stagnation = { state: "STAGNANT", duration_ms: 1_000 };
 
 describe("markersFor", () => {
   it("returns the missing-phone marker for a lead that cannot receive calls or WhatsApp", () => {
@@ -57,5 +60,31 @@ describe("markersFor", () => {
       "MISSING_PHONE",
       "IDENTITY_CONFLICT"
     ]);
+  });
+
+  it("adds the stagnant marker after the SLA warning, without dropping the intake ones", () => {
+    expect(
+      markersFor(
+        { missing_phone: true },
+        [{ type: "IDENTITY_CONFLICT" }, { type: "POSSIBLE_DUPLICATE" }],
+        breached,
+        stagnant
+      )
+    ).toEqual([
+      "MISSING_PHONE",
+      "IDENTITY_CONFLICT",
+      "POSSIBLE_DUPLICATE",
+      "FIRST_CONTACT_SLA_BREACHED",
+      "STAGNANT"
+    ]);
+  });
+
+  it("does not mark a MOVING lead as stagnant", () => {
+    expect(markersFor({ missing_phone: false }, [], pending, moving)).toEqual([]);
+  });
+
+  it("omits the stagnant marker when stagnation is omitted, so callers from before ticket 04 stay safe", () => {
+    expect(markersFor({ missing_phone: false }, [], pending)).toEqual([]);
+    expect(markersFor({ missing_phone: false }, [], pending, stagnant)).toEqual(["STAGNANT"]);
   });
 });

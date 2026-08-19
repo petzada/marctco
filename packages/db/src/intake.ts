@@ -17,6 +17,7 @@ import {
 } from "@marctco/domain";
 import type { AccessContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { ingestionTimelineConflictTarget } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
 import { findPersonCandidatesInTransaction } from "./person.js";
@@ -438,7 +439,7 @@ async function applyIntakePlanInTransaction(
           FROM integration_events AS event
           WHERE event.id = ${plan.integration_event_id}::uuid
             AND event.workspace_id = ${context.workspace_id}::uuid
-          ON CONFLICT (workspace_id, type, integration_event_id) DO NOTHING
+          ${ingestionTimelineConflictTarget}
         `;
         await settleEvent(
           transaction,
@@ -594,7 +595,7 @@ async function writeOpportunity(
   const created = await transaction.$queryRaw<IdRow[]>`
     INSERT INTO opportunities (
       workspace_id, person_id, pipeline_id, stage_id, area, status,
-      arrived_at, missing_phone, financing_type, financial_institution,
+      arrived_at, last_movement_at, missing_phone, financing_type, financial_institution,
       installment_amount, campaign_id, campaign_name, form_id, form_name, updated_at
     )
     VALUES (
@@ -604,6 +605,7 @@ async function writeOpportunity(
       ${plan.stage_id}::uuid,
       'COMMERCIAL',
       'OPEN',
+      ${plan.arrived_at}::timestamptz,
       ${plan.arrived_at}::timestamptz,
       ${plan.missing_phone},
       ${plan.financing_type}::financing_type,

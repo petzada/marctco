@@ -979,6 +979,7 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
     expect(after.status).toBe("LOST");
     expect(after.assigned_user_id).toBe(before.assigned_user_id);
     expect(after.arrived_at).toEqual(before.arrived_at);
+    expect(after.last_movement_at).toEqual(before.last_movement_at);
 
     await expect(
       seeder.leadSubmission.findUniqueOrThrow({ where: { id: first.lead_submission_id } })

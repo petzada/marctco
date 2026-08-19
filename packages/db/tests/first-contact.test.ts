@@ -296,6 +296,8 @@ describe("first_contact_at", () => {
     expect(card.first_contact_at?.toISOString()).toBe(listed?.first_contact_at?.toISOString());
     expect(card.status).toBe("OPEN");
     expect(card.closed_at).toBeNull();
+    expect(listed?.last_movement_at).not.toBeNull();
+    expect(card.last_movement_at?.toISOString()).toBe(listed?.last_movement_at?.toISOString());
   });
 
   it("exposes closed_at on the list and the card for a lead closed without contact", async () => {
