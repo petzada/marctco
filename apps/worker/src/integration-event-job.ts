@@ -1,6 +1,7 @@
 import {
   createJobContext,
   decideAndApplyIntake,
+  getWorkspaceSettings,
   readWorkspaceFeatureFlags,
   readIntegrationEventForProcessing,
   recordLeadSubmission,
@@ -107,7 +108,8 @@ export async function processIntegrationEventJob(
   const submission = await recordLeadSubmission(context, {
     key: planSubmission(inbound),
     integration_event_id: event.id,
-    received_at: event.received_at
+    received_at: event.received_at,
+    whatsapp_opt_in: inbound.whatsapp_opt_in
   });
 
   const destination = await resolveIntakeDestination(context, event.target_pipeline_id);
@@ -121,8 +123,8 @@ export async function processIntegrationEventJob(
   const { applied } = decided_and_applied;
   const post_creation_effects =
     applied.kind === "NEW_OPPORTUNITY"
-      ? planOpportunityPostCreationEffects({
-          feature_flags: await readWorkspaceFeatureFlags(context),
+      ? await planArrivalFirstContact({
+          context,
           created_opportunity_id: applied.opportunity_id
         })
       : [];
@@ -133,4 +135,25 @@ export async function processIntegrationEventJob(
     intake_plan_kind: decided_and_applied.intake_plan_kind,
     post_creation_effects
   };
+}
+
+/**
+ * Arrival hook only. Reads the flag first so a workspace that never paid for
+ * the capability does not pay for a settings round-trip. The default trigger
+ * is ON_ASSIGNMENT, so this emits nothing until the workspace chose ON_ARRIVAL.
+ */
+async function planArrivalFirstContact(input: {
+  readonly context: Parameters<typeof readWorkspaceFeatureFlags>[0];
+  readonly created_opportunity_id: string;
+}): Promise<readonly OpportunityPostCreationEffect[]> {
+  const feature_flags = await readWorkspaceFeatureFlags(input.context);
+  if (!feature_flags.auto_primeiro_contato) {
+    return [];
+  }
+  const settings = await getWorkspaceSettings(input.context);
+  return planOpportunityPostCreationEffects({
+    feature_flags,
+    first_contact_trigger: settings.first_contact_trigger,
+    created_opportunity_id: input.created_opportunity_id
+  });
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   DEFAULT_FIRST_CONTACT_SLA_MINUTES,
+  DEFAULT_FIRST_CONTACT_TEMPLATE_BODY,
   DEFAULT_STAGNATION_DAYS,
   MAX_FIRST_CONTACT_SLA_MINUTES,
   MAX_STAGNATION_DAYS
@@ -125,11 +126,17 @@ afterAll(async () => {
   await Promise.all([seeder.$disconnect(), app.$disconnect()]);
 });
 
+const firstContactDefaults = {
+  first_contact_trigger: "ON_ASSIGNMENT",
+  first_contact_template_body: DEFAULT_FIRST_CONTACT_TEMPLATE_BODY
+} as const;
+
 describe("getWorkspaceSettings", () => {
   it("returns the domain defaults when the workspace has no row", async () => {
     await expect(getWorkspaceSettings(owner_context, app)).resolves.toEqual({
       first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-      stagnation_days: DEFAULT_STAGNATION_DAYS
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      ...firstContactDefaults
     });
   });
 
@@ -137,7 +144,8 @@ describe("getWorkspaceSettings", () => {
     for (const context of [attendant_context, supervisor_context, manager_context, owner_context]) {
       await expect(getWorkspaceSettings(context, app)).resolves.toEqual({
         first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-        stagnation_days: DEFAULT_STAGNATION_DAYS
+        stagnation_days: DEFAULT_STAGNATION_DAYS,
+        ...firstContactDefaults
       });
     }
   });
@@ -149,14 +157,16 @@ describe("updateWorkspaceSettings", () => {
       updateWorkspaceSettings(manager_context, { first_contact_sla_minutes: 20 }, app)
     ).resolves.toEqual({
       first_contact_sla_minutes: 20,
-      stagnation_days: DEFAULT_STAGNATION_DAYS
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      ...firstContactDefaults
     });
 
     await expect(
       updateWorkspaceSettings(owner_context, { stagnation_days: 11 }, app)
     ).resolves.toEqual({
       first_contact_sla_minutes: 20,
-      stagnation_days: 11
+      stagnation_days: 11,
+      ...firstContactDefaults
     });
 
     await expect(
@@ -172,7 +182,8 @@ describe("updateWorkspaceSettings", () => {
 
     await expect(getWorkspaceSettings(attendant_context, app)).resolves.toEqual({
       first_contact_sla_minutes: 20,
-      stagnation_days: 11
+      stagnation_days: 11,
+      ...firstContactDefaults
     });
   });
 
@@ -186,7 +197,8 @@ describe("updateWorkspaceSettings", () => {
       updateWorkspaceSettings(manager_context, { first_contact_sla_minutes: 25 }, app)
     ).resolves.toEqual({
       first_contact_sla_minutes: 25,
-      stagnation_days: 8
+      stagnation_days: 8,
+      ...firstContactDefaults
     });
   });
 
@@ -205,7 +217,8 @@ describe("updateWorkspaceSettings", () => {
     }
     await expect(getWorkspaceSettings(manager_context, app)).resolves.toEqual({
       first_contact_sla_minutes: 25,
-      stagnation_days: 8
+      stagnation_days: 8,
+      ...firstContactDefaults
     });
   });
 
@@ -213,11 +226,13 @@ describe("updateWorkspaceSettings", () => {
     await updateWorkspaceSettings(neighbour_context, { first_contact_sla_minutes: 90 }, app);
     await expect(getWorkspaceSettings(owner_context, app)).resolves.toEqual({
       first_contact_sla_minutes: 25,
-      stagnation_days: 8
+      stagnation_days: 8,
+      ...firstContactDefaults
     });
     await expect(getWorkspaceSettings(neighbour_context, app)).resolves.toEqual({
       first_contact_sla_minutes: 90,
-      stagnation_days: DEFAULT_STAGNATION_DAYS
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      ...firstContactDefaults
     });
   });
 
@@ -228,6 +243,76 @@ describe("updateWorkspaceSettings", () => {
     const count = await seeder.workspaceSettings.count({ where: { workspace_id: fresh } });
     expect(count).toBe(0);
     await seeder.workspace.delete({ where: { id: fresh } });
+  });
+
+  it("lets Gestão write the first-contact trigger and template, and refuses a neighbour's write", async () => {
+    const arrival_body = "Olá {{lead_name}}, aqui é a {{workspace_name}}.";
+    await expect(
+      updateWorkspaceSettings(
+        manager_context,
+        {
+          first_contact_trigger: "ON_ARRIVAL",
+          first_contact_template_body: arrival_body
+        },
+        app
+      )
+    ).resolves.toEqual({
+      first_contact_sla_minutes: 25,
+      stagnation_days: 8,
+      first_contact_trigger: "ON_ARRIVAL",
+      first_contact_template_body: arrival_body
+    });
+
+    await expect(
+      updateWorkspaceSettings(
+        attendant_context,
+        {
+          first_contact_trigger: "DISABLED",
+          first_contact_template_body: ""
+        },
+        app
+      )
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(
+      updateWorkspaceSettings(
+        manager_context,
+        {
+          first_contact_trigger: "ON_ARRIVAL",
+          first_contact_template_body: "Olá {{attendant_name}}"
+        },
+        app
+      )
+    ).rejects.toMatchObject({ code: "INVALID" });
+
+    await expect(
+      updateWorkspaceSettings(
+        manager_context,
+        { first_contact_trigger: "ON_ASSIGNMENT", first_contact_template_body: "" },
+        app
+      )
+    ).rejects.toMatchObject({ code: "INVALID" });
+
+    await updateWorkspaceSettings(
+      neighbour_context,
+      {
+        first_contact_trigger: "DISABLED",
+        first_contact_template_body: ""
+      },
+      app
+    );
+    await expect(getWorkspaceSettings(owner_context, app)).resolves.toEqual({
+      first_contact_sla_minutes: 25,
+      stagnation_days: 8,
+      first_contact_trigger: "ON_ARRIVAL",
+      first_contact_template_body: arrival_body
+    });
+    await expect(getWorkspaceSettings(neighbour_context, app)).resolves.toEqual({
+      first_contact_sla_minutes: 90,
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      first_contact_trigger: "DISABLED",
+      first_contact_template_body: ""
+    });
   });
 });
 

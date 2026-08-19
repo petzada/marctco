@@ -4,11 +4,14 @@ import {
   DEFAULT_STAGNATION_DAYS,
   type ResolvedWorkspaceSettings
 } from "./workspace-settings.js";
+import { DEFAULT_FIRST_CONTACT_TEMPLATE_BODY } from "./first-contact.js";
 import { FirstContactSlaError, firstContactSla } from "./first-contact-sla.js";
 
 const settings: ResolvedWorkspaceSettings = {
   first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-  stagnation_days: DEFAULT_STAGNATION_DAYS
+  stagnation_days: DEFAULT_STAGNATION_DAYS,
+  first_contact_trigger: "ON_ASSIGNMENT",
+  first_contact_template_body: DEFAULT_FIRST_CONTACT_TEMPLATE_BODY
 };
 
 const arrived_at = new Date("2026-08-17T12:00:00.000Z");
@@ -73,7 +76,9 @@ describe("firstContactSla", () => {
   it("uses the workspace's resolved limit, not the domain default, when they differ", () => {
     const tight: ResolvedWorkspaceSettings = {
       first_contact_sla_minutes: 30,
-      stagnation_days: DEFAULT_STAGNATION_DAYS
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body: DEFAULT_FIRST_CONTACT_TEMPLATE_BODY
     };
     expect(
       firstContactSla({

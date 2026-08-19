@@ -43,7 +43,10 @@ describe("Leads table route", () => {
     listLeadAssignmentDestinations.mockReset().mockResolvedValue([]);
     getWorkspaceSettings.mockReset().mockResolvedValue({
       first_contact_sla_minutes: 120,
-      stagnation_days: 7
+      stagnation_days: 7,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
     redirect.mockClear();
     resolveWorkspaceAccess.mockReset();

@@ -1,4 +1,10 @@
-import type { InputHTMLAttributes, LabelHTMLAttributes, ReactNode } from "react";
+import type {
+  InputHTMLAttributes,
+  LabelHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes
+} from "react";
 
 /**
  * DESIGN.md "Components > Inputs & Forms". `text-input`: `{colors.canvas}`
@@ -17,6 +23,38 @@ export function TextInput({ invalid = false, className = "", ...rest }: TextInpu
     <input
       aria-invalid={invalid || undefined}
       className={`min-h-10 w-full rounded-md border bg-canvas px-sm py-xs text-body text-ink placeholder:text-ink-muted transition-colors duration-150 ease-out hover:border-hairline-strong focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus disabled:bg-surface-inset disabled:text-ink-disabled pointer-coarse:min-h-11 ${
+        invalid ? "border-danger" : "border-hairline"
+      } ${className}`.trim()}
+      {...rest}
+    />
+  );
+}
+
+export interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  readonly invalid?: boolean;
+}
+
+export function TextArea({ invalid = false, className = "", ...rest }: TextAreaProps) {
+  return (
+    <textarea
+      aria-invalid={invalid || undefined}
+      className={`min-h-24 w-full rounded-md border bg-canvas px-sm py-xs text-body text-ink placeholder:text-ink-muted transition-colors duration-150 ease-out hover:border-hairline-strong focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus disabled:bg-surface-inset disabled:text-ink-disabled ${
+        invalid ? "border-danger" : "border-hairline"
+      } ${className}`.trim()}
+      {...rest}
+    />
+  );
+}
+
+export interface NativeSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  readonly invalid?: boolean;
+}
+
+export function NativeSelect({ invalid = false, className = "", ...rest }: NativeSelectProps) {
+  return (
+    <select
+      aria-invalid={invalid || undefined}
+      className={`min-h-10 w-full rounded-md border bg-canvas px-sm py-xs text-body text-ink transition-colors duration-150 ease-out hover:border-hairline-strong focus-visible:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-focus disabled:bg-surface-inset disabled:text-ink-disabled pointer-coarse:min-h-11 ${
         invalid ? "border-danger" : "border-hairline"
       } ${className}`.trim()}
       {...rest}

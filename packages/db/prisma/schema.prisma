@@ -451,6 +451,9 @@ model LeadSubmission {
   /// Null while the submission produced no card — quarantine, or a plan that
   /// has not been applied yet.
   opportunity_id            String?                    @db.Uuid
+  /// Evidence from the `v1` contract. The connector translates; it never
+  /// infers consent from a phone, campaign or provider (ADR-0008).
+  whatsapp_opt_in           Boolean?
   created_at                DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at                DateTime                   @updatedAt @db.Timestamptz(6)
   workspace                 Workspace                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
@@ -488,6 +491,9 @@ model Opportunity {
   /// Means one thing only: no WhatsApp and no phone call. Not a generic
   /// "something is missing" label (ADR-0007 §Quarentena).
   missing_phone              Boolean                    @default(false)
+  /// Snapshot of the submission that created or released this card.
+  /// Automatic WhatsApp dispatch requires true; absent or false fails closed.
+  whatsapp_opt_in            Boolean?
   /// Classification of the credit contract that motivated the contact. Never
   /// selects a pipeline, never identifies a Pessoa.
   financing_type             FinancingType?
@@ -687,16 +693,28 @@ model Activity {
   @@map("activities")
 }
 
+/// When the automatic first WhatsApp fires. Absence of a stored value is
+/// ON_ASSIGNMENT, never DISABLED (ADR-0003, ADR-0004).
+enum FirstContactTrigger {
+  ON_ASSIGNMENT
+  ON_ARRIVAL
+  DISABLED
+
+  @@map("first_contact_trigger")
+}
+
 /// Optional operational clocks for one workspace. No row means the domain
 /// defaults, never "SLA off". The row is born on the first write from
 /// Configurações — provision_workspace does not create it.
 model WorkspaceSettings {
-  workspace_id                String    @id @db.Uuid
-  first_contact_sla_minutes   Int?
-  stagnation_days             Int?
-  created_at                  DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at                  DateTime  @updatedAt @db.Timestamptz(6)
-  workspace                   Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  workspace_id                  String               @id @db.Uuid
+  first_contact_sla_minutes     Int?
+  stagnation_days               Int?
+  first_contact_trigger         FirstContactTrigger?
+  first_contact_template_body   String?              @db.Text
+  created_at                    DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime             @updatedAt @db.Timestamptz(6)
+  workspace                     Workspace            @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
   @@map("workspace_settings")
 }

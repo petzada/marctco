@@ -146,6 +146,11 @@ export type IntakePlan =
       readonly campaign_name: string | null;
       readonly form_id: string | null;
       readonly form_name: string | null;
+      /**
+       * Snapshot of the submission that created or released this card.
+       * Automatic dispatch requires `true`; anything else fails closed.
+       */
+      readonly whatsapp_opt_in: boolean | null;
       readonly reviews: readonly IntakeReviewPlan[];
     };
 
@@ -200,6 +205,7 @@ export function decideIntake(input: DecideIntakeInput): IntakePlan {
     campaign_name: normalized.attribution.campaign_name,
     form_id: normalized.attribution.form_id,
     form_name: normalized.attribution.form_name,
+    whatsapp_opt_in: normalized.whatsapp_opt_in,
     reviews: planReviews(person, input.open_opportunity_ids)
   };
 }

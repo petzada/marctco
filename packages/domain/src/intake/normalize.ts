@@ -86,6 +86,8 @@ export interface NormalizedLead {
 
   readonly attribution: InboundLead["attribution"];
   readonly answers: InboundLead["answers"];
+  /** Copied from the `v1` contract. Not inferred during normalization. */
+  readonly whatsapp_opt_in: boolean | null;
 
   readonly diagnostics: readonly NormalizationDiagnostic[];
 }
@@ -144,6 +146,7 @@ export function normalize(inbound: InboundLead): NormalizedLead {
     installment_amount_raw: inbound.installment_amount,
     attribution: inbound.attribution,
     answers: inbound.answers,
+    whatsapp_opt_in: inbound.whatsapp_opt_in,
     diagnostics
   };
 }

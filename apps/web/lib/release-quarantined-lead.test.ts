@@ -93,7 +93,8 @@ describe("releaseQuarantinedLead", () => {
     expect(mocks.recordLeadSubmission).toHaveBeenCalledWith(context, {
       key: { source: "META_LEAD_ADS", external_lead_id: "lead-1" },
       integration_event_id: "event-1",
-      received_at: RECEIVED_AT
+      received_at: RECEIVED_AT,
+      whatsapp_opt_in: null
     });
   });
 

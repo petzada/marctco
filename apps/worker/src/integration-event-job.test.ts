@@ -6,6 +6,7 @@ const resolveIntakeDestination = vi.fn();
 const recordLeadSubmission = vi.fn();
 const decideAndApplyIntake = vi.fn();
 const readWorkspaceFeatureFlags = vi.fn();
+const getWorkspaceSettings = vi.fn();
 const createJobContext = vi.fn((input: unknown) => input);
 
 vi.mock("@marctco/db", () => ({
@@ -14,6 +15,7 @@ vi.mock("@marctco/db", () => ({
   recordLeadSubmission,
   decideAndApplyIntake,
   readWorkspaceFeatureFlags,
+  getWorkspaceSettings,
   createJobContext
 }));
 
@@ -60,6 +62,13 @@ describe("processIntegrationEventJob", () => {
       auto_primeiro_contato: false,
       score_cabimento_llm: false,
       resumo_handoff_llm: false
+    });
+    getWorkspaceSettings.mockReset().mockResolvedValue({
+      first_contact_sla_minutes: 120,
+      stagnation_days: 7,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
     createJobContext.mockClear();
   });
@@ -117,7 +126,11 @@ describe("processIntegrationEventJob", () => {
 
     const [, input] = recordLeadSubmission.mock.calls[0] as [
       unknown,
-      { key: { source: string; external_lead_id: string }; received_at: Date }
+      {
+        key: { source: string; external_lead_id: string };
+        received_at: Date;
+        whatsapp_opt_in: boolean | null;
+      }
     ];
     // Pluga carries no id of its own in this slice, so the connector uses the
     // event id: identical on every reprocessing, which is what stops a
@@ -127,6 +140,7 @@ describe("processIntegrationEventJob", () => {
       external_lead_id: integration_event_id
     });
     expect(input.received_at).toEqual(RECEIVED_AT);
+    expect(input.whatsapp_opt_in).toBeNull();
   });
 
   it("coordinates the decision in the ENTRY stage, with now equal to the received instant", async () => {
@@ -146,14 +160,36 @@ describe("processIntegrationEventJob", () => {
     expect(readWorkspaceFeatureFlags).toHaveBeenCalledWith(
       expect.objectContaining({ workspace_id })
     );
+    expect(getWorkspaceSettings).not.toHaveBeenCalled();
     expect(processed.post_creation_effects).toEqual([]);
   });
 
-  it("emits one server-side effect only after a new Opportunity was actually created", async () => {
+  it("emits no arrival effect under the default ON_ASSIGNMENT trigger", async () => {
     readWorkspaceFeatureFlags.mockResolvedValue({
       auto_primeiro_contato: true,
       score_cabimento_llm: false,
       resumo_handoff_llm: false
+    });
+
+    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
+
+    expect(getWorkspaceSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ workspace_id })
+    );
+    expect(processed.post_creation_effects).toEqual([]);
+  });
+
+  it("emits AUTO_FIRST_CONTACT on arrival only when the workspace chose ON_ARRIVAL", async () => {
+    readWorkspaceFeatureFlags.mockResolvedValue({
+      auto_primeiro_contato: true,
+      score_cabimento_llm: false,
+      resumo_handoff_llm: false
+    });
+    getWorkspaceSettings.mockResolvedValue({
+      first_contact_sla_minutes: 120,
+      stagnation_days: 7,
+      first_contact_trigger: "ON_ARRIVAL",
+      first_contact_template_body: "Olá {{lead_name}}, aqui é a {{workspace_name}}."
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });

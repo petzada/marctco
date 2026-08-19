@@ -187,7 +187,7 @@ describe("getLastSuccessfulSyncAt and requeueIntegrationEventForReprocessing", (
     const job = createJobContext({ workspace_id: workspace, integration_event_id: event_id });
     const submission = await recordLeadSubmission(
       job,
-      { key: { source: "META_LEAD_ADS", external_lead_id }, integration_event_id: event_id, received_at },
+      { key: { source: "META_LEAD_ADS", external_lead_id }, integration_event_id: event_id, received_at, whatsapp_opt_in: null },
       app
     );
     await applyIntakePlan(
@@ -209,6 +209,7 @@ describe("getLastSuccessfulSyncAt and requeueIntegrationEventForReprocessing", (
         campaign_name: null,
         form_id: null,
         form_name: null,
+        whatsapp_opt_in: null,
         reviews: []
       },
       app

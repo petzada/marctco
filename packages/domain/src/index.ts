@@ -187,6 +187,21 @@ export {
   type WorkspaceSettingsWriteParse
 } from "./workspace-settings.js";
 export {
+  DEFAULT_FIRST_CONTACT_TEMPLATE_BODY,
+  DEFAULT_FIRST_CONTACT_TRIGGER,
+  FIRST_CONTACT_TRIGGERS,
+  isFirstContactTrigger,
+  parseFirstContactTemplate,
+  planFirstContactDispatch,
+  renderFirstContactTemplate,
+  templateVariablesFor,
+  type FirstContactDispatchPlan,
+  type FirstContactDispatchRefusal,
+  type FirstContactRender,
+  type FirstContactTemplateParse,
+  type FirstContactTrigger
+} from "./first-contact.js";
+export {
   CATEGORICAL_CHART_COLOR_COUNT,
   OPERATIONAL_DASHBOARD_RECENT_DAYS,
   OPERATIONAL_DASHBOARD_TILE_IDS,

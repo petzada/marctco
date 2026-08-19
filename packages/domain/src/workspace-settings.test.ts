@@ -13,7 +13,10 @@ describe("resolveWorkspaceSettings", () => {
   it("uses the domain defaults when the workspace has no row", () => {
     expect(resolveWorkspaceSettings(null)).toEqual({
       first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-      stagnation_days: DEFAULT_STAGNATION_DAYS
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
   });
 
@@ -25,7 +28,10 @@ describe("resolveWorkspaceSettings", () => {
       })
     ).toEqual({
       first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-      stagnation_days: DEFAULT_STAGNATION_DAYS
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
   });
 
@@ -37,7 +43,10 @@ describe("resolveWorkspaceSettings", () => {
       })
     ).toEqual({
       first_contact_sla_minutes: 30,
-      stagnation_days: DEFAULT_STAGNATION_DAYS
+      stagnation_days: DEFAULT_STAGNATION_DAYS,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
 
     expect(
@@ -47,7 +56,10 @@ describe("resolveWorkspaceSettings", () => {
       })
     ).toEqual({
       first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-      stagnation_days: 3
+      stagnation_days: 3,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
   });
 
@@ -59,7 +71,10 @@ describe("resolveWorkspaceSettings", () => {
       })
     ).toEqual({
       first_contact_sla_minutes: 45,
-      stagnation_days: 14
+      stagnation_days: 14,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
   });
 });
@@ -108,6 +123,36 @@ describe("parseWorkspaceSettingsWrite", () => {
 
   it("refuses an empty write", () => {
     expect(parseWorkspaceSettingsWrite({})).toEqual({ ok: false, code: "INVALID" });
+  });
+
+  it("accepts a first-contact write with a template valid for the trigger", () => {
+    expect(
+      parseWorkspaceSettingsWrite({
+        first_contact_trigger: "ON_ARRIVAL",
+        first_contact_template_body: "Olá {{lead_name}}, aqui é a {{workspace_name}}."
+      })
+    ).toEqual({
+      ok: true,
+      value: {
+        first_contact_trigger: "ON_ARRIVAL",
+        first_contact_template_body: "Olá {{lead_name}}, aqui é a {{workspace_name}}."
+      }
+    });
+  });
+
+  it("refuses an empty template when the trigger is active and attendant variables on arrival", () => {
+    expect(
+      parseWorkspaceSettingsWrite({
+        first_contact_trigger: "ON_ASSIGNMENT",
+        first_contact_template_body: ""
+      })
+    ).toEqual({ ok: false, code: "INVALID" });
+    expect(
+      parseWorkspaceSettingsWrite({
+        first_contact_trigger: "ON_ARRIVAL",
+        first_contact_template_body: "Olá {{attendant_name}}"
+      })
+    ).toEqual({ ok: false, code: "INVALID" });
   });
 });
 

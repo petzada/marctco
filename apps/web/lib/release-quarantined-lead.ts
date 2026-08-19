@@ -48,7 +48,8 @@ export async function releaseQuarantinedLead(
   const submission = await recordLeadSubmission(context, {
     key: planSubmission(inbound),
     integration_event_id: quarantined.integration_event_id,
-    received_at: quarantined.received_at
+    received_at: quarantined.received_at,
+    whatsapp_opt_in: inbound.whatsapp_opt_in
   });
 
   const destination = await resolveIntakeDestination(context, quarantined.target_pipeline_id);

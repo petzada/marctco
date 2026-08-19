@@ -483,7 +483,8 @@ describe("resolveIntakeReview", () => {
           external_lead_id: absorbed_submission.external_lead_id
         },
         integration_event_id: resend_event_id,
-        received_at: new Date("2026-08-11T10:00:00.000Z")
+        received_at: new Date("2026-08-11T10:00:00.000Z"),
+        whatsapp_opt_in: null
       },
       app
     );

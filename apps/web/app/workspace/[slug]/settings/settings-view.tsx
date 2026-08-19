@@ -5,6 +5,7 @@ import {
 } from "@marctco/domain";
 import { Button } from "../../../../components/ui/button";
 import { FieldError, FieldLabel, TextInput } from "../../../../components/ui/field";
+import { FirstContactSettingsForm } from "./first-contact-settings-form";
 
 interface SettingsViewProps {
   readonly result?: string | undefined;
@@ -14,13 +15,21 @@ interface SettingsViewProps {
 
 function ResultMessage({ result }: Readonly<{ result?: string | undefined }>) {
   if (!result) return null;
-  const failed = result === "invalid" || result === "failed";
+  const failed =
+    result === "invalid" ||
+    result === "failed" ||
+    result === "first-contact-invalid" ||
+    result === "first-contact-failed";
   const message =
     result === "saved"
       ? "Ritmo da operação atualizado."
-      : result === "invalid"
-        ? "Informe um número inteiro positivo dentro do intervalo."
-        : "Não foi possível salvar. Tente novamente.";
+      : result === "first-contact"
+        ? "Primeiro contato automático atualizado."
+        : result === "invalid"
+          ? "Informe um número inteiro positivo dentro do intervalo."
+          : result === "first-contact-invalid"
+            ? "Revise o gatilho e o texto. Variável inválida ou template vazio com o disparo ligado."
+            : "Não foi possível salvar. Tente novamente.";
   return (
     <p
       className={`rounded-md border px-md py-sm text-body-sm ${
@@ -111,6 +120,19 @@ export function SettingsView({ result, settings, slug }: SettingsViewProps) {
             </Button>
           </div>
         </form>
+      </section>
+
+      <section className="rounded-lg border border-hairline bg-canvas p-lg">
+        <h2 className="text-title text-ink">Primeiro contato automático</h2>
+        <p className="mt-xxs max-w-prose text-body-sm text-ink-muted">
+          Define quando o WhatsApp de abertura sai e com qual texto. Sem
+          consentimento explícito o disparo não acontece.
+        </p>
+        <FirstContactSettingsForm
+          invalid={result === "first-contact-invalid"}
+          settings={settings}
+          slug={slug}
+        />
       </section>
     </main>
   );

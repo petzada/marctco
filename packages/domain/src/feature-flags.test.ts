@@ -29,13 +29,22 @@ describe("feature flag catalog", () => {
     expect(
       planOpportunityPostCreationEffects({
         feature_flags,
+        first_contact_trigger: "ON_ARRIVAL",
         created_opportunity_id: "opportunity-1"
       })
     ).toEqual([{ kind: "AUTO_FIRST_CONTACT", opportunity_id: "opportunity-1" }]);
     expect(
       planOpportunityPostCreationEffects({
         feature_flags,
+        first_contact_trigger: "ON_ARRIVAL",
         created_opportunity_id: null
+      })
+    ).toEqual([]);
+    expect(
+      planOpportunityPostCreationEffects({
+        feature_flags,
+        first_contact_trigger: "ON_ASSIGNMENT",
+        created_opportunity_id: "opportunity-1"
       })
     ).toEqual([]);
   });

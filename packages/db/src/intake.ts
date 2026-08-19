@@ -85,6 +85,11 @@ export interface RecordLeadSubmissionInput {
   readonly integration_event_id: string;
   /** Truth about the origin. Not the Opportunity's `arrived_at`. */
   readonly received_at: Date;
+  /**
+   * Evidence from the `v1` contract. Written on INSERT and never overwritten
+   * on a duplicate transmission (ADR-0007, ADR-0008).
+   */
+  readonly whatsapp_opt_in: boolean | null;
 }
 
 /**
@@ -168,7 +173,7 @@ export async function recordLeadSubmission(
     const inserted = await transaction.$queryRaw<IdRow[]>`
       INSERT INTO lead_submissions (
         workspace_id, source, external_lead_id, received_at,
-        last_integration_event_id, updated_at
+        last_integration_event_id, whatsapp_opt_in, updated_at
       )
       VALUES (
         ${context.workspace_id}::uuid,
@@ -176,6 +181,7 @@ export async function recordLeadSubmission(
         ${key.external_lead_id},
         ${input.received_at}::timestamptz,
         ${input.integration_event_id}::uuid,
+        ${input.whatsapp_opt_in},
         CURRENT_TIMESTAMP
       )
       ON CONFLICT (workspace_id, source, external_lead_id) DO NOTHING
@@ -595,7 +601,7 @@ async function writeOpportunity(
   const created = await transaction.$queryRaw<IdRow[]>`
     INSERT INTO opportunities (
       workspace_id, person_id, pipeline_id, stage_id, area, status,
-      arrived_at, last_movement_at, missing_phone, financing_type, financial_institution,
+      arrived_at, last_movement_at, missing_phone, whatsapp_opt_in, financing_type, financial_institution,
       installment_amount, campaign_id, campaign_name, form_id, form_name, updated_at
     )
     VALUES (
@@ -608,6 +614,7 @@ async function writeOpportunity(
       ${plan.arrived_at}::timestamptz,
       ${plan.arrived_at}::timestamptz,
       ${plan.missing_phone},
+      ${plan.whatsapp_opt_in},
       ${plan.financing_type}::financing_type,
       ${plan.financial_institution},
       ${plan.installment_amount}::numeric,
