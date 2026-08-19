@@ -6,7 +6,7 @@ Status: done
 
 > Fase 2 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md).
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).
-> ADRs vinculantes: 0002, 0003 (só o campo de telefone no membro; o disparo é Fase 4), 0005, 0009, 0013, 0014, 0015, 0016, 0019, 0020, 0021, 0022, 0023, 0024, 0025, 0026.
+> ADRs vinculantes: 0002, 0003 (só o campo de telefone no membro; o disparo é Fase 4), 0005, 0009, 0013, 0014, 0015, 0016, 0019, 0020, 0021, 0022, 0023, 0024, 0025, 0026, **0028** (tag é o time; o time exclui outros Supervisores), **0029** (empresa agrupa equipes, só leitura), **0030** (workspace é do dono — campanha exclusiva não abre tenant).
 > Costuras: as três da [spec de fundação e ingestão](../fundacao-e-ingestao/spec.md) — nenhuma quarta numerada. A costura principal desta fase é o mesmo lugar em que `listLeads` e `assignLead` já vivem.
 
 ---
@@ -141,8 +141,9 @@ Esta fase acrescenta operações nomeadas no mesmo módulo de acesso — Equipe,
 - `WorkspaceMember.status`: `ACTIVE | DETACHED`, default `ACTIVE`. Desatrelar e desligar desativam o vínculo; não apagam a linha. Não existe terceiro valor “desligado”.
 - `WorkspaceMember.display_name` e `WorkspaceMember.email`: denormalizados no cadastro, para a Equipe e o nome do responsável listarem sem Auth a cada linha. **A migration faz o backfill do vínculo que já existe**: o `OWNER` da Hugs em produção nunca passou por cadastro, e sem isso a Equipe abre com a linha da Direção em branco. `UPDATE ... FROM auth.users` na mesma migration que cria as colunas.
 - `WorkspaceMember.whatsapp_phone_e164`: opcional, normalizado pelo mesmo leitor de telefone da ingestão. A Equipe coleta agora porque o cadastro é o gesto; o disparo WhatsApp permanece Fase 4.
-- `Tag`: catálogo do workspace. Unicidade por workspace e nome, sem distinguir maiúscula.
+- `Tag`: catálogo do workspace. Unicidade por workspace e nome, sem distinguir maiúscula. Nomeia o **time**, nunca a marca ([ADR-0028](../../docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)).
 - `MemberTag`: aplicação da tag ao membro. É o que computa o time. Nunca herdada pela Oportunidade.
+- `Company` e `Tag.company_id` (ticket 08): a sub-empresa do grupo como agrupamento de equipes, para a Direção ler a operação por empresa. Anuláveis, expand/contract. **Dimensão de leitura**: nenhuma operação de escopo, RLS, roteamento ou permissão as lê, e o membro não ganha coluna de empresa — a empresa de uma pessoa é a das equipes dela ([ADR-0029](../../docs/adr/0029-empresa-e-agrupamento-de-equipe.md)).
 - `Opportunity.campaign_id`, `campaign_name`, `form_id`, `form_name`: texto opcional, gravados na ingestão a partir do lead normalizado. Os quatro, não só os identificadores: o `campaign_id` do Meta é numérico e ilegível, e o nome é o que uma pessoa consegue ler. Retransmissão **não** sobrescreve. A fila não lê o payload bruto: ele expira em 90 dias, e a ingestão é a única janela.
 - `Opportunity.previous_assigned_user_id`: uuid opcional. Escrito por `reassignLead` e pelo desatrelamento, com o responsável que saiu. É a trilha mínima até a `Activity` da Fase 3 — quem tinha 200 leads abertos larga 200 cards na fila, e sem esta coluna não há como saber de quem eram. Nunca participa de escopo nem de filtro de permissão.
 - **Nenhum campo monetário novo.** `amount` sai desta fase: a grandeza que Ranking e Metas precisam agregar é honorários, que deriva da economia estimada — saída da análise de cabimento, Fase 7. Item A10 do [plano](../../docs/plano-de-construcao.md). `installment_amount` continua sendo o único sinal de tamanho do caso.
@@ -170,6 +171,8 @@ Leads `WON`/`LOST` não voltam à fila.
 Antes de `MemberTag`, o código tratava `SUPERVISOR` como `MANAGER`. **Essa equivalência acabou nesta fase**, inclusive para Supervisor ainda sem tag: sem tag, time vazio, não reatribui, Kanban vazio, tabela vazia — a fila sem dono não é o consolo ([ADR-0024](../../docs/adr/0024-fila-sem-dono-e-da-gestao.md)).
 
 Time = membros `ACTIVE` que compartilham **ao menos uma** tag com o Supervisor, e as Oportunidades atribuídas a eles (o Supervisor está no próprio time). Fila sem dono **não** é time e **não** entra no escopo do Supervisor: só Gestão e Direção a vêem e atribuem.
+
+**O conjunto exclui os outros `SUPERVISOR`** ([ADR-0028](../../docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md), ticket 09). Sem essa exclusão, dois Supervisores com a mesma tag ficam no time um do outro e reatribuem o lead um do outro sem nenhuma recusa disparar — porque, pela regra do OU, o outro está mesmo no time. Um **Atendente** com duas tags continua no time de dois Supervisores, e os dois o alcançam: a exclusão vale entre quem comanda, não sobre quem é comandado.
 
 A função pura em `packages/domain` recebe as tags do ator e o quadro de membros e devolve o conjunto de `user_id` do time — incluindo o caso vazio. As operações nomeadas aplicam esse conjunto no SQL. `ATTENDANT` continua filtrando `assigned_user_id = user_id` e **não** vê fila sem dono.
 

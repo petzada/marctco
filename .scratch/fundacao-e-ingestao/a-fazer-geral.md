@@ -124,7 +124,7 @@ segundos, não minutos.
       reconhecidos.
 - [x] Tela de Leads mostra *Maria Souza*, origem **Landing page**, etapa de
       entrada do funil `Comercial`.
-- [ ] `railway logs --service web` traz `integration_event_received result="accepted"`
+- [x] `railway logs --service web` traz `integration_event_received result="accepted"`
       e `railway logs --service worker` traz o processamento do evento.
 
 Se algo não aparecer, o próximo passo é a auditoria de leitura do banco (o script

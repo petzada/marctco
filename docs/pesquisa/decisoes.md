@@ -14,7 +14,7 @@
 > | §Handoff gatilhos "etapa/status `ganho` ou `necessario_juridico`" | Ganho/perda são status, mas nenhum estado cria card jurídico por si só; o gestor confirma o handoff — [ADR-0009](../adr/0009-etapas-editaveis-papeis-e-status.md) |
 > | #9 flags liberando módulos por packaging | Flag só onde **custa dinheiro ou chama terceiro por uso**; catálogo de três entradas — [ADR-0004](../adr/0004-fronteira-flag-configuracao-estado.md) |
 > | #18 tags “opcionalmente em oportunidades” | Tag que define o time vive no **membro**. Tag na oportunidade, se existir, não computa escopo e não se herda — [ADR-0020](../adr/0020-tag-no-membro-define-o-time.md) |
-> | #18 “um workspace por grupo” | Workspace é **fronteira de captação**, não uma assessoria nem automaticamente o grupo — [ADR-0022](../adr/0022-workspace-e-fronteira-de-captacao.md) |
+> | #18 “um workspace por grupo” | Workspace é fronteira do **dono**, não uma assessoria; o grupo do mesmo dono cabe num tenant — [ADR-0022](../adr/0022-workspace-e-fronteira-de-captacao.md), [ADR-0030](../adr/0030-workspace-e-fronteira-do-dono.md) |
 > | #4/#18 funis por produto | Funis são fluxos Comercial/Jurídico; tipo de financiamento é atributo opcional — [ADR-0009](../adr/0009-etapas-editaveis-papeis-e-status.md) |
 > | #12 normalização/deduplicação | Múltiplos contatos por Pessoa; telefone não decide conflito; possível duplicado vira marcador na Oportunidade criada, não retenção — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |
 > | #16 “200 + fila” | `IntegrationEvent` é outbox: commit PostgreSQL → 200 → dispatcher/BullMQ — [ADR-0007](../adr/0007-ingestao-idempotencia.md) |

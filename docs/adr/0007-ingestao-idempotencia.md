@@ -7,6 +7,8 @@ Toda origem de lead (Pluga Meta, Pluga Google, webhook servidor-servidor de LP) 
 **Status:** accepted · 2026-08-04
 
 > **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a resolução de associação navegador → workspace é o quarto caso sem tenant. A lista fechada, o executor técnico `NOLOGIN` e as policies mínimas passam a ser definidos por aquele ADR — seis funções desde a emenda de 2026-08-19; a redação original deste bloco falava no quarto caso. Esta decisão de ingestão permanece inalterada.
+>
+> **Emendado pelo [ADR-0031](./0031-conexao-na-chave-idempotente.md):** a chave idempotente do envio ganha a conexão — `UNIQUE(workspace_id, integration_connection_id, source, external_lead_id)`. Sem ela, duas landing pages com numeração própria colidem e a segunda é engolida como retransmissão inerte. O resto desta decisão — outbox, três fases, dúvida não segura o lead — permanece inalterado.
 
 Este é o ponto mais irreversível do sistema: uma vez que leads reais atravessaram este caminho, mudar a regra de deduplicação significa reconciliar dados de produção à mão.
 
@@ -65,7 +67,7 @@ Perder lead por mapeamento torto é o pecado capital de quem compra mídia; o ma
 
 ## Mecanismo 1 — "eu já recebi esta transmissão?"
 
-`UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission`.
+`UNIQUE(workspace_id, source, external_lead_id)` em `LeadSubmission` — **emendado pelo [ADR-0031](./0031-conexao-na-chave-idempotente.md)**, que acrescenta `integration_connection_id` à chave: `source` sozinho não distingue duas landing pages, e cada uma numera por conta própria.
 
 - **`external_lead_id` é `NOT NULL` sempre.** Em Postgres `NULL` não colide com `NULL` num índice único. Integrações servidor-servidor de LP devem enviar um ID estável; quando uma origem não o fornecer, o conector sintetiza um para manter a proteção.
 - **Quando a origem não fornece ID, o conector usa o `IntegrationEvent.id`** — o identificador que o próprio CRM cunhou ao receber a requisição. Responsabilidade do adapter, não do domínio.

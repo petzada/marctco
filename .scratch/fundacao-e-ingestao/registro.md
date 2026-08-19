@@ -457,7 +457,6 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - **Branch de hardening:** `fix/wave-review-ia-configuracoes`, sem push direto
   para `main`; entrega pelo fluxo `pnpm ship`.
 
-<<<<<<< HEAD
 ## Ticket 12 — Tela de Leads — CONCLUÍDO
 
 - **O que foi construído:** `/workspace/:slug/leads` — tabela paginada por
