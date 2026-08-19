@@ -54,21 +54,24 @@ export default async function LeadsPage({
     redirect(`/workspace/${slug}/my-leads`);
   }
 
-  const { cursor: cursorParam, marker, responsible, team } = await leadsSearchParamsCache.parse(searchParams);
+  const { cursor: cursorParam, marker, clock, responsible, team } = await leadsSearchParamsCache.parse(searchParams);
   const cursor = decodeLeadCursor(cursorParam);
   const isUnassignedView = responsible === "unassigned";
   const responsibleUserId = responsible && !isUnassignedView && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(responsible)
     ? responsible
     : undefined;
   const teamName = team?.trim().slice(0, 100) || undefined;
+  const now = new Date();
   const filterParams = new URLSearchParams();
   if (marker) filterParams.set("marker", marker);
+  if (clock) filterParams.set("clock", clock);
   if (responsibleUserId || isUnassignedView) filterParams.set("responsible", responsibleUserId ?? "unassigned");
   if (teamName) filterParams.set("team", teamName);
 
   const rowsPromise = listLeads(access.workspace.context, {
     ...(cursor !== undefined ? { after: cursor } : {}),
     ...(marker ? { marker } : {}),
+    ...(clock ? { clock, now } : {}),
     ...(responsibleUserId ? { responsible_user_id: responsibleUserId } : {}),
     ...(isUnassignedView ? { unassigned: true } : {}),
     ...(teamName ? { team: teamName } : {}),

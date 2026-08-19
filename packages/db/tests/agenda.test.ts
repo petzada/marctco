@@ -347,3 +347,40 @@ describe("listAgenda and the card share Activity", () => {
     ).rejects.toMatchObject({ reason: "OPPORTUNITY_REQUIRED" });
   });
 });
+
+describe("overdue filter", () => {
+  const now = new Date("2026-08-19T15:00:00.000Z");
+
+  it("lists every overdue OPEN activity in scope when overdue_only is set", async () => {
+    const opportunity_id = await seedOpportunity({ assigned_user_id: attendant_user });
+    const overdue = await createActivity(
+      attendant_context,
+      {
+        opportunity_id,
+        type: "CALL",
+        title: "Vencida fora do intervalo",
+        due_at: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
+      },
+      app
+    );
+    const future = await createActivity(
+      attendant_context,
+      {
+        opportunity_id,
+        type: "TASK",
+        title: "Ainda no prazo",
+        due_at: new Date(now.getTime() + 60 * 60 * 1000)
+      },
+      app
+    );
+
+    const view = await listAgenda(
+      attendant_context,
+      { from: window_from, to: window_to, overdue_only: true, now },
+      app
+    );
+    const ids = view.items.map((item) => item.id);
+    expect(ids).toContain(overdue.id);
+    expect(ids).not.toContain(future.id);
+  });
+});

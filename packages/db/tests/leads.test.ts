@@ -719,6 +719,44 @@ describe("assignment filters", () => {
   });
 });
 
+describe("clock filters", () => {
+  const now = new Date("2026-08-19T15:00:00.000Z");
+
+  it("filters sla-breached OPEN leads for the Dashboard tile destination", async () => {
+    const breached = await seedOpportunity({
+      name: "SLA estourado",
+      assigned_user_id: attendant_user,
+      arrived_at: new Date(now.getTime() - 121 * 60_000)
+    });
+    const fresh = await seedOpportunity({
+      name: "Dentro do SLA",
+      assigned_user_id: attendant_user,
+      arrived_at: new Date(now.getTime() - 30 * 60_000)
+    });
+    const rows = await listLeads(manager_context, { clock: "sla-breached", now, limit: 200 }, app);
+    const ids = rows.map((row) => row.opportunity_id);
+    expect(ids).toContain(breached.opportunity_id);
+    expect(ids).not.toContain(fresh.opportunity_id);
+  });
+
+  it("filters stagnant OPEN leads for the Dashboard tile destination", async () => {
+    const stagnant = await seedOpportunity({
+      name: "Parado",
+      assigned_user_id: attendant_user,
+      arrived_at: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000)
+    });
+    const moving = await seedOpportunity({
+      name: "Em movimento",
+      assigned_user_id: attendant_user,
+      arrived_at: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
+    });
+    const rows = await listLeads(manager_context, { clock: "stagnant", now, limit: 200 }, app);
+    const ids = rows.map((row) => row.opportunity_id);
+    expect(ids).toContain(stagnant.opportunity_id);
+    expect(ids).not.toContain(moving.opportunity_id);
+  });
+});
+
 describe("updateLeadDetails", () => {
   it("normalizes a new phone through the same reader ingestion uses", async () => {
     const seeded = await seedOpportunity({ name: "Editar telefone", missing_phone: true });

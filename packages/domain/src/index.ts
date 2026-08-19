@@ -153,17 +153,25 @@ export {
   type ActivityType
 } from "./activity.js";
 export {
+  AGENDA_DUE_FILTERS,
   AGENDA_VIEWS,
   MAX_AGENDA_RANGE_MS,
   agendaBoundsForView,
   isAgendaView,
+  parseAgendaDueFilter,
   parseAgendaInterval,
   shiftAgendaDate,
   todayAgendaDate,
+  type AgendaDueFilter,
   type AgendaIntervalDecision,
   type AgendaIntervalRefusal,
   type AgendaViewKind
 } from "./agenda.js";
+export {
+  LEAD_CLOCK_FILTERS,
+  parseLeadClockFilter,
+  type LeadClockFilter
+} from "./lead-clock-filter.js";
 export {
   DEFAULT_FIRST_CONTACT_SLA_MINUTES,
   DEFAULT_STAGNATION_DAYS,
@@ -178,3 +186,16 @@ export {
   type WorkspaceSettingsWrite,
   type WorkspaceSettingsWriteParse
 } from "./workspace-settings.js";
+export {
+  OPERATIONAL_DASHBOARD_TILE_IDS,
+  buildOperationalDashboardTiles,
+  canReadOperationalDashboard,
+  canSeeUnassignedQueueOnDashboard,
+  operationalDashboardTileDestination,
+  type OperationalDashboardCounts,
+  type OperationalDashboardDestination,
+  type OperationalDashboardEmptyReason,
+  type OperationalDashboardScreen,
+  type OperationalDashboardTile,
+  type OperationalDashboardTileId
+} from "./operational-dashboard.js";
