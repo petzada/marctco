@@ -3,10 +3,14 @@ export {
   createJobContext,
   isJobContext,
   isUserContext,
+  jobIntegrationEventId,
+  SCHEDULED_SWEEP_NAMES,
   WorkspaceRole,
   type AccessContext,
   type CreateJobContextInput,
   type JobContext,
+  type JobOrigin,
+  type ScheduledSweepName,
   type UserContext
 } from "./access-context.js";
 export {
@@ -203,4 +207,101 @@ export {
   type MoveLeadStageInput,
   type MovedLeadStage
 } from "./lead-board.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 01 — Activity on the lead. Appended at the end so parallel Fase 3
+// tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  cancelActivity,
+  completeActivity,
+  createActivity,
+  listLeadActivities,
+  rescheduleActivity,
+  ActivityError,
+  type ActivityRefusal,
+  type CreateActivityInput,
+  type LeadActivity,
+  type RescheduleActivityInput
+} from "./activities.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 02 — Configurações: SLA and stagnation clocks. Appended at the end
+// so parallel Fase 3 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  getWorkspaceSettings,
+  updateWorkspaceSettings,
+  WorkspaceSettingsWriteError
+} from "./workspace-settings.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 06 — Agenda, a calendar view over Activity. Appended at the end so
+// parallel Fase 3 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  listAgenda,
+  AgendaError,
+  type AgendaItem,
+  type AgendaPipelineOption,
+  type AgendaRefusal,
+  type AgendaTagOption,
+  type AgendaView,
+  type ListAgendaOptions
+} from "./agenda.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 04 — stagnation clock and movement facts. No new named operation:
+// existing writes stamp last_movement_at and record the fact internally.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Ticket 07 — operational Dashboard tiles. Ticket 08 extends this same
+// operation with series; do not add a second dashboard read.
+// ---------------------------------------------------------------------------
+export {
+  getOperationalDashboard,
+  OperationalDashboardError,
+  type GetOperationalDashboardOptions,
+  type OperationalDashboard,
+  type OperationalDashboardEmptyState,
+  type OperationalDashboardRefusal
+} from "./operational-dashboard.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 05 — lead timeline on the card. Appended at the end so parallel
+// Fase 3 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  listLeadTimeline,
+  DEFAULT_TIMELINE_LIMIT,
+  MAX_TIMELINE_LIMIT,
+  type LeadTimelineFact,
+  type LeadTimelinePage,
+  type ListLeadTimelineOptions,
+  type OpportunityTimelineEventType
+} from "./lead-timeline.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 09 — Notification model, clock detection and scheduled sweep.
+// Appended at the end so parallel Fase 3 tickets stay additive. Ticket 10
+// owns the Dashboard reading surface; mark-as-read is required here to
+// prove read does not resolve.
+// ---------------------------------------------------------------------------
+export {
+  claimWorkspacesWithOverdueOpportunities,
+  sweepWorkspaceOpportunityClock,
+  type OpportunityClockSweepResult,
+  type OverdueOpportunityWorkspace
+} from "./opportunity-clock.js";
+export {
+  listUnresolvedNotifications,
+  markNotificationRead,
+  NotificationError,
+  type MarkNotificationReadInput,
+  type MarkedNotificationRead,
+  type NotificationRefusal,
+  type UnresolvedNotification,
+  type UnresolvedNotificationList
+} from "./notifications.js";
 

@@ -39,8 +39,16 @@ O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. S�
 _Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, Super Admin do SaaS, `ADMIN` global, confundir com tag de time, Supervisor alcançando lead de outro Supervisor, Supervisor com a fila sem dono no escopo, RLS por papel, escopo por empresa, motor `can()`, entidade Team, tratar assessoria como se fosse o tenant, Gestão recortada por tag, sub-empresa como perfil
 
 **Contexto de acesso**:
-Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e o evento que o originou. Ambas isolam pelo workspace; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
-_Avoid_: Workspace e papel viajando separados, papel como parâmetro que ninguém usa, papel inventado para o job preencher campo, contexto em singleton ou cache sem chave de workspace, montar o contexto em cada tela
+Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e a origem do trabalho — um Evento de integração real ou uma Passada agendada. Ambas isolam pelo workspace, um tenant por transação; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
+_Avoid_: Workspace e papel viajando separados, papel como parâmetro que ninguém usa, papel inventado para o job preencher campo, contexto em singleton ou cache sem chave de workspace, montar o contexto em cada tela, terceiro tipo de contexto para manutenção, evento âncora fabricado
+
+**Origem do job**:
+O que nomeia o trabalho de um job: um Evento de integração real, ou uma Passada agendada. União discriminada. Não alarga o que o job alcança — o isolamento continua sendo o workspace.
+_Avoid_: Evento âncora, origem opcional, job sem origem, job sem workspace
+
+**Passada agendada**:
+Trabalho de manutenção disparado pelo relógio da aplicação, sem Evento de integração que o origine. O nome é fechado: expiração de payload, relógios de SLA e estagnação. A varredura descobre os workspaces por função privada e então escreve sob o mesmo isolamento de tenant de qualquer job.
+_Avoid_: Âncora falsa, papel inventado para o job, bypass de RLS, uma transação que atravessa workspaces
 
 **Tag**:
 Rótulo configurável no workspace, criado e aplicado na tela Equipe no mesmo ato do cadastro do colaborador. No membro, nomeia o **time** — e nada mais — e é o que define o time de um Supervisor. A marca do grupo não mora aqui: mora na Empresa, que a tag aponta. Na oportunidade, se existir, é rótulo operacional (carteira, campanha) digitado à mão — nunca herdado do responsável.
@@ -69,6 +77,14 @@ _Avoid_: Ganho ou Perdido como coluna do funil, situação inferida a partir da 
 **Chegada**:
 Instante em que a Oportunidade passa a existir e o relógio de atendimento pode começar a correr. Para todo lead que entra direto, é o instante do recebimento; para o que passou pela quarentena, é o instante da liberação, porque não corre relógio contra ninguém enquanto não há card. O recebimento continua registrado à parte, como verdade sobre a origem.
 _Avoid_: Confundir com o instante do recebimento em todos os casos, reconstruir a chegada depois, relógio correndo sobre lead que ninguém podia atender
+
+**Atividade**:
+Compromisso de atendimento preso a um Lead: tipo, responsável, vencimento e descrição. O atendente registra o que faz — ligação, mensagem, reunião ou tarefa —, conclui o que executou, reagenda o que o cliente adiou e cancela o que não vai acontecer. Concluir e cancelar são resultados diferentes: só a conclusão prova atendimento. Toda atividade tem um Lead; não existe evento órfão. A vencida e não concluída permanece visível, em destaque. Quem marca trabalho para quem segue o perfil: Atendente só para si, Supervisor para o time, Gestão e Direção para qualquer membro ativo — e nunca para alguém que não alcança aquele lead.
+_Avoid_: Evento sem lead, tratar cancelamento como conclusão, amarrar o tipo a um canal, apagar a vencida, atividade recorrente, segunda regra de escopo baseada no responsável
+
+**Dashboard operacional**:
+Primeira tela da manhã da Gestão, da Direção e do Supervisor com time: os números que queimam agora e os gráficos que dizem se o dia é pior que ontem — chegadas por dia na janela recente, aderência ao SLA por dia, leads em aberto por etapa do funil comercial padrão. Tudo no escopo do perfil, numa operação nomeada só. Atendente não tem esta tela. Paleta dos gráficos vive no `DESIGN.md`, não no componente.
+_Avoid_: Montar `where` na tela, um endpoint por gráfico, improvisar cor de série a partir de tom semântico, recálculo de SLA fora de `firstContactSla`, Analytics histórico nesta tela
 
 **Marcador**:
 Pendência anexada a uma Oportunidade que já existe e já pode ser atendida. Sinaliza, nunca bloqueia, e é sempre resolvível. Quantos houver, o usuário os alcança por um único ponto de entrada no lead. Os marcadores não moram todos no mesmo lugar, mas quem responde "o que este lead tem" é um só — a pergunta "quais leads têm este aviso" é outra, e pertence aos contadores.
@@ -155,8 +171,8 @@ Payload bruto recebido de uma origem, persistido transacionalmente como outbox a
 _Avoid_: Confundir com EnvioLead (que já é lead interpretado), publicar no Redis antes do commit, descartar o bruto antes de processar, guardar o mesmo payload em dois lugares
 
 **Evento da linha do tempo da Oportunidade**:
-Fato imutável que aconteceu com uma Oportunidade e precisa continuar visível depois de reprocessamento ou mesclagem. Nesta fatia há somente reenvio recebido e EnvioLead absorvido como reentrada; atividade, mensagem e documento entram nas fases que os possuem. Quando uma Oportunidade é mesclada, seus eventos são transferidos para a canônica — nenhuma leitura segue a lápide.
-_Avoid_: Reconstituir evento a partir do estado atual do card, gravar texto de UI no domínio, anexar evento novo à Oportunidade absorvida, transformar a linha do tempo mínima em model genérico das fases futuras
+Fato imutável que aconteceu com uma Oportunidade e precisa continuar visível depois de reprocessamento ou mesclagem. A ingestão grava reenvio recebido e EnvioLead absorvido como reentrada, e estes dois continuam deduplicando pelo evento de integração. A Fase 3 acrescenta os fatos de movimento — mudança de etapa, atribuição, reatribuição, retorno à fila, atividade marcada e atividade concluída — que não têm evento de integração e não deduplicam: dois movimentos iguais em instantes diferentes são dois fatos. Os fatos `ASSIGNED`, `REASSIGNED` e `RETURNED_TO_QUEUE` carregam no próprio evento os ids tipados e imutáveis do destinatário (`assigned_user_id`) e de quem saiu (`previous_assigned_user_id`); a leitura resolve o nome pelo `WorkspaceMember` daquele workspace. Fatos anteriores à coluna nascem nulos: o banco não inventa a cadeia que não gravou. Quando uma Oportunidade é mesclada, seus eventos são transferidos para a canônica — nenhuma leitura segue a lápide.
+_Avoid_: Reconstituir evento a partir do estado atual do card, gravar texto de UI ou nome como snapshot no domínio, anexar evento novo à Oportunidade absorvida, transformar a linha do tempo em model genérico das fases futuras, deixar a retransmissão inerte reanimar o relógio de estagnação
 
 **Expiração do payload**:
 Passados 90 dias, o conteúdo bruto do Evento de integração é apagado e a linha permanece: some o dado pessoal, fica o fato de que aquele lead chegou, de onde, quando e no que deu. Evento em quarentena não expira enquanto estiver em quarentena, porque é justamente o payload que o gestor precisa ler para completar.
@@ -175,5 +191,37 @@ Interruptor do catálogo, ligado pela marctco por workspace, que libera capacida
 _Avoid_: Flag por módulo para packaging, interruptor que o gestor edita, variável de ambiente, toggle de UI
 
 **Configuração de workspace**:
-Escolha operacional que o gestor da assessoria edita na tela, alterando o comportamento de uma capacidade que a feature flag já liberou. O que é mera consequência de dado existente (integração conectada, funil jurídico ativo) não é nem flag nem configuração.
-_Avoid_: Feature flag, preferência pessoal do usuário, pré-condição de dado
+Escolha operacional que o gestor da assessoria edita na tela, alterando o comportamento de uma capacidade que a feature flag já liberou. O que é mera consequência de dado existente (integração conectada, funil jurídico ativo) não é nem flag nem configuração. A linha é opcional: workspace que nunca tocou em Configurações usa o padrão do domínio, e ausência nunca desliga o relógio.
+_Avoid_: Feature flag, preferência pessoal do usuário, pré-condição de dado, ausência como desligamento, semear a linha no provisionamento
+
+**SLA de primeiro contato**:
+Limite em minutos, configurável pela Gestão, entre a chegada do lead e a primeira evidência de atendimento. Sem linha no workspace, vale o padrão do domínio. Não é feature flag: não custa dinheiro por uso e não chama terceiro.
+_Avoid_: Parar o relógio na atribuição, horário comercial, flag `auto_primeiro_contato`, `first_contact_trigger`
+
+**Estagnação**:
+Limite em dias, configurável pela Gestão, sem movimento no lead. Sem linha no workspace, vale o padrão do domínio. Mede movimento, não chegada. O âncora é o último movimento; quando ainda não houve nenhum, é a chegada — assim o lead nunca tocado é o mais parado, não o menos. Ganho, perda e mesclado nunca contam como parados.
+_Avoid_: Contar edição de campo, leitura ou retransmissão inerte como movimento, desligar o relógio por ausência de configuração, tratar ganho ou perda como parado
+
+**Último movimento**:
+Instante da última operação que mexeu no lead — mover etapa, atribuir, reatribuir, devolver à fila, criar ou concluir atividade. Gravado em `last_movement_at` na mesma transação do fato na linha do tempo. Ausência ancora a estagnação na chegada.
+_Avoid_: Inferir do `updated_at`, carimbar na edição de campo ou na retransmissão inerte, apagar `previous_assigned_user_id` porque a linha do tempo existe
+
+**Estado de estagnação**:
+Se o lead ainda anda dentro do limite (em movimento) ou se passou do limite sem movimento (parado). Função pura, relógio corrido em dias de 24 horas. Ganho, perda e mesclado nunca saem como parados.
+_Avoid_: Horário comercial, uma segunda função para a tela e outra para o alerta, contar fechado como parado
+
+**Primeiro contato**:
+Instante em que alguém falou com esta pessoa pela primeira vez. Nesta fase é a primeira Atividade concluída daquele lead; a Fase 4 acrescenta a mensagem de WhatsApp na mesma coluna, sem trocar o significado. Anulável e escrito uma vez: a segunda conclusão não sobrescreve, e atribuir ou mover etapa não preenchem.
+_Avoid_: Parar o relógio na atribuição, inferir do responsável, sobrescrever na segunda conclusão, reconstruir varrendo atividades a cada tela
+
+**Fechamento**:
+Instante em que a Oportunidade deixa de estar em aberto e passa a ganho ou perda. Gravado em `closed_at`, anulável enquanto `status` for `OPEN` e obrigatório quando for `WON` ou `LOST`. Para o relógio de SLA, encerra a espera quando não houve primeiro contato: a duração congela nesse instante e nunca conta como atendimento. A operação nomeada de concluir atendimento da Fase 6 preencherá a coluna; caminhos legados que já fecham o card (como arquivar spam na quarentena) também a gravam.
+_Avoid_: Usar `updated_at` como proxy de fechamento, inferir fechamento de etapa ou atribuição, deixar ganho/perda sem `closed_at`
+
+**Estado de SLA de primeiro contato**:
+Se o lead ainda espera dentro do limite (pendente), se foi atendido dentro do limite (cumprido) ou se estourou o limite (estourado) — com ou sem atendimento tardio. Função pura, relógio corrido. A duração termina em `first_contact_at` quando houve contato, em `closed_at` quando ganho ou perda sem contato, ou em `now` enquanto ainda está aberto sem contato. Ganho e perda sem nenhuma atividade concluída param de esperar atendimento e não contam como atendidos.
+_Avoid_: Horário comercial, feriado, tratar ganho ou perda como atendimento, uma segunda função para a tela e outra para o alerta, deixar o relógio correr após fechamento sem contato
+
+**Notificação**:
+Aviso persistido na Oportunidade de que o SLA de primeiro contato estourou ou de que o lead está parado. Uma linha por lead e por tipo; a varredura seguinte atualiza a detecção, não cria segunda linha. Não tem destinatário: quem enxerga é o escopo de perfil da operação nomeada. `read_at` é do aviso, não de cada leitor — marcar como lida não resolve, e resolver não exige leitura. Some da lista de gestão quando a causa acaba (primeiro contato, movimento, ganho, perda ou mesclagem), sem apagar a linha. O Atendente não a recebe: o sinal dele é a atividade vencida na Agenda.
+_Avoid_: Destinatário na tabela, estado de leitura por usuário, uma linha nova a cada passada, tratar lida como resolvida, e-mail ou push nesta fase, Atendente na superfície de gestão

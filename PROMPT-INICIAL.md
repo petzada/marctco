@@ -1,6 +1,6 @@
 # Prompt inicial para a sessão de implementação
 
-> **Fases 0–2 entregues.** Este prompt abriu a fatia quando o repositório não tinha código de produção. Não use como estado atual. Próximo: [`.scratch/fechamento-fases-0-2.md`](.scratch/fechamento-fases-0-2.md) (etapa B, manual/prod) e Fase 3 · Tempo do [plano](docs/plano-de-construcao.md) — spec ainda não existe.
+> **Fases 0–3 entregues.** Este prompt abriu a fatia quando o repositório não tinha código de produção. Não use como estado atual. Fechamento 0–2: [`.scratch/fechamento-fases-0-2.md`](.scratch/fechamento-fases-0-2.md). Fechamento Fase 3: [`.scratch/tempo/PROMPT-HANDOFF.md`](.scratch/tempo/PROMPT-HANDOFF.md). Próximo: Fase 4 · Canal do [plano](docs/plano-de-construcao.md).
 
 Cole o bloco abaixo numa sessão nova do Claude Code, na raiz do repositório clonado.
 
@@ -157,8 +157,11 @@ propor mudança — e traga a proposta a mim em vez de mudar por conta própria.
 - Quatro perfis, e nenhum a mais: ATTENDANT, SUPERVISOR, MANAGER, OWNER. Uma regra
   nesta fatia: atendente só enxerga oportunidade atribuída a si.
 - `AccessContext` é união: `UserContext` (workspace + usuário + papel) no app,
-  `JobContext` (workspace + evento) no worker. NÃO invente papel para o job
-  preencher campo, e NÃO torne `role` opcional (ADR-0016).
+  `JobContext` (workspace + origem do trabalho) no worker e nas passadas
+  agendadas do web. NÃO invente papel para o job preencher campo, e NÃO torne
+  `role` opcional (ADR-0016). **Supersessão 2026-08-19:** a forma "workspace +
+  evento" no topo virou `JobOrigin` (evento de integração real **ou** passada
+  agendada nomeada); não há terceiro tipo de contexto.
 - `packages/db` NÃO exporta o client do Prisma. Exporta operações nomeadas que
   recebem `AccessContext` — `listLeads`, `countLeadsByMarker`, `applyIntakePlan`.
   O client cru é interno e o CI reprova import de fora (ADR-0016).

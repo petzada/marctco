@@ -5,7 +5,12 @@ import type {
   IntegrationEventStatus,
   PrismaClient
 } from "@prisma/client";
-import { createJobContext, type JobContext, type UserContext } from "./access-context.js";
+import {
+  createJobContext,
+  jobIntegrationEventId,
+  type JobContext,
+  type UserContext
+} from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { hashIntegrationToken, type IntegrationProvider } from "./integration-connection.js";
 import { assertUuid } from "./internal/uuid.js";
@@ -208,7 +213,7 @@ export async function markIntegrationEventDispatched(
       SET dispatch_status = 'DISPATCHED',
           dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${context.integration_event_id}::uuid
+      WHERE id = ${jobIntegrationEventId(context)}::uuid
     `;
     if (updated === 0) {
       throw new Error(EVENT_NOT_VISIBLE);
@@ -252,7 +257,7 @@ export async function markIntegrationEventFailed(
           failed_at = COALESCE(failed_at, CURRENT_TIMESTAMP),
           failure_reason = ${reason},
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${context.integration_event_id}::uuid
+      WHERE id = ${jobIntegrationEventId(context)}::uuid
         AND workspace_id = ${context.workspace_id}::uuid
         AND status NOT IN ('PROCESSED', 'QUARANTINED')
     `;
@@ -263,7 +268,7 @@ export async function markIntegrationEventFailed(
     const visible = await transaction.$queryRaw<IdRow[]>`
       SELECT id
       FROM integration_events
-      WHERE id = ${context.integration_event_id}::uuid
+      WHERE id = ${jobIntegrationEventId(context)}::uuid
         AND workspace_id = ${context.workspace_id}::uuid
     `;
     if (visible.length === 0) {
@@ -296,7 +301,7 @@ export async function readIntegrationEventForProcessing(
       JOIN integration_connections AS connection
         ON connection.workspace_id = event.workspace_id
        AND connection.id = event.integration_connection_id
-      WHERE event.id = ${context.integration_event_id}::uuid
+      WHERE event.id = ${jobIntegrationEventId(context)}::uuid
     `
   );
   const event = events[0];

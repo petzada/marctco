@@ -13,5 +13,7 @@ describe("parseMarkerFilter", () => {
     expect(parseMarkerFilter(null)).toBeUndefined();
     expect(parseMarkerFilter("")).toBeUndefined();
     expect(parseMarkerFilter("SOME_FUTURE_MARKER")).toBeUndefined();
+    expect(parseMarkerFilter("FIRST_CONTACT_SLA_BREACHED")).toBeUndefined();
+    expect(parseMarkerFilter("STAGNANT")).toBeUndefined();
   });
 });

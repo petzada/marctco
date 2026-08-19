@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   countLeadsByMarker,
+  getWorkspaceSettings,
   listLeadAssignmentDestinations,
   listTeam,
   listLeads,
@@ -53,27 +54,31 @@ export default async function LeadsPage({
     redirect(`/workspace/${slug}/my-leads`);
   }
 
-  const { cursor: cursorParam, marker, responsible, team } = await leadsSearchParamsCache.parse(searchParams);
+  const { cursor: cursorParam, marker, clock, responsible, team } = await leadsSearchParamsCache.parse(searchParams);
   const cursor = decodeLeadCursor(cursorParam);
   const isUnassignedView = responsible === "unassigned";
   const responsibleUserId = responsible && !isUnassignedView && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(responsible)
     ? responsible
     : undefined;
   const teamName = team?.trim().slice(0, 100) || undefined;
+  const now = new Date();
   const filterParams = new URLSearchParams();
   if (marker) filterParams.set("marker", marker);
+  if (clock) filterParams.set("clock", clock);
   if (responsibleUserId || isUnassignedView) filterParams.set("responsible", responsibleUserId ?? "unassigned");
   if (teamName) filterParams.set("team", teamName);
 
   const rowsPromise = listLeads(access.workspace.context, {
     ...(cursor !== undefined ? { after: cursor } : {}),
     ...(marker ? { marker } : {}),
+    ...(clock ? { clock, now } : {}),
     ...(responsibleUserId ? { responsible_user_id: responsibleUserId } : {}),
     ...(isUnassignedView ? { unassigned: true } : {}),
     ...(teamName ? { team: teamName } : {}),
     limit: PAGE_SIZE
   });
   const countsPromise = countLeadsByMarker(access.workspace.context);
+  const settingsPromise = getWorkspaceSettings(access.workspace.context);
   const teamPromise = access.workspace.role === "ATTENDANT"
     ? Promise.resolve([])
     : listTeam(access.workspace.context);
@@ -113,6 +118,7 @@ export default async function LeadsPage({
               filterQuery={filterParams.toString()}
               isUnassignedView={isUnassignedView}
               rowsPromise={rowsPromise}
+              settingsPromise={settingsPromise}
               slug={slug}
             />
           </Suspense>
@@ -141,6 +147,7 @@ async function CountersSection({
 
 async function TableSection({
   rowsPromise,
+  settingsPromise,
   slug,
   hasActiveFilter,
   isFirstPage,
@@ -153,6 +160,7 @@ async function TableSection({
   isUnassignedView
 }: Readonly<{
   rowsPromise: Promise<LeadListRow[]>;
+  settingsPromise: ReturnType<typeof getWorkspaceSettings>;
   slug: string;
   hasActiveFilter: boolean;
   isFirstPage: boolean;
@@ -164,8 +172,8 @@ async function TableSection({
   filterQuery: string;
   isUnassignedView: boolean;
 }>) {
-  const [rows, members, assignDestinations, reassignDestinations] = await Promise.all([
-    rowsPromise, teamPromise, assignDestinationsPromise, reassignDestinationsPromise
+  const [rows, members, assignDestinations, reassignDestinations, clockSettings] = await Promise.all([
+    rowsPromise, teamPromise, assignDestinationsPromise, reassignDestinationsPromise, settingsPromise
   ]);
   const first = rows[0];
   const last = rows[rows.length - 1];
@@ -186,6 +194,8 @@ async function TableSection({
         assignDestinations={assignDestinations}
         reassignDestinations={reassignDestinations}
         isUnassignedView={isUnassignedView}
+        clockSettings={clockSettings}
+        nowIso={new Date().toISOString()}
         rows={rows}
         slug={slug}
       />

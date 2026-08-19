@@ -62,6 +62,11 @@ let user_context_a: UserContext;
 const provisioned_workspace_ids: string[] = [];
 const isolation_cases = [
   {
+    table_name: "activities",
+    read_sql: "SELECT workspace_id AS tenant_id FROM activities ORDER BY workspace_id",
+    write_sql: `INSERT INTO activities (id, workspace_id, opportunity_id, assigned_user_id, type, title, due_at, status, created_by_user_id, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', '${user_b}', 'TASK', 'Cross-workspace', CURRENT_TIMESTAMP, 'OPEN', '${user_b}', CURRENT_TIMESTAMP)`
+  },
+  {
     table_name: "intake_reviews",
     read_sql: "SELECT workspace_id AS tenant_id FROM intake_reviews ORDER BY workspace_id",
     write_sql: `INSERT INTO intake_reviews (id, workspace_id, opportunity_id, type, candidate_person_ids) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'IDENTITY_CONFLICT', ARRAY['${person_b}']::uuid[])`
@@ -87,6 +92,11 @@ const isolation_cases = [
     table_name: "member_tags",
     read_sql: "SELECT workspace_id AS tenant_id FROM member_tags ORDER BY workspace_id",
     write_sql: `INSERT INTO member_tags (workspace_id, user_id, tag_id) VALUES ('${workspace_b}', '${user_b}', '${tag_b_unapplied}')`
+  },
+  {
+    table_name: "notifications",
+    read_sql: "SELECT workspace_id AS tenant_id FROM notifications ORDER BY workspace_id",
+    write_sql: `INSERT INTO notifications (id, workspace_id, opportunity_id, type, detected_at, last_detected_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'STAGNANT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   },
   {
     table_name: "opportunities",
@@ -139,6 +149,11 @@ const isolation_cases = [
     read_sql:
       "SELECT workspace_id AS tenant_id FROM workspace_members ORDER BY workspace_id",
     write_sql: `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('${workspace_b}', '${randomUUID()}', 'ATTENDANT')`
+  },
+  {
+    table_name: "workspace_settings",
+    read_sql: "SELECT workspace_id AS tenant_id FROM workspace_settings ORDER BY workspace_id",
+    write_sql: `INSERT INTO workspace_settings (workspace_id, first_contact_sla_minutes, stagnation_days, updated_at) VALUES ('${workspace_b}', 15, 3, CURRENT_TIMESTAMP)`
   },
   {
     table_name: "workspaces",
@@ -369,6 +384,46 @@ beforeAll(async () => {
         }
       ]
     });
+    await transaction.activity.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          assigned_user_id: user_a,
+          type: "TASK",
+          title: "Ligar para o lead A",
+          due_at: new Date(),
+          created_by_user_id: user_a
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: opportunity_b,
+          assigned_user_id: user_b,
+          type: "CALL",
+          title: "Ligar para o lead B",
+          due_at: new Date(),
+          created_by_user_id: user_b
+        }
+      ]
+    });
+    await transaction.notification.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "STAGNANT",
+          detected_at: new Date(),
+          last_detected_at: new Date()
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: opportunity_b,
+          type: "STAGNANT",
+          detected_at: new Date(),
+          last_detected_at: new Date()
+        }
+      ]
+    });
     await transaction.workspaceFlag.createMany({
       data: [
         { workspace_id: workspace_a, key: "auto_primeiro_contato" },
@@ -388,6 +443,20 @@ beforeAll(async () => {
         { workspace_id: workspace_b, user_id: user_b, tag_id: tag_b }
       ]
     });
+    await transaction.workspaceSettings.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          first_contact_sla_minutes: 30,
+          stagnation_days: 5
+        },
+        {
+          workspace_id: workspace_b,
+          first_contact_sla_minutes: 45,
+          stagnation_days: 9
+        }
+      ]
+    });
   });
   const context = await resolveUserContextForSlug(user_a, workspace_slug_a, client);
   if (!context) {
@@ -398,6 +467,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const disposable_workspace_ids = [workspace_a, workspace_b, ...provisioned_workspace_ids];
+  await client.activity.deleteMany({
+    where: { workspace_id: { in: disposable_workspace_ids } }
+  });
+  await client.opportunityTimelineEvent.deleteMany({
+    where: { workspace_id: { in: disposable_workspace_ids } }
+  });
   await client.workspaceMember.deleteMany({
     where: { workspace_id: { in: disposable_workspace_ids } }
   });
@@ -427,11 +502,13 @@ describe("Seam 3: RLS and schema invariants", () => {
     `;
 
     expect(rows.map((row) => row.table_name)).toEqual([
+      "activities",
       "intake_reviews",
       "integration_connections",
       "integration_events",
       "lead_submissions",
       "member_tags",
+      "notifications",
       "opportunities",
       "opportunity_timeline_events",
       "person_emails",
@@ -442,6 +519,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       "tags",
       "workspace_flags",
       "workspace_members",
+      "workspace_settings",
       "workspaces"
     ]);
     expect(isolation_cases.map((test_case) => test_case.table_name)).toEqual(
@@ -511,14 +589,15 @@ describe("Seam 3: RLS and schema invariants", () => {
         AND namespace.nspname NOT LIKE 'pg_toast%'
       ORDER BY namespace.nspname, procedure.proname
     `;
-    // Five, not four: ticket 15 materialized the payload expiry sweep, whose
-    // discovery is circular for the same reason `claim_pending_events` is —
-    // setting the GUC needs the `workspace_id` only the read reveals (ADR-0019,
-    // emendado). Its answer is the narrowest of the five: tenant ids and one
-    // event id, never a payload.
+    // Six, not five: ticket 09 materialized the opportunity-clock sweep, whose
+    // discovery is circular for the same reason `claim_expired_payload_workspaces`
+    // is — setting the GUC needs the `workspace_id` only the read reveals
+    // (ADR-0019, emendado). Its answer is the narrowest of the six: tenant ids,
+    // never an opportunity, a person or a payload.
     const allowed = new Set([
       "private.claim_pending_events",
       "private.claim_expired_payload_workspaces",
+      "private.claim_overdue_opportunity_workspaces",
       "private.provision_workspace",
       "private.resolve_workspace_by_token_hash",
       "private.resolve_user_workspaces"
@@ -530,6 +609,48 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(
       function_names.filter((function_name) => !allowed.has(function_name))
     ).toEqual([]);
+    expect(function_names).toHaveLength(6);
+  });
+
+  it("rejects a seventh SECURITY DEFINER name — verified deliberately", async () => {
+    const probe = "rls_seam3_probe_seventh";
+    await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_migrator");
+      await transaction.$executeRawUnsafe(`
+        CREATE FUNCTION private.${probe}() RETURNS uuid
+        LANGUAGE sql
+        SECURITY DEFINER
+        SET search_path = pg_catalog
+        AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$
+      `);
+
+      const functions = await transaction.$queryRaw<
+        Array<{ schema_name: string; function_name: string }>
+      >`
+        SELECT namespace.nspname::text AS schema_name, procedure.proname::text AS function_name
+        FROM pg_proc AS procedure
+        JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+        WHERE procedure.prosecdef
+          AND namespace.nspname <> 'information_schema'
+          AND namespace.nspname <> 'pg_catalog'
+          AND namespace.nspname NOT LIKE 'pg_toast%'
+        ORDER BY namespace.nspname, procedure.proname
+      `;
+      const allowed = new Set([
+        "private.claim_pending_events",
+        "private.claim_expired_payload_workspaces",
+        "private.claim_overdue_opportunity_workspaces",
+        "private.provision_workspace",
+        "private.resolve_workspace_by_token_hash",
+        "private.resolve_user_workspaces"
+      ]);
+      const function_names = functions.map((row) => `${row.schema_name}.${row.function_name}`);
+      expect(function_names.filter((function_name) => !allowed.has(function_name))).toEqual([
+        `private.${probe}`
+      ]);
+
+      await transaction.$executeRawUnsafe(`DROP FUNCTION private.${probe}()`);
+    });
   });
 
   it("keeps campaign and form as nullable text on opportunities, under the existing RLS, with no extra SECURITY DEFINER", async () => {
@@ -556,7 +677,10 @@ describe("Seam 3: RLS and schema invariants", () => {
       WHERE schemaname = 'public' AND tablename = 'opportunities'
       ORDER BY policyname
     `;
-    expect(policies).toEqual([{ policy_name: "opportunities_workspace_isolation" }]);
+    expect(policies).toEqual([
+      { policy_name: "opportunities_private_definer_select" },
+      { policy_name: "opportunities_workspace_isolation" }
+    ]);
   });
 
   it("has an index whose leading column scopes every business table by workspace", async () => {
@@ -590,6 +714,28 @@ describe("Seam 3: RLS and schema invariants", () => {
     `;
     expect(rows).toEqual([
       { predicate: "((resolution IS NULL) AND (identity_conflict_resolution IS NULL))" }
+    ]);
+  });
+
+  it("indexes activities for agenda, card and open-by-responsible lookups", async () => {
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname IN (
+        'activities_workspace_id_due_at_id_idx',
+        'activities_workspace_id_opportunity_id_due_at_idx',
+        'activities_workspace_id_assigned_user_id_due_at_open_idx'
+      )
+      ORDER BY class.relname
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "activities_workspace_id_assigned_user_id_due_at_open_idx",
+        predicate: "(status = 'OPEN'::activity_status)"
+      },
+      { index_name: "activities_workspace_id_due_at_id_idx", predicate: null },
+      { index_name: "activities_workspace_id_opportunity_id_due_at_idx", predicate: null }
     ]);
   });
 
@@ -1720,7 +1866,7 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       WHERE namespace.nspname = 'private' AND procedure.prosecdef
     `;
 
-    expect(functions.length).toBeGreaterThanOrEqual(5);
+    expect(functions.length).toBeGreaterThanOrEqual(6);
     for (const routine of functions) {
       expect(routine.search_path, routine.function_name).toEqual(["search_path=pg_catalog"]);
       expect(routine.public_can_execute, routine.function_name).toBe(false);
@@ -1902,6 +2048,311 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       { table_name: "workspace_members", command: "SELECT" },
       { table_name: "workspaces", command: "INSERT" },
       { table_name: "workspaces", command: "SELECT" }
+    ]);
+  });
+
+  it("indexes open leads still waiting for first contact, only in the migration", async () => {
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'opportunities_workspace_id_arrived_at_first_contact_pending_idx'
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "opportunities_workspace_id_arrived_at_first_contact_pending_idx",
+        predicate:
+          "((first_contact_at IS NULL) AND (status = 'OPEN'::opportunity_status) AND (merged_into_opportunity_id IS NULL))"
+      }
+    ]);
+  });
+
+  it("requires closed_at when status is WON or LOST, and forbids it while OPEN", async () => {
+    const rows = await client.$queryRaw<Array<{ constraint_name: string; check_clause: string }>>`
+      SELECT con.conname::text AS constraint_name, pg_get_constraintdef(con.oid) AS check_clause
+      FROM pg_constraint AS con
+      JOIN pg_class AS rel ON rel.oid = con.conrelid
+      WHERE rel.relname = 'opportunities'
+        AND con.conname = 'opportunities_closed_at_status_check'
+    `;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.check_clause).toContain("closed_at IS NULL");
+    expect(rows[0]?.check_clause).toContain("closed_at IS NOT NULL");
+  });
+
+  it("keeps last_movement_at nullable and indexes open unmerged leads by it, only in the migration", async () => {
+    const columns = await client.$queryRaw<
+      Array<{ column_name: string; is_nullable: string }>
+    >`
+      SELECT column_name, is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'opportunities'
+        AND column_name = 'last_movement_at'
+    `;
+    expect(columns).toEqual([{ column_name: "last_movement_at", is_nullable: "YES" }]);
+
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'opportunities_workspace_id_last_movement_at_open_idx'
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "opportunities_workspace_id_last_movement_at_open_idx",
+        predicate:
+          "((status = 'OPEN'::opportunity_status) AND (merged_into_opportunity_id IS NULL))"
+      }
+    ]);
+  });
+
+  it("deduplicates only the two ingestion timeline variants, and allows repeated movement facts", async () => {
+    const indexes = await client.$queryRaw<
+      Array<{ index_name: string; is_unique: boolean; predicate: string | null }>
+    >`
+      SELECT
+        class.relname::text AS index_name,
+        index.indisunique AS is_unique,
+        pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'opportunity_timeline_events_ingestion_dedupe_idx'
+    `;
+    expect(indexes).toEqual([
+      {
+        index_name: "opportunity_timeline_events_ingestion_dedupe_idx",
+        is_unique: true,
+        predicate:
+          "((type = ANY (ARRAY['RETRANSMISSION_RECEIVED'::opportunity_timeline_event_type, 'SUBMISSION_REENTERED'::opportunity_timeline_event_type])) AND (integration_event_id IS NOT NULL))"
+      }
+    ]);
+
+    const table_unique = await client.$queryRaw<Array<{ constraint_name: string }>>`
+      SELECT con.conname::text AS constraint_name
+      FROM pg_constraint AS con
+      JOIN pg_class AS rel ON rel.oid = con.conrelid
+      WHERE rel.relname = 'opportunity_timeline_events'
+        AND con.contype = 'u'
+    `;
+    expect(table_unique).toEqual([]);
+
+    await expect(
+      client.opportunityTimelineEvent.create({
+        data: {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "RETRANSMISSION_RECEIVED",
+          lead_submission_id: lead_submission_a,
+          integration_event_id: integration_event_a,
+          occurred_at: new Date()
+        }
+      })
+    ).rejects.toThrow(/unique/i);
+
+    await client.opportunityTimelineEvent.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "STAGE_CHANGED",
+          occurred_at: new Date("2026-08-18T10:00:00.000Z")
+        },
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "STAGE_CHANGED",
+          occurred_at: new Date("2026-08-18T11:00:00.000Z")
+        }
+      ]
+    });
+    const movement = await client.opportunityTimelineEvent.count({
+      where: { opportunity_id: opportunity_a, type: "STAGE_CHANGED" }
+    });
+    expect(movement).toBe(2);
+  });
+
+  it("keeps assignment snapshots on timeline facts nullable, indexed, and bound to this workspace's members", async () => {
+    const columns = await client.$queryRaw<
+      Array<{ column_name: string; is_nullable: string }>
+    >`
+      SELECT column_name, is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'opportunity_timeline_events'
+        AND column_name IN ('assigned_user_id', 'previous_assigned_user_id')
+      ORDER BY column_name
+    `;
+    expect(columns).toEqual([
+      { column_name: "assigned_user_id", is_nullable: "YES" },
+      { column_name: "previous_assigned_user_id", is_nullable: "YES" }
+    ]);
+
+    const indexes = await client.$queryRaw<Array<{ index_name: string }>>`
+      SELECT class.relname::text AS index_name
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname IN (
+        'opportunity_timeline_events_workspace_id_assigned_user_id_idx',
+        'opportunity_timeline_events_workspace_id_previous_assigned__idx'
+      )
+      ORDER BY class.relname
+    `;
+    expect(indexes).toEqual([
+      { index_name: "opportunity_timeline_events_workspace_id_assigned_user_id_idx" },
+      { index_name: "opportunity_timeline_events_workspace_id_previous_assigned__idx" }
+    ]);
+
+    await expect(
+      client.opportunityTimelineEvent.create({
+        data: {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "ASSIGNED",
+          assigned_user_id: user_b,
+          occurred_at: new Date()
+        }
+      })
+    ).rejects.toThrow(/foreign key/i);
+
+    await expect(
+      client.opportunityTimelineEvent.create({
+        data: {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "REASSIGNED",
+          previous_assigned_user_id: user_b,
+          occurred_at: new Date()
+        }
+      })
+    ).rejects.toThrow(/foreign key/i);
+
+    const stored = await client.opportunityTimelineEvent.create({
+      data: {
+        workspace_id: workspace_a,
+        opportunity_id: opportunity_a,
+        type: "ASSIGNED",
+        assigned_user_id: user_a,
+        occurred_at: new Date()
+      }
+    });
+    expect(stored.assigned_user_id).toBe(user_a);
+    expect(stored.previous_assigned_user_id).toBeNull();
+  });
+
+  it("indexes unresolved notifications for the dashboard question, only in the migration", async () => {
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'notifications_workspace_id_detected_at_unresolved_idx'
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "notifications_workspace_id_detected_at_unresolved_idx",
+        predicate: "(resolved_at IS NULL)"
+      }
+    ]);
+  });
+
+  it("lets the opportunity-clock sweep find tenants without a tenant, and answers only with workspace_id", async () => {
+    const overdue_id = randomUUID();
+    const person_id = randomUUID();
+    await client.$executeRawUnsafe(`
+      INSERT INTO persons (id, workspace_id, name, updated_at)
+      VALUES ('${person_id}', '${workspace_a}', 'Overdue', CURRENT_TIMESTAMP)
+    `);
+    await client.$executeRawUnsafe(`
+      INSERT INTO opportunities (
+        id, workspace_id, person_id, pipeline_id, stage_id, area, arrived_at, updated_at
+      ) VALUES (
+        '${overdue_id}', '${workspace_a}', '${person_id}', '${carded_pipeline_a}',
+        '${carded_stage_a}', 'COMMERCIAL', CURRENT_TIMESTAMP - INTERVAL '3 hours', CURRENT_TIMESTAMP
+      )
+    `);
+
+    try {
+      const discovered = await client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+        return transaction.$queryRaw<Array<Record<string, unknown>>>`
+          SELECT *
+          FROM private.claim_overdue_opportunity_workspaces(CURRENT_TIMESTAMP)
+        `;
+      });
+
+      const row = discovered.find((candidate) => candidate.workspace_id === workspace_a);
+      expect(row).toBeDefined();
+      expect(Object.keys(row ?? {}).sort()).toEqual(["workspace_id"]);
+    } finally {
+      await client.$executeRawUnsafe(`DELETE FROM opportunities WHERE id = '${overdue_id}'`);
+      await client.$executeRawUnsafe(`DELETE FROM persons WHERE id = '${person_id}'`);
+    }
+  });
+
+  it("keeps the opportunity-clock resolver owned, scoped and executable only as declared", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private'
+        AND procedure.proname = 'claim_overdue_opportunity_workspaces'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: "marctco_private_definer",
+        search_path: ["search_path=pg_catalog"],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+  });
+
+  it("never lets the clock-sweep executor read a person, a contact or a payload", async () => {
+    const privileges = await client.$queryRaw<
+      Array<{
+        reads_opportunity_clock: boolean;
+        reads_person: boolean;
+        reads_phone: boolean;
+        reads_raw: boolean;
+        writes_opportunities: boolean;
+        writes_notifications: boolean;
+      }>
+    >`
+      SELECT
+        has_column_privilege('marctco_private_definer', 'public.opportunities', 'arrived_at', 'SELECT') AS reads_opportunity_clock,
+        has_table_privilege('marctco_private_definer', 'public.persons', 'SELECT') AS reads_person,
+        has_table_privilege('marctco_private_definer', 'public.person_phones', 'SELECT') AS reads_phone,
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'raw', 'SELECT') AS reads_raw,
+        has_table_privilege('marctco_private_definer', 'public.opportunities', 'UPDATE') AS writes_opportunities,
+        has_table_privilege('marctco_private_definer', 'public.notifications', 'UPDATE') AS writes_notifications
+    `;
+    expect(privileges).toEqual([
+      {
+        reads_opportunity_clock: true,
+        reads_person: false,
+        reads_phone: false,
+        reads_raw: false,
+        writes_opportunities: false,
+        writes_notifications: false
+      }
     ]);
   });
 });

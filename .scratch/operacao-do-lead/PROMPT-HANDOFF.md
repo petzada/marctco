@@ -31,7 +31,7 @@ Os tickets **08** e **09** nasceram depois da implementação de 01–07. São t
 - [08 — Empresa agrupa equipes](./issues/08-empresa-agrupa-equipes.md) — [ADR-0029](../../docs/adr/0029-empresa-e-agrupamento-de-equipe.md). Independente do 09. Fazer **antes** de a Direção criar muitas tags.
 - [09 — Supervisor não alcança Supervisor](./issues/09-supervisor-nao-alcanca-supervisor.md) — [ADR-0028](../../docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md). Corrige o conjunto do time que o ticket 05 implementou. Fazer **antes** de cadastrar um segundo Supervisor no piloto: com um Supervisor por tag o defeito não se manifesta; com dois, um alcança o lead do outro sem erro nenhum.
 
-A **Fase 3 · Tempo** segue em `docs/fase-3-spec-e-tickets` e não espera 08/09.
+A **Fase 3 · Tempo** está **entregue** — spec e fechamento em [`.scratch/tempo/`](../tempo/) — e não espera 08/09. Próxima construção: **Fase 4 · Canal** no [plano de construção](../../docs/plano-de-construcao.md).
 
 Prova humana restante da Fase 2: [`.scratch/fechamento-fases-0-2.md`](../fechamento-fases-0-2.md) etapa B item 3 — passada visual de Meus leads depois do [PR #47](https://github.com/petzada/marctco/pull/47).
 

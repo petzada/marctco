@@ -2,19 +2,31 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import type { FinancingType, IdentityConflictResolution, LeadDetail, LeadReviewDetail } from "@marctco/db";
-import { FINANCING_TYPES, markersFor, type Marker, type PossibleDuplicateResolution } from "@marctco/domain";
+import type { FinancingType, IdentityConflictResolution, LeadActivity, LeadDetail, LeadReviewDetail, LeadTimelinePage } from "@marctco/db";
+import {
+  FINANCING_TYPES,
+  firstContactSla,
+  markersFor,
+  stagnation,
+  type Marker,
+  type PossibleDuplicateResolution,
+  type ResolvedWorkspaceSettings
+} from "@marctco/domain";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { FieldError, FieldLabel, TextInput } from "../ui/field";
 import { StatusBadge, type StatusBadgeTone } from "../ui/status-badge";
 import { markerPresentation } from "../../lib/leads/markers";
-import { formatArrivedAt, formatInstallmentAmount } from "../../lib/leads/row-view-model";
+import { formatArrivedAt, formatInstallmentAmount, waitCaption } from "../../lib/leads/row-view-model";
+import { LeadCardActivities, type ActivityAssigneeOption } from "./lead-card-activities";
+import { LeadCardTimeline } from "./lead-card-timeline";
 
 const MARKER_TONE: Readonly<Record<Marker, StatusBadgeTone>> = {
   MISSING_PHONE: "warning",
   IDENTITY_CONFLICT: "danger",
-  POSSIBLE_DUPLICATE: "info"
+  POSSIBLE_DUPLICATE: "info",
+  FIRST_CONTACT_SLA_BREACHED: "danger",
+  STAGNANT: "warning"
 };
 
 const FINANCING_TYPE_LABELS: Readonly<Record<FinancingType, string>> = {
@@ -36,6 +48,12 @@ const selectClassName =
 export interface LeadCardContentProps {
   readonly lead: LeadDetail;
   readonly slug: string;
+  readonly currentUserId: string;
+  readonly activities: readonly LeadActivity[];
+  readonly timeline: LeadTimelinePage;
+  readonly assignees: readonly ActivityAssigneeOption[];
+  readonly clockSettings: ResolvedWorkspaceSettings;
+  readonly nowIso: string;
 }
 
 /**
@@ -45,13 +63,38 @@ export interface LeadCardContentProps {
  * identity conflict get resolved; there is no "excluir duplicado" anywhere
  * in this file (ADR-0007).
  */
-export function LeadCardContent({ lead, slug }: LeadCardContentProps) {
+export function LeadCardContent({
+  lead,
+  slug,
+  currentUserId,
+  activities,
+  timeline,
+  assignees,
+  clockSettings,
+  nowIso
+}: LeadCardContentProps) {
   // The same `markersFor` the row and the comparison read from — the card
   // never re-derives "what does this lead have" on its own (ADR-0018). The
   // resolution panels below still read `lead.reviews` directly, because they
   // need the full review record (candidates, related card), not just which
   // marker kind is present.
-  const markers = markersFor({ missing_phone: lead.missing_phone }, lead.reviews);
+  const sla = firstContactSla({
+    arrived_at: lead.arrived_at,
+    first_contact_at: lead.first_contact_at,
+    closed_at: lead.closed_at,
+    status: lead.status,
+    settings: clockSettings,
+    now: new Date(nowIso)
+  });
+  const idle = stagnation({
+    arrived_at: lead.arrived_at,
+    last_movement_at: lead.last_movement_at,
+    status: lead.status,
+    merged_into_opportunity_id: null,
+    settings: clockSettings,
+    now: new Date(nowIso)
+  });
+  const markers = markersFor({ missing_phone: lead.missing_phone }, lead.reviews, sla, idle);
 
   return (
     <div className="grid gap-lg">
@@ -67,6 +110,11 @@ export function LeadCardContent({ lead, slug }: LeadCardContentProps) {
         </div>
         <p className="mt-xxs text-body-sm text-ink-muted">
           Chegou em <span className="tabular-nums">{formatArrivedAt(lead.arrived_at)}</span>
+        </p>
+        <p className="mt-xxs text-body-sm text-ink-muted">
+          <span className="tabular-nums">
+            {waitCaption({ sla, first_contact_at: lead.first_contact_at, status: lead.status })}
+          </span>
         </p>
       </section>
 
@@ -100,6 +148,16 @@ export function LeadCardContent({ lead, slug }: LeadCardContentProps) {
           <IdentityConflictPanel key={review.id} review={review} slug={slug} />
         )
       )}
+
+      <LeadCardTimeline timeline={timeline} />
+
+      <LeadCardActivities
+        activities={activities}
+        assignees={assignees}
+        currentUserId={currentUserId}
+        opportunityId={lead.opportunity_id}
+        slug={slug}
+      />
 
       <LeadEditForm lead={lead} slug={slug} />
     </div>

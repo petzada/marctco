@@ -1,7 +1,10 @@
 "use client";
 
+import { CalendarBlankIcon } from "@phosphor-icons/react/CalendarBlank";
+import { ChartBarIcon } from "@phosphor-icons/react/ChartBar";
 import { ColumnsIcon } from "@phosphor-icons/react/Columns";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
+import { GlobeSimpleIcon } from "@phosphor-icons/react/GlobeSimple";
 import { HouseIcon } from "@phosphor-icons/react/House";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { SignOutIcon } from "@phosphor-icons/react/SignOut";
@@ -16,6 +19,7 @@ interface WorkspaceShellProps {
   readonly workspaceName: string;
   readonly roleLabel: string;
   readonly canManageIntegrations: boolean;
+  readonly canManageSettings: boolean;
   readonly canReadTeam: boolean;
   /**
    * Whether this profile attends leads. The item is absent for Gestão and
@@ -29,6 +33,12 @@ interface WorkspaceShellProps {
    * of scope as Gestão on the board (ADR-0015).
    */
   readonly seesLeadsTable: boolean;
+  /**
+   * Whether this profile has the operational Dashboard. Absent for the
+   * ATTENDANT: the route refuses, hiding the item is not access control
+   * (ADR-0015).
+   */
+  readonly canReadDashboard: boolean;
 }
 
 interface NavigationProps {
@@ -45,8 +55,10 @@ export function WorkspaceShell({
   roleLabel,
   canReadTeam,
   canManageIntegrations,
+  canManageSettings,
   attendsLeads,
-  seesLeadsTable
+  seesLeadsTable,
+  canReadDashboard
 }: WorkspaceShellProps) {
   const pathname = usePathname();
   const mobileMenu = useRef<HTMLDetailsElement>(null);
@@ -92,8 +104,31 @@ export function WorkspaceShell({
           },
           {
             href: `/workspace/${slug}/integrations/landing-page`,
+            icon: <GlobeSimpleIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Landing page"
+          }
+        ]
+      : []),
+    ...(canManageSettings
+      ? [
+          {
+            href: `/workspace/${slug}/settings`,
             icon: <GearSixIcon aria-hidden="true" size={20} weight="regular" />,
             label: "Configurações"
+          }
+        ]
+      : []),
+    {
+      href: `/workspace/${slug}/agenda`,
+      icon: <CalendarBlankIcon aria-hidden="true" size={20} weight="regular" />,
+      label: "Agenda"
+    },
+    ...(canReadDashboard
+      ? [
+          {
+            href: `/workspace/${slug}/dashboard`,
+            icon: <ChartBarIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Dashboard"
           }
         ]
       : [])

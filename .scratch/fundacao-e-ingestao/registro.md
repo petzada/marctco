@@ -457,7 +457,6 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
 - **Branch de hardening:** `fix/wave-review-ia-configuracoes`, sem push direto
   para `main`; entrega pelo fluxo `pnpm ship`.
 
-<<<<<<< HEAD
 ## Ticket 12 — Tela de Leads — CONCLUÍDO
 
 - **O que foi construído:** `/workspace/:slug/leads` — tabela paginada por
@@ -589,6 +588,10 @@ Nada novo. Continua pendente o que já estava: marcar um usuário apto em `app_m
   por isso reusa o executor em vez de criar um. O âncora existe para a varredura
   abrir a transação com um `JobContext` real, evitando um terceiro tipo de
   `AccessContext` para o único processo que toca todos os tenants.
+  **Supersessão 2026-08-19:** o [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md)
+  fecha a lista em seis; o [ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)
+  torna a origem do `JobContext` uma união, e o âncora deixa de ser o único
+  caminho para manutenção.
 - **Um defeito real que o ticket revelou:** o BullMQ recusa adicionar um job
   cujo id já existe, e o id é derivado do evento. Job terminado guarda esse id —
   completo por 24 h, falho para sempre, porque `removeOnFail: false` mantém a

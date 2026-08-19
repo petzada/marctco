@@ -15,7 +15,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Workspace | `Workspace` | Fronteira do **dono**, não “uma assessoria” nem a pessoa jurídica do grupo. Campanha exclusiva não abre tenant ([ADR-0030](./0030-workspace-e-fronteira-do-dono.md), emendando o [ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)) |
 | Associação ao workspace | `WorkspaceMember` | Onde vive o perfil de acesso e o `status` do vínculo. **Nunca** `Membership` solto nem `User` do workspace |
 | Perfil de acesso | `WorkspaceMember.role` | `ATTENDANT \| SUPERVISOR \| MANAGER \| OWNER` — quatro, e nenhum a mais ([ADR-0015](./0015-perfis-de-acesso-e-escopo.md)) |
-| Contexto de acesso | `AccessContext` = `UserContext \| JobContext` | `UserContext`: `workspace_id` + `user_id` + `role`, construído somente por `resolveUserContextForSlug` após validar a associação. `JobContext`: `workspace_id` + `integration_event_id` — o worker não tem usuário nem papel ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md), [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). **Nunca** `Session` nem `RequestContext` |
+| Contexto de acesso | `AccessContext` = `UserContext \| JobContext` | `UserContext`: `workspace_id` + `user_id` + `role`, construído somente por `resolveUserContextForSlug` após validar a associação. `JobContext`: `workspace_id` + `origin: JobOrigin` — o job não tem usuário nem papel ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md), [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). **Nunca** `Session` nem `RequestContext`. **Emenda 2026-08-19:** a forma anterior era `workspace_id` + `integration_event_id` no topo; a origem virou união para caber a passada agendada sem fabricar evento âncora |
 | Provisionamento | `private.provision_workspace` | Workspace + vínculo do dono + funil padrão, num commit ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9) |
 | Tag | `Tag` | Catálogo do workspace, gerido na Equipe no mesmo gesto do cadastro. Nomeia o **time**, nunca a marca ([ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)). Na oportunidade fica **fora da Fase 2**; se nascer depois, é o mesmo catálogo e não computa escopo ([ADR-0020](./0020-tag-no-membro-define-o-time.md)) |
 | Tag no membro | `MemberTag` | Aplicação da tag ao `WorkspaceMember`. É o que computa o time de um `SUPERVISOR`. **Nunca** `Team` nem herança para a Oportunidade |
@@ -76,7 +76,7 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Motivo da resolução | `IntakeReview.resolution_reason` | Texto obrigatório nas três resoluções; nunca substitui a enumeração da decisão |
 | Oportunidade mesclada | `Opportunity.merged_into_opportunity_id` | Resultado de `SAME_FINANCING`; sai das vistas ativas sem exclusão física |
 | Pessoa mesclada | `Person.merged_into_person_id` | Resultado da resolução de `IDENTITY_CONFLICT`; preserva histórico e identificadores |
-| Evento da linha do tempo da Oportunidade | `OpportunityTimelineEvent` | Fato imutável; nesta fatia somente `RETRANSMISSION_RECEIVED \| SUBMISSION_REENTERED` |
+| Evento da linha do tempo da Oportunidade | `OpportunityTimelineEvent` | Fato imutável. Ingestão: `RETRANSMISSION_RECEIVED \| SUBMISSION_REENTERED`. Movimento (Fase 3 ticket 04): `STAGE_CHANGED \| ASSIGNED \| REASSIGNED \| RETURNED_TO_QUEUE \| ACTIVITY_CREATED \| ACTIVITY_COMPLETED`. Fato de movimento não tem evento de integração e não deduplica |
 | Handoff | `Handoff` | — |
 | Score de cabimento | `EligibilityScore` | "Cabimento" = admissibilidade da revisional |
 | Feature flag | `FeatureFlag` / `WorkspaceFlag` | Tabela `workspace_flags` |
@@ -121,6 +121,40 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Identificador do workspace na URL | `Workspace.slug` | UUIDv4, único. Não legível, não enumerável ([ADR-0012](./0012-contexto-de-tenant-na-url.md)) |
 | Origem comercial (handoff) | `source_opportunity_id` | — |
 | Motivo de perda | `loss_reason` | — |
+| Tipo da atividade | `ActivityType` | `CALL \| MESSAGE \| MEETING \| TASK`. `MESSAGE` cobre WhatsApp e e-mail sem antecipar a Fase 4; um valor `WHATSAPP` amarraria o tipo ao canal |
+| Situação da atividade | `ActivityStatus` | `OPEN \| DONE \| CANCELED`. Concluir prova atendimento; cancelar não |
+| SLA de primeiro contato | `WorkspaceSettings.first_contact_sla_minutes` | Minutos até a primeira evidência de atendimento. Anulável: nulo (ou linha ausente) resolve para o padrão do domínio, nunca desliga o relógio. Sem `first_contact_trigger` nesta fase |
+| Limite de estagnação | `WorkspaceSettings.stagnation_days` | Dias sem movimento. Anulável pela mesma regra do SLA |
+| Primeiro contato | `Opportunity.first_contact_at` | Instante da primeira evidência de atendimento. Anulável; escrito uma vez com `WHERE first_contact_at IS NULL`. Nesta fase a evidência é a primeira Atividade concluída; a Fase 4 preenche a mesma coluna com a mensagem de WhatsApp |
+| Fechamento | `Opportunity.closed_at` | Instante em que a Oportunidade passa a `WON` ou `LOST`. Anulável enquanto `OPEN`; obrigatório quando fechada (`CHECK` no banco). Encerra o relógio de SLA sem primeiro contato. A operação de concluir atendimento da Fase 6 preenche; caminhos que já fecham o card (ex.: arquivar spam) também gravam |
+| Estado de SLA de primeiro contato | `FirstContactSlaState: PENDING \| MET \| BREACHED` | Função pura `firstContactSla` em `packages/domain`. Relógio corrido. `WON`/`LOST` sem contato nunca é `MET` |
+| Duração da espera de primeiro contato | `FirstContactSla.duration_ms` | Milissegundos corridos de `arrived_at` até `first_contact_at`, ou até `closed_at` quando `WON`/`LOST` sem contato, ou até `now` enquanto `OPEN` sem contato |
+| Marcador de SLA estourado | `Marker = … \| FIRST_CONTACT_SLA_BREACHED` | `markersFor` passa a receber o estado de SLA e devolve o estourado como mais um marcador. Os contadores do topo da tabela **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
+| Último movimento | `Opportunity.last_movement_at` | Carimbo do último movimento do lead. Anulável; backfill para `arrived_at` na migration, para que lead nunca tocado seja o mais parado e não o menos. Editar campo, ler o lead e retransmissão inerte **não** escrevem |
+| Fato de ingestão na linha do tempo | `OpportunityTimelineEvent.integration_event_id` | Obrigatório só nas duas variantes de ingestão. Anulável a partir do ticket 04: fato de movimento nasce sem evento de integração. A unicidade `(workspace_id, type, integration_event_id)` é índice parcial sobre `RETRANSMISSION_RECEIVED` e `SUBMISSION_REENTERED` |
+| Envio do fato de ingestão | `OpportunityTimelineEvent.lead_submission_id` | Obrigatório só nas duas variantes de ingestão. Anulável no fato de movimento, que não tem EnvioLead |
+| Tipo do fato de movimento | `OpportunityTimelineEventType` | `STAGE_CHANGED` (mover etapa), `ASSIGNED` (atribuir), `REASSIGNED` (reatribuir), `RETURNED_TO_QUEUE` (devolver à fila no desatrelamento), `ACTIVITY_CREATED` (marcar atividade nova — movimento sem ser atendimento), `ACTIVITY_COMPLETED` (concluir atividade) |
+| Destinatário do fato de atribuição | `OpportunityTimelineEvent.assigned_user_id` | Quem recebeu o lead naquele fato. Preenchido em `ASSIGNED` e `REASSIGNED`. Anulável nos fatos anteriores à migration e nos demais tipos. Não é a coluna homônima da Oportunidade |
+| Responsável anterior do fato | `OpportunityTimelineEvent.previous_assigned_user_id` | Quem saiu naquele fato. Preenchido em `REASSIGNED` e `RETURNED_TO_QUEUE`. Anulável nos fatos anteriores à migration e nos demais tipos. Não é a coluna homônima da Oportunidade |
+| Estado de estagnação | `StagnationState: MOVING \| STAGNANT` | Função pura `stagnation` em `packages/domain`. Ancora em `arrived_at` quando `last_movement_at` é nulo. `WON`/`LOST`/mesclado nunca é `STAGNANT` |
+| Duração sem movimento | `Stagnation.duration_ms` | Milissegundos corridos do âncora (`last_movement_at` ou `arrived_at`) até `now` |
+| Marcador de lead parado | `Marker = … \| STAGNANT` | `markersFor` recebe o estado de estagnação ao lado do de SLA e devolve o parado como mais um marcador. Os contadores do topo **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
+| Origem do job | `JobOrigin` | União discriminada `{ type: "integration_event", integration_event_id } \| { type: "scheduled_sweep", sweep: ScheduledSweepName }`. O `type` evita colidir com o `kind` do `AccessContext` (`"user" \| "job"`). Evento de integração é linha real do tenant; passada agendada é nome fechado — nunca âncora fabricada ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md)) |
+| Passada agendada | `ScheduledSweepName` | `PAYLOAD_EXPIRY \| OPPORTUNITY_CLOCK`. `PAYLOAD_EXPIRY` é a retenção de payload ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)); `OPPORTUNITY_CLOCK` é a varredura dos relógios de SLA e estagnação. Lista fechada: nome novo entra aqui antes do código |
+| Descoberta de workspaces com relógio vencido | `private.claim_overdue_opportunity_workspaces` | Sexta função da lista fechada ([ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). Devolve somente `workspace_id`. Não é `provision_workspace` |
+| Dashboard operacional | `getOperationalDashboard` | Uma operação nomeada devolve tiles e séries no escopo do perfil. Atendente é recusado. Sem `where` montado pela tela |
+| Janela recente do Dashboard | `OPERATIONAL_DASHBOARD_RECENT_DAYS` | 14 dias civis inclusive o corrente, fuso `OPERATIONAL_DASHBOARD_TIME_ZONE` (`America/Sao_Paulo`) |
+| Série de chegadas | `ArrivalDayPoint` | Contagem de Oportunidades cuja `arrived_at` cai naquele dia da janela; mescladas fora |
+| Série de aderência ao SLA | `SlaAdherenceDayPoint` | Por dia de chegada: `MET` / (`MET` + `BREACHED`) via `firstContactSla`. `PENDING` não entra no denominador; dia sem resultado tem `adherence` nulo |
+| Série de etapa | `OpenByStagePoint` | Leads `OPEN` não mesclados no funil comercial padrão, uma barra por etapa na ordem de `position`, inclusive zero |
+| Cor categórica de série | `categoricalChartToken` | `{colors.chart-1}`…`{colors.chart-8}` com overflow `index modulo 8`. Estado semântico não ocupa slot |
+| Notificação | `Notification` | Aviso persistido na Oportunidade. Sem destinatário; quem enxerga é o escopo de perfil. Nome genérico de propósito: a Fase 6 acrescenta o aviso de atendimento concluído no mesmo model — nunca `SlaAlert` |
+| Tipo da notificação | `NotificationType` | `FIRST_CONTACT_SLA_BREACHED \| STAGNANT` nesta fase |
+| Detectada em | `Notification.detected_at` | Primeira passada que viu a causa. Não se move nas passadas seguintes |
+| Última detecção | `Notification.last_detected_at` | Atualizado por `ON CONFLICT` a cada passada em que a causa ainda vale |
+| Lida em | `Notification.read_at` | Do aviso, não de cada leitor. Nulo até alguém marcar. Marcar como lida **não** resolve |
+| Quem marcou como lida | `Notification.read_by_user_id` | Usuário do `UserContext` que marcou; nulo enquanto não lida. Completo junto de `read_at` |
+| Resolvida em | `Notification.resolved_at` | Escrito quando a causa acaba. Resolver **não** exige leitura. Nulo enquanto a causa permanece |
 
 ## Regras
 

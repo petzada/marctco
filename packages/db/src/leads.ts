@@ -10,11 +10,14 @@ import {
   normalizeDecimalAmount,
   normalizeEmail,
   readPhone,
+  resolveWorkspaceSettings,
   type AssignmentRole,
-  type Marker
+  type LeadClockFilter,
+  type TableMarker
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { stampOpportunityMovement } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
 import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext, type ScopedTransactionClient } from "./internal/scoped-transaction.js";
@@ -64,6 +67,10 @@ export interface LeadListRow {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
+  readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly assigned_user_name: string | null;
@@ -81,7 +88,13 @@ export interface ListLeadsOptions {
   readonly limit?: number;
   readonly after?: LeadListCursor;
   /** Filters the table in place — the same question a counter answers. */
-  readonly marker?: Marker;
+  readonly marker?: TableMarker;
+  /**
+   * SLA-breached or stagnant — the Dashboard tile's destination filter.
+   * Uses the same workspace clocks as `firstContactSla` / `stagnation`.
+   */
+  readonly clock?: LeadClockFilter;
+  readonly now?: Date;
   readonly responsible_user_id?: string;
   readonly unassigned?: boolean;
   readonly team?: string;
@@ -101,6 +114,10 @@ interface LeadListRawRow {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
+  readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly assigned_user_name: string | null;
@@ -114,7 +131,7 @@ interface LeadListRawRow {
  * this marker", the counter's question — it never calls `markersFor`, which
  * answers "what does this one lead have" (ADR-0018).
  */
-function markerFilterSql(marker: Marker | undefined): Prisma.Sql {
+function markerFilterSql(marker: TableMarker | undefined): Prisma.Sql {
   switch (marker) {
     case undefined:
       return Prisma.empty;
@@ -148,6 +165,60 @@ function markerFilterSql(marker: Marker | undefined): Prisma.Sql {
   }
 }
 
+interface SettingsRow {
+  readonly first_contact_sla_minutes: number | null;
+  readonly stagnation_days: number | null;
+}
+
+function toStoredSettings(row: SettingsRow | undefined): {
+  first_contact_sla_minutes: number | null;
+  stagnation_days: number | null;
+} | null {
+  if (!row) {
+    return null;
+  }
+  return {
+    first_contact_sla_minutes: row.first_contact_sla_minutes,
+    stagnation_days: row.stagnation_days
+  };
+}
+
+/**
+ * SQL mirror of `firstContactSla` / `stagnation` for OPEN leads so the
+ * Dashboard tile and the paginated table answer the same question.
+ */
+function clockFilterSql(
+  clock: LeadClockFilter,
+  settings: { readonly first_contact_sla_minutes: number; readonly stagnation_days: number },
+  now: Date
+): Prisma.Sql {
+  switch (clock) {
+    case "sla-breached":
+      return Prisma.sql`
+        AND opportunity.status = 'OPEN'::opportunity_status
+        AND (
+          (
+            opportunity.first_contact_at IS NULL
+            AND opportunity.arrived_at <= ${now}::timestamptz - (${settings.first_contact_sla_minutes} * interval '1 minute')
+          )
+          OR (
+            opportunity.first_contact_at IS NOT NULL
+            AND opportunity.first_contact_at - opportunity.arrived_at >= (${settings.first_contact_sla_minutes} * interval '1 minute')
+          )
+        )
+      `;
+    case "stagnant":
+      return Prisma.sql`
+        AND opportunity.status = 'OPEN'::opportunity_status
+        AND COALESCE(opportunity.last_movement_at, opportunity.arrived_at) <= ${now}::timestamptz - (${settings.stagnation_days} * interval '1 day')
+      `;
+    default: {
+      const unhandled: never = clock;
+      throw new Error(`Unhandled clock filter: ${JSON.stringify(unhandled)}`);
+    }
+  }
+}
+
 function toLeadListRow(row: LeadListRawRow): LeadListRow {
   return {
     opportunity_id: row.opportunity_id,
@@ -163,6 +234,10 @@ function toLeadListRow(row: LeadListRawRow): LeadListRow {
     form_id: row.form_id,
     form_name: row.form_name,
     arrived_at: row.arrived_at,
+    first_contact_at: row.first_contact_at,
+    closed_at: row.closed_at,
+    last_movement_at: row.last_movement_at,
+    status: row.status as LeadListRow["status"],
     missing_phone: row.missing_phone,
     assigned_user_id: row.assigned_user_id,
     assigned_user_name: row.assigned_user_name,
@@ -224,8 +299,23 @@ export async function listLeads(
     ? Prisma.sql`AND (opportunity.arrived_at, opportunity.id) < (${after.arrived_at}::timestamptz, ${after.id}::uuid)`
     : Prisma.empty;
 
-  const rows = await withAccessContext(prisma, context, async (transaction) =>
-    transaction.$queryRaw<LeadListRawRow[]>(Prisma.sql`
+  const rows = await withAccessContext(prisma, context, async (transaction) => {
+    let clockClause = Prisma.empty;
+    if (options.clock) {
+      const now = options.now ?? new Date();
+      if (Number.isNaN(now.getTime())) {
+        throw new Error("now must be a valid instant when filtering by clock");
+      }
+      const settingsRows = await transaction.$queryRaw<SettingsRow[]>`
+        SELECT first_contact_sla_minutes, stagnation_days
+        FROM workspace_settings
+        WHERE workspace_id = ${context.workspace_id}::uuid
+      `;
+      const settings = resolveWorkspaceSettings(toStoredSettings(settingsRows[0]));
+      clockClause = clockFilterSql(options.clock, settings, now);
+    }
+
+    return transaction.$queryRaw<LeadListRawRow[]>(Prisma.sql`
       SELECT
         opportunity.id AS opportunity_id,
         opportunity.person_id,
@@ -240,6 +330,10 @@ export async function listLeads(
         opportunity.form_id,
         opportunity.form_name,
         opportunity.arrived_at,
+        opportunity.first_contact_at,
+        opportunity.closed_at,
+        opportunity.last_movement_at,
+        opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
         assignee.display_name AS assigned_user_name,
@@ -280,12 +374,13 @@ export async function listLeads(
         ${opportunityScopeSql(context, "opportunity")}
         ${cursorClause}
         ${markerFilterSql(options.marker)}
+        ${clockClause}
         ${responsibleFilter}
         ${teamFilter}
       ORDER BY opportunity.arrived_at DESC, opportunity.id DESC
       LIMIT ${limit}::integer
-    `)
-  );
+    `);
+  });
 
   return rows.map(toLeadListRow);
 }
@@ -446,6 +541,10 @@ export interface LeadDetail {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
+  readonly status: "OPEN" | "WON" | "LOST";
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly source: LeadSource | null;
@@ -467,6 +566,10 @@ interface LeadCoreRawRow {
   readonly form_id: string | null;
   readonly form_name: string | null;
   readonly arrived_at: Date;
+  readonly first_contact_at: Date | null;
+  readonly closed_at: Date | null;
+  readonly last_movement_at: Date | null;
+  readonly status: string;
   readonly missing_phone: boolean;
   readonly assigned_user_id: string | null;
   readonly source: string | null;
@@ -532,6 +635,10 @@ export async function getLead(
         opportunity.form_id,
         opportunity.form_name,
         opportunity.arrived_at,
+        opportunity.first_contact_at,
+        opportunity.closed_at,
+        opportunity.last_movement_at,
+        opportunity.status::text AS status,
         opportunity.missing_phone,
         opportunity.assigned_user_id,
         origin.source::text AS source
@@ -695,6 +802,10 @@ export async function getLead(
       form_id: core.form_id,
       form_name: core.form_name,
       arrived_at: core.arrived_at,
+      first_contact_at: core.first_contact_at,
+      closed_at: core.closed_at,
+      last_movement_at: core.last_movement_at,
+      status: core.status as LeadDetail["status"],
       missing_phone: core.missing_phone,
       assigned_user_id: core.assigned_user_id,
       source: (core.source as LeadSource | null) ?? null,
@@ -847,6 +958,11 @@ export async function assignLeads(
       RETURNING opportunity.id AS opportunity_id
     `);
     const claimedIds = new Set(claimed.map((row) => row.opportunity_id));
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: claimed.map((row) => row.opportunity_id),
+      type: "ASSIGNED"
+    });
     const refusedIds = opportunity_ids.filter((id) => !claimedIds.has(id));
     const current = refusedIds.length === 0 ? [] : await transaction.$queryRaw<Array<{
       opportunity_id: string; assigned_user_id: string | null; assigned_user_name: string | null;
@@ -978,6 +1094,11 @@ export async function reassignLeads(
       RETURNING opportunity.id AS opportunity_id
     `);
     const claimedIds = new Set(claimed.map((row) => row.opportunity_id));
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: claimed.map((row) => row.opportunity_id),
+      type: "REASSIGNED"
+    });
     const conflicted = eligible.filter((item) => !claimedIds.has(item.opportunity_id));
     const current = conflicted.length === 0 ? [] : await transaction.$queryRaw<Array<{
       opportunity_id: string; assigned_user_id: string | null; assigned_user_name: string | null;

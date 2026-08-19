@@ -150,8 +150,12 @@ export async function inspectTimeline(
   workspace_id: string,
   opportunity_id: string
 ): Promise<InspectedTimelineEvent[]> {
-  return inspector().opportunityTimelineEvent.findMany({
-    where: { workspace_id, opportunity_id },
+  const rows = await inspector().opportunityTimelineEvent.findMany({
+    where: {
+      workspace_id,
+      opportunity_id,
+      type: { in: ["RETRANSMISSION_RECEIVED", "SUBMISSION_REENTERED"] }
+    },
     select: {
       type: true,
       opportunity_id: true,
@@ -160,6 +164,22 @@ export async function inspectTimeline(
       occurred_at: true
     },
     orderBy: [{ occurred_at: "asc" }, { id: "asc" }]
+  });
+  return rows.map((row) => {
+    if (
+      (row.type !== "RETRANSMISSION_RECEIVED" && row.type !== "SUBMISSION_REENTERED") ||
+      row.lead_submission_id === null ||
+      row.integration_event_id === null
+    ) {
+      throw new Error("ingestion timeline facts must keep submission and integration event ids");
+    }
+    return {
+      type: row.type,
+      opportunity_id: row.opportunity_id,
+      lead_submission_id: row.lead_submission_id,
+      integration_event_id: row.integration_event_id,
+      occurred_at: row.occurred_at
+    };
   });
 }
 

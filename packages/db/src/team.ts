@@ -6,6 +6,7 @@ import {
   type WorkspaceRole
 } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
+import { stampOpportunityMovement } from "./internal/opportunity-movement.js";
 import {
   type ScopedTransactionClient,
   withAccessContext
@@ -374,7 +375,7 @@ export async function detachWorkspaceMember(
       throw new Error("The workspace OWNER cannot be detached");
     }
 
-    const queued_open_opportunities = await transaction.$executeRaw`
+    const queued = await transaction.$queryRaw<Array<{ opportunity_id: string }>>`
       UPDATE opportunities
       SET
         previous_assigned_user_id = assigned_user_id,
@@ -382,7 +383,14 @@ export async function detachWorkspaceMember(
       WHERE workspace_id = ${context.workspace_id}::uuid
         AND status = 'OPEN'::opportunity_status
         AND assigned_user_id = ${target_user_id}::uuid
+      RETURNING id AS opportunity_id
     `;
+    await stampOpportunityMovement(transaction, {
+      workspace_id: context.workspace_id,
+      opportunity_ids: queued.map((row) => row.opportunity_id),
+      type: "RETURNED_TO_QUEUE"
+    });
+    const queued_open_opportunities = queued.length;
     await transaction.$executeRaw`
       UPDATE workspace_members
       SET status = 'DETACHED'::workspace_member_status

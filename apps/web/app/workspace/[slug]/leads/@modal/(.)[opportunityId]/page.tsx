@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getLead } from "@marctco/db";
+import { getLead, getWorkspaceSettings, listLeadActivities, listLeadTimeline, listTeam } from "@marctco/db";
 import { LeadCardContent } from "../../../../../../components/leads/lead-card-content";
 import { LeadCardModalShell } from "../../../../../../components/leads/lead-card-modal-shell";
 import { resolveWorkspaceAccess } from "../../../../../../lib/workspace-access";
@@ -7,9 +7,8 @@ import { resolveWorkspaceAccess } from "../../../../../../lib/workspace-access";
 /**
  * Intercepts a `Link` navigation to `/workspace/:slug/leads/:opportunityId`
  * from inside the Leads list and renders it as an overlay instead of a full
- * page swap — still a Server Component calling `getLead` directly, still no
- * endpoint for the read (ADR-0013). A hard refresh or a pasted link falls
- * through to the sibling `[opportunityId]/page.tsx` instead.
+ * page swap — still a Server Component calling named operations directly,
+ * still no endpoint for the read (ADR-0013).
  */
 export default async function LeadCardInterceptedModal({
   params
@@ -20,11 +19,30 @@ export default async function LeadCardInterceptedModal({
     notFound();
   }
 
+  const context = access.workspace.context;
   try {
-    const lead = await getLead(access.workspace.context, opportunityId);
+    const [lead, activities, timeline, teammates, clockSettings] = await Promise.all([
+      getLead(context, opportunityId),
+      listLeadActivities(context, opportunityId),
+      listLeadTimeline(context, opportunityId),
+      context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context),
+      getWorkspaceSettings(context)
+    ]);
     return (
       <LeadCardModalShell>
-        <LeadCardContent lead={lead} slug={slug} />
+        <LeadCardContent
+          activities={activities}
+          timeline={timeline}
+          assignees={teammates.map((member) => ({
+            user_id: member.user_id,
+            display_name: member.display_name?.trim() || member.email || "Sem nome"
+          }))}
+          clockSettings={clockSettings}
+          currentUserId={context.user_id}
+          lead={lead}
+          nowIso={new Date().toISOString()}
+          slug={slug}
+        />
       </LeadCardModalShell>
     );
   } catch {

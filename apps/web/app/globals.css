@@ -13,6 +13,7 @@
  *   {rounded.foo}     -> --radius-foo     -> rounded-foo
  *   {shadow.foo}      -> --shadow-foo     -> shadow-foo
  *   (content widths)  -> --max-width-foo  -> max-w-foo
+ *                       --min-width-foo  -> min-w-foo
  *
  * Widths get their own namespace rather than riding the spacing scale —
  * see "Content widths" below for the collision that forces it.
@@ -80,6 +81,20 @@
   --color-danger: #d70015;
   --color-danger-ink: #b3000f;
   --color-danger-surface: #fdecec;
+
+  /* Data visualization — DESIGN.md "Colors > Data visualization".
+   * Categorical sequence is derived separately from the semantic set.
+   * Axis/grid alias the surface ladder; they are not a third gray. */
+  --color-chart-1: #0066cc;
+  --color-chart-2: #8a4f24;
+  --color-chart-3: #1a7a78;
+  --color-chart-4: #6b3d91;
+  --color-chart-5: #c4a035;
+  --color-chart-6: #2c4a7c;
+  --color-chart-7: #9a5b7d;
+  --color-chart-8: #4a6b52;
+  --color-chart-axis: var(--color-ink-muted);
+  --color-chart-grid: var(--color-hairline);
 
   /* ---------------------------------------------------------------------
    * Typography — Font family
@@ -217,6 +232,7 @@
   --spacing-xxl: 48px;
   --spacing-section: 80px;
   --spacing-section-lg: 96px;
+  --spacing-chart-plot: 240px;
 
   /* ---------------------------------------------------------------------
    * Content widths
@@ -244,6 +260,7 @@
   --max-width-prose: 720px;
   --max-width-content: 1280px;
   --max-width-content-wide: 1440px;
+  --min-width-chart-track: 640px;
 
   /* ---------------------------------------------------------------------
    * Border radius
@@ -289,9 +306,11 @@
  * sync with it:
  *
  * - Motion and transition timing.
- * - Data visualization (categorical) palette — do not improvise one from
- *   the semantic success/warning/danger tones above.
  * - Density — table/card sizing is documented at one height only.
+ *
+ * The categorical dataviz palette is registered in DESIGN.md "Colors >
+ * Data visualization" and mirrored above as --color-chart-1..8 plus
+ * axis/grid aliases. Do not invent a ninth hue here.
  *
  * The surface-for-disclosure gap (popover/tooltip) is registered directly
  * in DESIGN.md's "Known Gaps" section, not here — see that file.
