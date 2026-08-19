@@ -4,7 +4,7 @@
 
 **Status:** accepted · 2026-08-04
 
-> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** o schema `private` passa a hospedar quatro funções de lista fechada. A função de associação do navegador usa `marctco_private_definer`; cada função futura precisa de executor técnico compatível com `FORCE RLS`, sem congelar seu ownership antes da migration que a cria.
+> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** o schema `private` hospeda a lista fechada de funções `SECURITY DEFINER` — seis desde a emenda de 2026-08-19 da Fase 3; a redação original deste bloco dizia quatro. A função de associação do navegador usa `marctco_private_definer`; cada função futura precisa de executor técnico compatível com `FORCE RLS`, sem congelar seu ownership antes da migration que a cria. A enumeração canônica vive no ADR-0019.
 
 ## Dono do schema
 
@@ -37,7 +37,7 @@ Com Docker local:
 3. **Expand/contract é regra dura.** Nunca `NOT NULL` sem default em um passo; nunca constraint única sem verificar duplicata antes; nunca remover coluna na mesma release que para de usá-la.
 4. Migrations rodam com a connection string do papel **owner**, distinta da do app — se forem a mesma, o `FORCE ROW LEVEL SECURITY` não protege nada.
 5. O seed (funil comercial padrão, com sua etapa `ENTRY` e sua `CLOSING`) é script de seed do Prisma, não migration.
-6. **O datamodel do Prisma se limita ao schema `public`.** `auth.*` pertence ao Supabase, e existe um terceiro schema, `private`, que hospeda as quatro funções `SECURITY DEFINER` da lista fechada do [ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9. O executor `NOLOGIN` delas, seus grants e policies mínimos também vivem em migration SQL, como especificado no [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md). `private` é criado e mantido por SQL escrito à mão dentro das migrations e **não** é declarado na datasource: o Prisma não o modela, não o gera e não o compara. Quem prova o conteúdo dele é o Seam 3.
+6. **O datamodel do Prisma se limita ao schema `public`.** `auth.*` pertence ao Supabase, e existe um terceiro schema, `private`, que hospeda as funções `SECURITY DEFINER` da lista fechada do [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) — seis desde 2026-08-19; a redação original apontava as quatro da regra 9 do [ADR-0006](./0006-rls-duas-camadas-guc-worker.md). O executor `NOLOGIN` delas, seus grants e policies mínimos também vivem em migration SQL. `private` é criado e mantido por SQL escrito à mão dentro das migrations e **não** é declarado na datasource: o Prisma não o modela, não o gera e não o compara. Quem prova o conteúdo dele é o Seam 3.
 7. **Drift check no CI:** `migrate diff` entre `schema.prisma` e o banco recém-migrado precisa retornar vazio. Sem ele, alguém edita o `schema.prisma` sem gerar a migration correspondente e o CI passa mentindo — erro que agente de código comete com frequência.
 
    **O que o drift check não cobre precisa ficar dito, senão ele vira falsa segurança:** ele compara o datamodel do Prisma com o banco, e o Prisma não modela policy, função, papel nem grant. Ou seja, **exatamente o SQL que carrega o modelo de segurança está fora do alcance dele** — uma policy derrubada à mão em produção mantém o drift check verde. Quem cobre essa superfície é o Seam 3, varrendo `pg_policies`, `pg_tables`, os atributos dos papéis e a lista de funções `SECURITY DEFINER`. As duas verificações não se substituem: uma olha o schema, a outra olha a segurança.

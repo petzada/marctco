@@ -1,10 +1,10 @@
 # Isolamento multi-tenant: duas camadas, GUC `app.workspace_id`, worker sob RLS
 
-O isolamento entre workspaces tem **duas camadas**: escopo explícito na aplicação é o caminho normal, e RLS no Postgres é a rede que transforma um filtro esquecido em zero linhas em vez de vazamento entre clientes. As policies de `marctco_app` e `marctco_worker` keiam num GUC `app.workspace_id` setado pelo servidor — nunca em `auth.uid()` — e o **worker roda sob RLS** como o app, com o claim setado por job. O executor `NOLOGIN` das quatro funções privadas é a exceção estreita definida pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md), não um papel de runtime. `service_role` fica restrito a migrations, ferramenta interna da marctco e inspeção de DLQ.
+O isolamento entre workspaces tem **duas camadas**: escopo explícito na aplicação é o caminho normal, e RLS no Postgres é a rede que transforma um filtro esquecido em zero linhas em vez de vazamento entre clientes. As policies de `marctco_app` e `marctco_worker` keiam num GUC `app.workspace_id` setado pelo servidor — nunca em `auth.uid()` — e o **worker roda sob RLS** como o app, com o claim setado por job. O executor `NOLOGIN` das funções privadas é a exceção estreita definida pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md), não um papel de runtime. `service_role` fica restrito a migrations, ferramenta interna da marctco e inspeção de DLQ.
 
 **Status:** accepted · 2026-08-04
 
-> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a regra 9 fecha em **cinco** funções desde a emenda de 2026-08-11 (a quinta é a descoberta da varredura de retenção, ticket 15) — quatro, incluindo a resolução de associação navegador → workspace; `FORCE RLS` exige um executor técnico `NOLOGIN` com policies/grants mínimos para que as funções privadas funcionem sem dar bypass ao app ou ao worker.
+> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a regra 9 fecha em **seis** funções desde a emenda de 2026-08-19 (era três neste ADR, quatro no 0019, cinco no ticket 15, seis na Fase 3 — a sexta é a descoberta da varredura de SLA e estagnação). `FORCE RLS` exige um executor técnico `NOLOGIN` com policies/grants mínimos para que as funções privadas funcionem sem dar bypass ao app ou ao worker. A enumeração canônica vive no ADR-0019.
 
 ## O problema que o stack doc não registra
 
@@ -21,7 +21,7 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
 `stack-recomendada.md` §2 diz "`service_role` só no servidor (app/worker)", sugerindo worker com bypass. Rejeitado: o worker é o ponto **mais** perigoso do sistema, não o menos — processa jobs de vários workspaces no mesmo processo, sem sessão de usuário. É o cenário exato da regra 3 do [ADR-0004](./0004-fronteira-flag-configuracao-estado.md). Dar bypass a ele remove a rede justamente onde a queda é mais provável.
 
-- O job carrega `workspace_id` e `integration_event_id`, ambos escritos pelo handler autenticado — **nunca** lidos de campo livre do payload do provedor.
+- O job de ingestão carrega `workspace_id` e o `integration_event_id` real, ambos escritos pelo handler autenticado — **nunca** lidos de campo livre do payload do provedor. A origem do `JobContext` é união: esse evento, ou uma passada agendada nomeada ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md), emendado em 2026-08-19). Isolamento continua sendo um workspace por transação.
 - Cada job abre transação, faz `SET LOCAL app.workspace_id`, e trabalha dentro dela.
 - Se o `IntegrationEvent` não pertencer àquele workspace, a RLS devolve zero linhas e o job falha alto: o isolamento vira também teste de consistência.
 
@@ -53,16 +53,16 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
 9. **`SECURITY DEFINER` só em schema privado, e a lista é fechada.** Existem consultas que precisam acontecer **antes** de haver tenant, e por isso não podem passar por policy keiada no GUC. Elas não justificam bypass para o app inteiro: cada uma vira uma função `SECURITY DEFINER` em schema `private`, com superfície mínima, `EXECUTE` revogado de todo papel que não seja o do app, `search_path` fixado e owner técnico `NOLOGIN` definido no ADR-0019. Policies para esse owner são por tabela/comando necessário; as policies de app/worker continuam no GUC.
 
-   São **quatro**, e nenhuma a mais:
+   A redação original desta regra enumerava **quatro**, e nenhuma a mais. O [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) é quem fecha a lista: cinco desde o ticket 15, **seis** desde 2026-08-19 (`claim_overdue_opportunity_workspaces`, só `workspace_id`, sem payload nem PII). A tabela abaixo é o recorte original; a enumeração vigente e o Seam 3 vivem naquele ADR.
 
    | Função | Por que não tem tenant | O que devolve |
    |---|---|---|
-| `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `workspace_id` |
-| `claim_pending_events` | O dispatcher procura pendência de todos os workspaces, sem sessão e sem job prévio | Só `(id, workspace_id)` — nunca `raw`, que carrega CPF e telefone |
-| `provision_workspace` | Cria o Workspace, o vínculo do primeiro membro e o funil padrão; o tenant ainda não existe | `workspace_id` |
-| `resolve_user_workspaces` | A sessão valida o slug contra `WorkspaceMember` antes de conhecer o `workspace_id` | Somente escolhas/associação do próprio usuário: `workspace_id`, `slug`, `name`, `role` |
+   | `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `workspace_id` |
+   | `claim_pending_events` | O dispatcher procura pendência de todos os workspaces, sem sessão e sem job prévio | Só `(id, workspace_id)` — nunca `raw`, que carrega CPF e telefone |
+   | `provision_workspace` | Cria o Workspace, o vínculo do primeiro membro e o funil padrão; o tenant ainda não existe | `workspace_id` |
+   | `resolve_user_workspaces` | A sessão valida o slug contra `WorkspaceMember` antes de conhecer o `workspace_id` | Somente escolhas/associação do próprio usuário: `workspace_id`, `slug`, `name`, `role` |
 
-   O que **devolvem** importa tanto quanto quem pode chamá-las: uma função sem tenant que devolvesse payload seria um vazamento cross-tenant com aparência de recurso. O Seam 3 enumera `SECURITY DEFINER` no banco e **reprova qualquer função fora desta lista** — sem isso, a lista é comentário, e uma quinta função entra sem ninguém notar.
+   O que **devolvem** importa tanto quanto quem pode chamá-las: uma função sem tenant que devolvesse payload seria um vazamento cross-tenant com aparência de recurso. O Seam 3 enumera `SECURITY DEFINER` no banco e **reprova qualquer função fora da lista do ADR-0019** — sem isso, a lista é comentário.
 
 10. **O app e o worker se recusam a subir com o papel errado.** Toda a defesa deste ADR depende de um valor numa variável de ambiente, e nenhuma das duas camadas olha para lá. O painel do Supabase entrega, pronta para copiar, a connection string do `postgres` — colá-la no Railway produz exatamente o cenário de abertura deste documento: RLS habilitada, policies escritas, isolamento zero, sem nenhum sinal de erro, com o CI inteiro verde.
 

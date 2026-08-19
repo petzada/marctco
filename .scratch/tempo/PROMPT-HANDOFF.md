@@ -43,7 +43,7 @@ Somente:
 
 O ticket 04 depende de 01, 02 e 03, todos aceitos. O ticket 06 também já está aceito, mas não desbloqueia outra fatia sozinho.
 
-Depois que o 04 for implementado, revisado e aceito, a fronteira será `[05, 07, 09]`. Antes de iniciar o 09, cumpra a parada humana obrigatória do `PROMPT-ORQUESTRACAO.md`: emendas do ADR-0019 e do ADR-0016/`CONTEXT.md`.
+Depois que o 04 for implementado, revisado e aceito, a fronteira será `[05, 07, 09]`. As emendas de ADR-0019 e ADR-0016/`CONTEXT.md` que o 09 exigia **já estão registradas** (2026-08-19); não há nova parada humana para reabri-las.
 
 ## Como retomar em outra sessão
 

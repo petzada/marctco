@@ -41,6 +41,8 @@ O varredor **não é peça nova**: é o mesmo mecanismo do botão "reprocessar" 
 
 **A lista fechada de funções privadas passou de quatro para cinco.** `private.claim_expired_payload_workspaces(cutoff)` devolve `(workspace_id, anchor_integration_event_id)` — menos do que a `claim_pending_events` — e não recebeu privilégio novo: cabe dentro das colunas que `marctco_private_definer` já lia. O Seam 3 passou a cobrar o contrato por varredura de **toda** função `SECURITY DEFINER` do schema, o que fecha a pendência carregada do ticket 03.
 
+> **Supersessão 2026-08-19.** O [ADR-0019](../../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) fecha a lista em **seis** (`claim_overdue_opportunity_workspaces`). O âncora desta quinta função é o contorno que o [ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md) emendado substitui pela origem discriminada; o retorno desta função permanece até o código da retenção acompanhar.
+
 **"Reprocessar" precisou de mais do que virar a coluna.** O BullMQ recusa adicionar um job cujo id já existe, e o id é derivado do evento: um job terminado — completo por 24h, falho para sempre — bloqueava a republicação. O evento voltava a `PENDING`, o dispatcher "publicava", marcava `DISPATCHED` e nada acontecia. O publicador passou a remover antes de adicionar; a nota está no [ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md).
 
 **A fila morta só é escrita quando o BullMQ esgota as tentativas**, e nunca por cima de evento `PROCESSED` (o lead já está no funil) ou `QUARANTINED` (é ação humana pendente, e rotulá-la de falha a tiraria da fila de quarentena *e* da exceção de expiração). Falha de publicação nunca vira fila morta — Redis fora é motivo de backoff, não de desistir do lead.

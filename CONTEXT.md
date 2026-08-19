@@ -39,8 +39,16 @@ O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. S�
 _Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, Super Admin do SaaS, `ADMIN` global, confundir com tag de time, Supervisor com a fila sem dono no escopo, RLS por papel, motor `can()`, entidade Team, tratar assessoria como se fosse o tenant, Gestão recortada por tag, sub-empresa como perfil
 
 **Contexto de acesso**:
-Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e o evento que o originou. Ambas isolam pelo workspace; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
-_Avoid_: Workspace e papel viajando separados, papel como parâmetro que ninguém usa, papel inventado para o job preencher campo, contexto em singleton ou cache sem chave de workspace, montar o contexto em cada tela
+Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e a origem do trabalho — um Evento de integração real ou uma Passada agendada. Ambas isolam pelo workspace, um tenant por transação; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
+_Avoid_: Workspace e papel viajando separados, papel como parâmetro que ninguém usa, papel inventado para o job preencher campo, contexto em singleton ou cache sem chave de workspace, montar o contexto em cada tela, terceiro tipo de contexto para manutenção, evento âncora fabricado
+
+**Origem do job**:
+O que nomeia o trabalho de um job: um Evento de integração real, ou uma Passada agendada. União discriminada. Não alarga o que o job alcança — o isolamento continua sendo o workspace.
+_Avoid_: Evento âncora, origem opcional, job sem origem, job sem workspace
+
+**Passada agendada**:
+Trabalho de manutenção disparado pelo relógio da aplicação, sem Evento de integração que o origine. O nome é fechado: expiração de payload, relógios de SLA e estagnação. A varredura descobre os workspaces por função privada e então escreve sob o mesmo isolamento de tenant de qualquer job.
+_Avoid_: Âncora falsa, papel inventado para o job, bypass de RLS, uma transação que atravessa workspaces
 
 **Tag**:
 Rótulo configurável no workspace, criado e aplicado na tela Equipe no mesmo ato do cadastro do colaborador. No membro, identifica marca ou time e é o que define o time de um Supervisor. Na oportunidade, se existir, é rótulo operacional (carteira, campanha) digitado à mão — nunca herdado do responsável.

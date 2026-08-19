@@ -35,6 +35,8 @@ A rotina roda na **aplicação**, não em `pg_cron` — o plano do Supabase não
 
 **Emenda de 2026-08-11 — em qual processo.** Este ADR dizia "no worker"; ao ser implementada no ticket 15, a rotina ficou no processo **web**, ao lado do dispatcher, pelo mesmo motivo que o ticket 07 encontrou: a descoberta de trabalho sem tenant passa pelo schema `private`, e `marctco_worker` não tem sequer `USAGE` nele ([ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md), que vence por ser decisão de isolamento). Levá-la para o worker exigiria uma de duas coisas — conceder àquele papel o acesso privado que o Seam 3 prova que ele não tem, ou rotear manutenção por Redis e fazer a retenção depender de uma fila estar de pé. Nenhuma das duas paga o que custa. O que a decisão sempre significou continua intacto: o agendamento é da aplicação, não do banco.
 
+> **Supersessão 2026-08-19 — origem do `JobContext`.** O ticket 15 abriu a transação da varredura com um evento âncora para caber na forma antiga (`workspace_id` + `integration_event_id`). O [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md) emendado torna a origem uma união: essa passada passa a nomear-se `PAYLOAD_EXPIRY`, sem fabricar causalidade. O retorno `(workspace_id, anchor_integration_event_id)` de `claim_expired_payload_workspaces` permanece até o código da retenção acompanhar o tipo; a sexta função da Fase 3 já nasce sem âncora.
+
 ## O número que forçou a decisão
 
 Um cliente com 1.000 leads/dia gera ~365 mil eventos/ano. A ~2 KB de payload, **duas cópias**, isso é da ordem de **1,5 a 2 GB por ano, por cliente**, de JSON que ninguém lê depois da primeira semana. O plano Free do Supabase tem teto de centenas de MB: ele não passa do primeiro trimestre.

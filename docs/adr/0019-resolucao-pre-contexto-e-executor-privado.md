@@ -6,6 +6,8 @@ Uma sessão de navegador resolve a associação entre o usuário autenticado e o
 
 **Emenda:** este ADR supersede parcialmente o [ADR-0006](./0006-rls-duas-camadas-guc-worker.md), o [ADR-0010](./0010-migrations-e-ci-cd.md), o [ADR-0012](./0012-contexto-de-tenant-na-url.md) e o [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md): a lista fechada deixa de ter três funções e passa a ter quatro; policies do app e do worker continuam keiadas exclusivamente em `app.workspace_id`, mas o executor técnico das funções privadas recebe policies próprias e mínimas. As notas de supersessão nesses documentos apontam para esta decisão.
 
+> **Emenda de 2026-08-19 — a lista fecha em seis.** A varredura de SLA e estagnação da Fase 3 precisa descobrir quais workspaces têm lead vencido **antes** de existir tenant, a mesma circularidade da quinta função. `private.claim_overdue_opportunity_workspaces` é a sexta; o Seam 3 passa a esperar seis nomes e continua reprovando o sétimo. Não é reabertura: a lista já cresceu uma vez de propósito, e a alternativa de esticar `claim_expired_payload_workspaces` foi rejeitada — ela é nomeada e indexada para outra pergunta, e as cadências são distintas (90 dias contra 5 minutos). Esta função **não** toca `private.provision_workspace`.
+
 ## O problema
 
 `Workspace.slug` é o UUIDv4 que chega na URL, enquanto a RLS de `Workspace` e `WorkspaceMember` compara `app.workspace_id` com o `Workspace.id`. Antes de validar a associação, não existe um `workspace_id` que possa alimentar o GUC; setar o próprio slug no GUC não encontra a associação. Portanto, a frase "validar o slug contra `WorkspaceMember` antes de setar o GUC" não tinha uma consulta que pudesse executá-la sob as policies vigentes.
@@ -14,9 +16,9 @@ Também não basta criar uma função `SECURITY DEFINER` pertencente ao migrador
 
 ## A decisão
 
-### 1. Cinco funções sem contexto, lista fechada
+### 1. Seis funções sem contexto, lista fechada
 
-As únicas funções `SECURITY DEFINER` do banco continuam no schema `private`, com `search_path` fixado e `EXECUTE` revogado de `PUBLIC`. São exatamente estas (a quinta entrou pela emenda de 2026-08-11, abaixo):
+As únicas funções `SECURITY DEFINER` do banco continuam no schema `private`, com `search_path` fixado e `EXECUTE` revogado de `PUBLIC` e do worker. São exatamente estas (a quinta entrou pela emenda de 2026-08-11; a sexta, pela de 2026-08-19, abaixo):
 
 | Função | Chamador autorizado | Por que não tem `AccessContext` | Retorno permitido |
 |---|---|---|---|
@@ -25,12 +27,17 @@ As únicas funções `SECURITY DEFINER` do banco continuam no schema `private`, 
 | `provision_workspace` | app | O Workspace ainda não existe | `workspace_id` |
 | `resolve_user_workspaces` | app | A sessão precisa validar o slug contra `WorkspaceMember` antes de ter `workspace_id` | Para associações do próprio usuário: `workspace_id`, `slug`, `name` e `role`; ausência de associação não devolve detalhe do workspace |
 | `claim_expired_payload_workspaces` | app | A varredura de retenção precisa do `workspace_id` que só a leitura revela, exatamente como o dispatcher | Somente `(workspace_id, anchor_integration_event_id)` |
+| `claim_overdue_opportunity_workspaces` | app | A varredura de SLA e estagnação precisa do `workspace_id` que só a leitura revela, antes de haver tenant para o `JobContext` | Somente `workspace_id` |
 
-**Emenda de 2026-08-11 — a lista fecha em cinco.** O ticket 15 materializou a expiração de payload do [ADR-0014](./0014-copia-unica-e-retencao-do-payload.md), e a descoberta dela é a mesma circularidade da `claim_pending_events`: para setar `app.workspace_id` a varredura precisaria do `workspace_id` que só a leitura revela. `claim_expired_payload_workspaces(cutoff)` é a mais estreita das cinco — devolve identificadores de tenant e um evento âncora, nunca `raw` —, pertence a `marctco_private_definer`, e **não recebeu privilégio novo nenhum**: ela é escrita dentro das colunas `(id, workspace_id, dispatch_status, received_at)` que aquele papel já podia ler desde o ticket 07. É por isso que ela reusa o executor em vez de criar um: o Seam 3 prova a mesma contenção, incluindo que o papel continua sem `SELECT` em `raw` e sem `UPDATE` na tabela.
+**Emenda de 2026-08-11 — a lista fecha em cinco (nessa data).** O ticket 15 materializou a expiração de payload do [ADR-0014](./0014-copia-unica-e-retencao-do-payload.md), e a descoberta dela é a mesma circularidade da `claim_pending_events`: para setar `app.workspace_id` a varredura precisaria do `workspace_id` que só a leitura revela. `claim_expired_payload_workspaces(cutoff)` é a mais estreita das cinco — devolve identificadores de tenant e um evento âncora, nunca `raw` —, pertence a `marctco_private_definer`, e **não recebeu privilégio novo nenhum**: ela é escrita dentro das colunas `(id, workspace_id, dispatch_status, received_at)` que aquele papel já podia ler desde o ticket 07. É por isso que ela reusa o executor em vez de criar um: o Seam 3 prova a mesma contenção, incluindo que o papel continua sem `SELECT` em `raw` e sem `UPDATE` na tabela.
 
-O âncora existe para que a varredura abra sua transação com um `JobContext` real. Continua valendo que esta decisão **não cria um terceiro tipo de `AccessContext`**: o contexto do trabalho de manutenção é o mesmo do worker, e o evento que o nomeia é uma linha real do tenant.
+O âncora existe para que a varredura abra sua transação com um `JobContext` real. Continua valendo que esta decisão **não cria um terceiro tipo de `AccessContext`**: o contexto do trabalho de manutenção é o mesmo `JobContext` do worker. A emenda de 2026-08-19 no [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md) troca o âncora obrigatório por uma origem discriminada — evento de integração **real** ou passada agendada nomeada —, porque a sexta função não tem evento para apontar e não deve fabricar um.
 
-O Seam 3 passou a cobrar o contrato de **toda** função `SECURITY DEFINER` do schema `private` por varredura — `search_path` fixado, `EXECUTE` fora de `PUBLIC` e do worker, executor sem `LOGIN` e sem `BYPASSRLS` —, em vez de um caso escrito à mão por função. A sexta, se existir, nasce sujeita à prova sem que ninguém precise lembrar de escrevê-la.
+O Seam 3 passou a cobrar o contrato de **toda** função `SECURITY DEFINER` do schema `private` por varredura — `search_path` fixado, `EXECUTE` fora de `PUBLIC` e do worker, executor sem `LOGIN` e sem `BYPASSRLS` —, em vez de um caso escrito à mão por função. A sétima, se existir, nasce sujeita à prova sem que ninguém precise lembrar de escrevê-la.
+
+**Emenda de 2026-08-19 — a sexta função.** `claim_overdue_opportunity_workspaces` descobre quais workspaces têm Oportunidade em aberto com relógio de SLA de primeiro contato ou de estagnação vencido. É estreita de propósito: devolve **somente** `workspace_id`, nunca `opportunity_id`, Pessoa, contato, `raw`, nem um evento âncora. Não há PII no retorno, e a migration que a materializar (ticket 09 da Fase 3) não inventa `SELECT` em payload nem em dados de Pessoa.
+
+O executor é técnico `NOLOGIN`, `NOSUPERUSER` e `NOBYPASSRLS`, com `search_path` fixado; `EXECUTE` permanece revogado de `PUBLIC` e de `marctco_worker`. Grants e policies são o mínimo para responder a pergunta — colunas de relógio da Oportunidade e a configuração de workspace que os resolve —, nunca `Person`, contatos ou `IntegrationEvent.raw`. Reusar `marctco_private_definer` só vale se o Seam 3 provar a mesma contenção **depois** desses grants; do contrário nasce executor dedicado com os mesmos atributos, como já aconteceu com `provision_workspace`. Esta emenda **não altera** `private.provision_workspace` nem o papel `marctco_provisioner`.
 
 `resolve_user_workspaces(authenticated_user_id, requested_slug nullable)` tem dois modos, sob a mesma interface SQL estreita:
 
@@ -43,7 +50,7 @@ O `authenticated_user_id` vem exclusivamente de uma verificação server-side da
 
 `resolve_user_workspaces` é de propriedade de `marctco_private_definer`, papel técnico com `NOLOGIN`, `NOSUPERUSER`, `NOBYPASSRLS` e sem associação que `marctco_app` ou `marctco_worker` possam assumir. Ele não é connection string, não executa jobs e não é papel de migrations. Cada uma das outras três funções, quando materializada, precisa de executor técnico com as mesmas propriedades, grants e policies mínimos; pode reutilizar ou não esse papel somente se o Seam 3 provar a mesma contenção. Esta decisão não congela prematuramente o ownership dessas funções ainda inexistentes.
 
-Para cada tabela/comando que uma função privada realmente usa, a migration concede ao seu executor técnico apenas o privilégio SQL correspondente e cria policy explícita para esse papel. As policies normais de `marctco_app` e `marctco_worker` continuam usando somente `app.workspace_id`; não nasce `app.user_id`, policy baseada em JWT, nem bypass amplo. O papel técnico não pode fazer login, e o único caminho que o aciona são as quatro funções enumeradas acima.
+Para cada tabela/comando que uma função privada realmente usa, a migration concede ao seu executor técnico apenas o privilégio SQL correspondente e cria policy explícita para esse papel. As policies normais de `marctco_app` e `marctco_worker` continuam usando somente `app.workspace_id`; não nasce `app.user_id`, policy baseada em JWT, nem bypass amplo. O papel técnico não pode fazer login, e o único caminho que o aciona são as funções enumeradas na lista fechada — seis desde a emenda de 2026-08-19.
 
 **Emenda de 2026-08-06 — executor de `provision_workspace`.** A terceira função materializou-se com executor próprio, `marctco_provisioner`, e não reusa `marctco_private_definer`: esse papel é dono dos dois resolvedores somente-leitura, e dar-lhe `INSERT` em `workspaces` transformaria duas leituras pré-tenant em caminhos de escrita — contenção que o Seam 3 não conseguiria provar igual. `marctco_provisioner` recebe `SELECT`+`INSERT` em `workspaces`, `workspace_members` e `pipelines`, `INSERT` em `stages`, e policy por comando em cada uma dessas tabelas; nunca `UPDATE` nem `DELETE`, e nenhum acesso a `integration_connections`. As invariantes diferidas do funil rodam no `COMMIT`, fora do contexto `SECURITY DEFINER`: por isso a função fixa `app.workspace_id` no workspace que acabou de criar — o mesmo do qual o chamador já é `OWNER` — para que os gatilhos enxerguem as linhas que precisam validar.
 
@@ -67,11 +74,13 @@ O limiter em memória do [ADR-0012](./0012-contexto-de-tenant-na-url.md) continu
 
 O Seam 3 passa a reprovar:
 
-- qualquer `SECURITY DEFINER` fora das quatro funções acima, overload incluso;
+- qualquer `SECURITY DEFINER` fora das seis funções acima, overload incluso;
 - `resolve_user_workspaces` cujo owner não seja `marctco_private_definer`, cujo `search_path` não seja fixado, ou cujo `EXECUTE` alcance `PUBLIC`/worker; e qualquer função futura sem executor técnico equivalente;
 - executor técnico com `LOGIN`, `BYPASSRLS`, superuser ou membership assumível por app/worker;
-- policy de executor técnico que não seja associada a uma tabela/comando exigidos por uma das quatro funções;
+- policy de executor técnico que não seja associada a uma tabela/comando exigidos por uma das seis funções;
 - app ou worker que obtenha dado sem o GUC, fora de uma das interfaces privadas permitidas.
+
+> A redação original desta prova cobrava **quatro** nomes; a emenda de 2026-08-11 passou a cinco; esta, a seis. O contrato que a prova protege não mudou: lista fechada, executor `NOLOGIN` sem `BYPASSRLS`, retorno mínimo, nenhum payload.
 
 O fluxo do ticket 04 prova que uma associação válida produz exatamente um `UserContext`; slug de outro workspace e slug inexistente devolvem o mesmo 404; ambos não produzem contexto; e o evento de auditoria não carrega PII. A prova da função precisa rodar com `FORCE RLS` ativo, para não confundir sucesso do owner com sucesso do executor técnico.
 
@@ -81,9 +90,10 @@ O fluxo do ticket 04 prova que uma associação válida produz exatamente um `Us
 - **Usar `service_role`, a conexão de migrations ou Supabase Data API privilegiada no web.** Uma consulta de associação ganharia bypass global e anularia a segunda camada justamente no processo que atende o navegador.
 - **Criar a quarta função pertencente ao migrador.** Sob `FORCE RLS`, ela continua sujeita à policy e retorna zero linhas sem GUC.
 - **Deixar `createUserContext` público e pedir disciplina.** Qualquer rota poderia construir um contexto a partir de entrada não validada; a regra voltaria a ser comentário, não interface.
+- **Esticar `claim_expired_payload_workspaces` para devolver também os workspaces com lead vencido (2026-08-19).** A função é nomeada e indexada para a retenção de payload; as duas varreduras têm cadências distintas por natureza (90 dias contra 5 minutos). Uma sexta função estreita custa o pedágio do Seam 3; uma função que responde duas perguntas mistura grants e esconde o vazamento na hora do incidente.
 
 ## Consequências
 
 Há um único caminho pré-contexto no navegador e uma lista pequena, auditável e testável de escapes sem tenant. O custo é manter grants, policies e testes adicionais para o executor técnico a cada nova função privada — exatamente o pedágio que impede que a exceção vire um bypass genérico.
 
-As operações normais de `packages/db` continuam recebendo `AccessContext`, abrindo transação e fazendo `SET LOCAL app.workspace_id`; esta decisão não cria um terceiro tipo de contexto nem altera o escopo dos quatro perfis de acesso.
+As operações normais de `packages/db` continuam recebendo `AccessContext`, abrindo transação e fazendo `SET LOCAL app.workspace_id`; esta decisão não cria um terceiro tipo de contexto nem altera o escopo dos quatro perfis de acesso. A sexta função só descobre `workspace_id`; a escrita da varredura acontece depois, sob `JobContext` e RLS, no workspace que ela devolveu.
