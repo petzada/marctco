@@ -274,4 +274,29 @@ describe("prepareChannelOutboundSend", () => {
       reason: "ATTENDANT_PHONE_MISSING"
     });
   });
+
+  it("renders ON_ARRIVAL without attendant variables and refuses attendant placeholders", () => {
+    expect(
+      prepareChannelOutboundSend({
+        ...sendable,
+        trigger: "ON_ARRIVAL",
+        template_body: "Olá {{lead_name}}, aqui é a {{workspace_name}}.",
+        attendant_name: null,
+        attendant_phone_e164: null
+      })
+    ).toEqual({
+      kind: "SEND",
+      instance_name: sendable.instance_name,
+      number: "5511987654321",
+      text: "Olá Maria, aqui é a Assessoria Horizonte."
+    });
+    expect(
+      prepareChannelOutboundSend({
+        ...sendable,
+        trigger: "ON_ARRIVAL",
+        attendant_name: null,
+        attendant_phone_e164: null
+      })
+    ).toEqual({ kind: "FAIL", reason: "KNOWN_REFUSAL" });
+  });
 });

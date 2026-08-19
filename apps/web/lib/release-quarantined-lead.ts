@@ -24,12 +24,14 @@ export interface ReleaseQuarantinedLeadInput {
  *     → recordLeadSubmission (phase two: the insert's answer is an *input*
  *       of the decision, not an output of it)
  *     → resolveIntakeDestination
- *     → decideAndApplyIntake (now = the release instant, not received_at)
+ *     → decideAndApplyIntake (now = the release instant, not received_at).
+ *       That named operation records the arrival-channel attempt in the same
+ *       transaction that creates the Opportunity; this adapter does not import
+ *       the feature-flag catalog.
  *
  * No second IntegrationEvent is created: `getQuarantinedEvent` returns the
  * one that already exists, and every call below carries its id forward
- * (ADR-0014). Feature-flag post-creation effects stay on the worker until
- * they have a consumer.
+ * (ADR-0014).
  */
 export async function releaseQuarantinedLead(
   context: UserContext,

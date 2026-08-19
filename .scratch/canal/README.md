@@ -1,6 +1,6 @@
 # Fase 4 — Canal
 
-Status da fatia: **especificada; tickets 00, 01, 02, 03a, 03b e 03c fechados.** Spec em [spec.md](./spec.md), tickets em [issues/](./issues/). Próximo: [04](./issues/04-gatilho-na-chegada-e-quarentena.md) (chegada e quarentena) em paralelo com [05](./issues/05-webhook-de-entrada.md) e [06](./issues/06-mensagem-na-linha-do-tempo-do-card.md); [07](./issues/07-seam4-atribuicao-ate-evidencia.md) (Seam 4) ficou desbloqueado pelo 03c.
+Status da fatia: **especificada; tickets 00, 01, 02, 03a, 03b, 03c e 04 fechados.** Spec em [spec.md](./spec.md), tickets em [issues/](./issues/). Próximo: [05](./issues/05-webhook-de-entrada.md) e [06](./issues/06-mensagem-na-linha-do-tempo-do-card.md) em paralelo; [07](./issues/07-seam4-atribuicao-ate-evidencia.md) (Seam 4) ficou desbloqueado pelo 03c.
 
 Fase 4 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Estado de partida: Fases 0–3 entregues — [PROMPT-HANDOFF da Fase 3](../tempo/PROMPT-HANDOFF.md).
 

@@ -15,6 +15,11 @@ import {
   type WhatsAppPairingState
 } from "@marctco/domain";
 import {
+  planOpportunityPostCreationEffects,
+  resolveFeatureFlags,
+  type OpportunityPostCreationEffect
+} from "@marctco/domain/feature-flags";
+import {
   isJobContext,
   isUserContext,
   jobChannelAttemptId,
@@ -232,6 +237,106 @@ export async function planAndRecordChannelOutboundAttemptInTransaction(
     occurred_at: null
   });
   return { kind: "FAILED", attempt_id, reason: plan.reason };
+}
+
+interface ArrivalOpportunityRow {
+  readonly whatsapp_opt_in: boolean | null;
+  readonly missing_phone: boolean;
+  readonly status: "OPEN" | "WON" | "LOST";
+  readonly merged_into_opportunity_id: string | null;
+}
+
+export interface ArrivalChannelOutboundPlan {
+  readonly recorded: PlannedChannelOutboundAttempt;
+  readonly post_creation_effects: readonly OpportunityPostCreationEffect[];
+}
+
+/**
+ * Arrival hook for intake and quarantine release. Encapsulates flags,
+ * settings, pairing and the 03a recorder inside the caller's Opportunity
+ * creation transaction so `apps/web` never remounts the feature-flag catalog.
+ * Attendant variables are absent on this trigger.
+ */
+export async function planArrivalChannelOutboundInTransaction(
+  transaction: ScopedTransactionClient,
+  context: AccessContext,
+  opportunity_id: string
+): Promise<ArrivalChannelOutboundPlan> {
+  assertUuid(opportunity_id, "opportunity_id");
+
+  const [flagRows, settingsRows, pairingRows, opportunityRows] = await Promise.all([
+    transaction.$queryRaw<Array<{ key: string }>>(Prisma.sql`
+      SELECT key
+      FROM workspace_flags
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND key = 'auto_primeiro_contato'
+    `),
+    transaction.$queryRaw<Array<{ first_contact_trigger: FirstContactTrigger | null }>>(Prisma.sql`
+      SELECT first_contact_trigger
+      FROM workspace_settings
+      WHERE workspace_id = ${context.workspace_id}::uuid
+    `),
+    transaction.$queryRaw<Array<{ pairing_state: string | null }>>(Prisma.sql`
+      SELECT pairing_state::text AS pairing_state
+      FROM integration_connections
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND provider = 'WHATSMIAU'::integration_provider
+        AND status = 'ACTIVE'::integration_connection_status
+      LIMIT 1
+    `),
+    transaction.$queryRaw<ArrivalOpportunityRow[]>(Prisma.sql`
+      SELECT
+        opportunity.whatsapp_opt_in,
+        opportunity.missing_phone,
+        opportunity.status,
+        opportunity.merged_into_opportunity_id
+      FROM opportunities AS opportunity
+      WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.id = ${opportunity_id}::uuid
+    `)
+  ]);
+
+  const feature_flags = resolveFeatureFlags(flagRows.map((row) => row.key));
+  const trigger = resolveWorkspaceSettings({
+    first_contact_sla_minutes: null,
+    stagnation_days: null,
+    first_contact_trigger: settingsRows[0]?.first_contact_trigger ?? null,
+    first_contact_template_body: null
+  }).first_contact_trigger;
+  const post_creation_effects = planOpportunityPostCreationEffects({
+    feature_flags,
+    first_contact_trigger: trigger,
+    created_opportunity_id: opportunity_id
+  });
+  if (post_creation_effects.length === 0) {
+    return {
+      recorded: {
+        kind: "NONE",
+        reason: feature_flags.auto_primeiro_contato ? "TRIGGER_MISMATCH" : "FLAG_OFF"
+      },
+      post_creation_effects
+    };
+  }
+
+  const opportunity = opportunityRows[0];
+  if (!opportunity) {
+    throw new ChannelOutboundError("OPPORTUNITY_NOT_VISIBLE");
+  }
+  const raw_pairing = pairingRows[0]?.pairing_state;
+  const pairing_state = isWhatsAppPairingState(raw_pairing) ? raw_pairing : null;
+  const recorded = await planAndRecordChannelOutboundAttemptInTransaction(transaction, context, {
+    opportunity_id,
+    occurred_trigger: "ON_ARRIVAL",
+    feature_flag_enabled: feature_flags.auto_primeiro_contato,
+    trigger,
+    whatsapp_opt_in: opportunity.whatsapp_opt_in,
+    missing_phone: opportunity.missing_phone,
+    status: opportunity.status,
+    merged: opportunity.merged_into_opportunity_id !== null,
+    pairing_state,
+    attendant_phone_present: false
+  });
+  return { recorded, post_creation_effects };
 }
 
 export async function planAndRecordChannelOutboundAttempt(

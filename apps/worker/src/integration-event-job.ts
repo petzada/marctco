@@ -1,8 +1,6 @@
 import {
   createJobContext,
   decideAndApplyIntake,
-  getWorkspaceSettings,
-  readWorkspaceFeatureFlags,
   readIntegrationEventForProcessing,
   recordLeadSubmission,
   resolveIntakeDestination
@@ -13,10 +11,7 @@ import {
   type IntakePlan,
   type IntegrationEventJobData
 } from "@marctco/domain";
-import {
-  planOpportunityPostCreationEffects,
-  type OpportunityPostCreationEffect
-} from "@marctco/domain/feature-flags";
+import type { OpportunityPostCreationEffect } from "@marctco/domain/feature-flags";
 import { connectLeadSource } from "./connector-v1.js";
 
 export interface ProcessedIntegrationEvent {
@@ -35,7 +30,10 @@ export interface ProcessedIntegrationEvent {
    * already processed.
    */
   readonly intake_plan_kind: IntakePlan["kind"] | null;
-  /** Planned on the server and intentionally has no consumer in this slice. */
+  /**
+   * Arrival-channel effects consumed in the same transaction that created the
+   * Opportunity. Empty unless an ON_ARRIVAL attempt was actually recorded.
+   */
   readonly post_creation_effects: readonly OpportunityPostCreationEffect[];
 }
 
@@ -64,8 +62,10 @@ function assertJobData(data: unknown): asserts data is IntegrationEventJobData {
  * an `InboundLead`; the domain normalizes it, names the idempotency key and
  * says what makes the submission idempotent; `packages/db` records it under
  * the tenant, then coordinates `planPersonLookup → decideIntake →
- * applyIntakePlan` under deterministic transaction locks. Every rule remains
- * in a pure function, and this function only carries values between the named
+ * applyIntakePlan` under deterministic transaction locks. Arrival first-contact
+ * is consumed inside that apply when the workspace chose ON_ARRIVAL — the
+ * worker does not remount flags or call Redis. Every rule remains in a pure
+ * function, and this function only carries values between the named
  * operations (ADR-0017).
  *
  * `now` is `received_at`, the instant the lead actually arrived — never this
@@ -120,40 +120,11 @@ export async function processIntegrationEventJob(
     integration_event_id: event.id,
     now: event.received_at
   });
-  const { applied } = decided_and_applied;
-  const post_creation_effects =
-    applied.kind === "NEW_OPPORTUNITY"
-      ? await planArrivalFirstContact({
-          context,
-          created_opportunity_id: applied.opportunity_id
-        })
-      : [];
 
   return {
     integration_event_id: data.integration_event_id,
     workspace_id: data.workspace_id,
     intake_plan_kind: decided_and_applied.intake_plan_kind,
-    post_creation_effects
+    post_creation_effects: decided_and_applied.post_creation_effects
   };
-}
-
-/**
- * Arrival hook only. Reads the flag first so a workspace that never paid for
- * the capability does not pay for a settings round-trip. The default trigger
- * is ON_ASSIGNMENT, so this emits nothing until the workspace chose ON_ARRIVAL.
- */
-async function planArrivalFirstContact(input: {
-  readonly context: Parameters<typeof readWorkspaceFeatureFlags>[0];
-  readonly created_opportunity_id: string;
-}): Promise<readonly OpportunityPostCreationEffect[]> {
-  const feature_flags = await readWorkspaceFeatureFlags(input.context);
-  if (!feature_flags.auto_primeiro_contato) {
-    return [];
-  }
-  const settings = await getWorkspaceSettings(input.context);
-  return planOpportunityPostCreationEffects({
-    feature_flags,
-    first_contact_trigger: settings.first_contact_trigger,
-    created_opportunity_id: input.created_opportunity_id
-  });
 }

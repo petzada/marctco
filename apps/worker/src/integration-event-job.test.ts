@@ -5,8 +5,6 @@ const readIntegrationEventForProcessing = vi.fn();
 const resolveIntakeDestination = vi.fn();
 const recordLeadSubmission = vi.fn();
 const decideAndApplyIntake = vi.fn();
-const readWorkspaceFeatureFlags = vi.fn();
-const getWorkspaceSettings = vi.fn();
 const createJobContext = vi.fn((input: unknown) => input);
 
 vi.mock("@marctco/db", () => ({
@@ -14,8 +12,6 @@ vi.mock("@marctco/db", () => ({
   resolveIntakeDestination,
   recordLeadSubmission,
   decideAndApplyIntake,
-  readWorkspaceFeatureFlags,
-  getWorkspaceSettings,
   createJobContext
 }));
 
@@ -56,20 +52,9 @@ describe("processIntegrationEventJob", () => {
       .mockReset()
       .mockResolvedValue({
         intake_plan_kind: "NEW_OPPORTUNITY",
-        applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() }
+        applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() },
+        post_creation_effects: []
       });
-    readWorkspaceFeatureFlags.mockReset().mockResolvedValue({
-      auto_primeiro_contato: false,
-      score_cabimento_llm: false,
-      resumo_handoff_llm: false
-    });
-    getWorkspaceSettings.mockReset().mockResolvedValue({
-      first_contact_sla_minutes: 120,
-      stagnation_days: 7,
-      first_contact_trigger: "ON_ASSIGNMENT",
-      first_contact_template_body:
-        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
-    });
     createJobContext.mockClear();
   });
 
@@ -154,42 +139,11 @@ describe("processIntegrationEventJob", () => {
     });
   });
 
-  it("keeps the post-creation hook inert while auto first contact is disabled", async () => {
-    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
-
-    expect(readWorkspaceFeatureFlags).toHaveBeenCalledWith(
-      expect.objectContaining({ workspace_id })
-    );
-    expect(getWorkspaceSettings).not.toHaveBeenCalled();
-    expect(processed.post_creation_effects).toEqual([]);
-  });
-
-  it("emits no arrival effect under the default ON_ASSIGNMENT trigger", async () => {
-    readWorkspaceFeatureFlags.mockResolvedValue({
-      auto_primeiro_contato: true,
-      score_cabimento_llm: false,
-      resumo_handoff_llm: false
-    });
-
-    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
-
-    expect(getWorkspaceSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ workspace_id })
-    );
-    expect(processed.post_creation_effects).toEqual([]);
-  });
-
-  it("emits AUTO_FIRST_CONTACT on arrival only when the workspace chose ON_ARRIVAL", async () => {
-    readWorkspaceFeatureFlags.mockResolvedValue({
-      auto_primeiro_contato: true,
-      score_cabimento_llm: false,
-      resumo_handoff_llm: false
-    });
-    getWorkspaceSettings.mockResolvedValue({
-      first_contact_sla_minutes: 120,
-      stagnation_days: 7,
-      first_contact_trigger: "ON_ARRIVAL",
-      first_contact_template_body: "Olá {{lead_name}}, aqui é a {{workspace_name}}."
+  it("forwards arrival-channel effects recorded in the coordinator and does not remount flags", async () => {
+    decideAndApplyIntake.mockResolvedValue({
+      intake_plan_kind: "NEW_OPPORTUNITY",
+      applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() },
+      post_creation_effects: [{ kind: "AUTO_FIRST_CONTACT", opportunity_id }]
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
@@ -199,21 +153,21 @@ describe("processIntegrationEventJob", () => {
     ]);
   });
 
+  it("keeps the arrival hook empty when the coordinator recorded nothing", async () => {
+    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
+    expect(processed.post_creation_effects).toEqual([]);
+  });
+
   it("does not emit an effect when a concurrent worker reused the existing Opportunity", async () => {
-    readWorkspaceFeatureFlags.mockResolvedValue({
-      auto_primeiro_contato: true,
-      score_cabimento_llm: false,
-      resumo_handoff_llm: false
-    });
     decideAndApplyIntake.mockResolvedValue({
       intake_plan_kind: "RETRANSMISSION",
-      applied: { kind: "RETRANSMISSION", opportunity_id }
+      applied: { kind: "RETRANSMISSION", opportunity_id },
+      post_creation_effects: []
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
     expect(processed.post_creation_effects).toEqual([]);
-    expect(readWorkspaceFeatureFlags).not.toHaveBeenCalled();
   });
 
   it("routes by the connection's target pipeline when it declares one", async () => {
@@ -245,7 +199,8 @@ describe("processIntegrationEventJob", () => {
     });
     decideAndApplyIntake.mockResolvedValue({
       intake_plan_kind: "QUARANTINE",
-      applied: { kind: "QUARANTINE" }
+      applied: { kind: "QUARANTINE" },
+      post_creation_effects: []
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
@@ -265,7 +220,8 @@ describe("processIntegrationEventJob", () => {
     });
     decideAndApplyIntake.mockResolvedValue({
       intake_plan_kind: "RETRANSMISSION",
-      applied: { kind: "RETRANSMISSION", opportunity_id }
+      applied: { kind: "RETRANSMISSION", opportunity_id },
+      post_creation_effects: []
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
