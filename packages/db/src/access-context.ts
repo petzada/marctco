@@ -146,6 +146,13 @@ export function createJobContext(input: CreateJobContextInput): JobContext {
   } as JobContext;
 }
 
+export function withResolvedFeatureFlags<Context extends AccessContext>(
+  context: Context,
+  feature_flags: ResolvedFeatureFlags
+): Context {
+  return { ...context, feature_flags };
+}
+
 export function isUserContext(context: AccessContext): context is UserContext {
   return context.kind === "user";
 }

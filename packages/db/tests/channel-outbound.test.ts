@@ -18,6 +18,7 @@ import {
   dispatchChannelOutboundAttempt,
   failChannelOutboundAttempt,
   getChannelOutboundAttempt,
+  loadChannelOutboundSend,
   planAndRecordChannelOutboundAttempt,
   type PlanChannelOutboundAttemptInput
 } from "../src/channel-outbound.js";
@@ -446,5 +447,66 @@ describe("channel outbound transitions", () => {
       (value): value is number => value !== undefined
     );
     expect(candidates).toContain(stored.first_contact_at?.getTime());
+  });
+});
+
+describe("loadChannelOutboundSend", () => {
+  it("loads instance, phones and template values for the job's workspace", async () => {
+    const opportunity_id = await seedOpportunity();
+    const opportunity = await seeder.opportunity.findUniqueOrThrow({ where: { id: opportunity_id } });
+    await seeder.personPhone.create({
+      data: {
+        workspace_id: workspace,
+        person_id: opportunity.person_id,
+        phone_e164: "+5511987654321"
+      }
+    });
+    await seeder.workspaceMember.update({
+      where: {
+        workspace_id_user_id: { workspace_id: workspace, user_id: attendant_user }
+      },
+      data: { whatsapp_phone_e164: "+5511912345678" }
+    });
+    await seeder.integrationConnection.create({
+      data: {
+        workspace_id: workspace,
+        provider: "WHATSMIAU",
+        token_hash: "c".repeat(64),
+        token_last4: "abcd",
+        instance_name: `marctco_${workspace.replaceAll("-", "")}`,
+        pairing_state: "CONNECTED"
+      }
+    });
+    const planned = await planAndRecordChannelOutboundAttempt(
+      manager,
+      eligiblePlan(opportunity_id),
+      app
+    );
+    expect(planned.kind).toBe("QUEUED");
+    if (planned.kind !== "QUEUED") {
+      return;
+    }
+
+    const payload = await loadChannelOutboundSend(outboundJob(planned.attempt_id), app);
+    expect(payload).toMatchObject({
+      instance_name: `marctco_${workspace.replaceAll("-", "")}`,
+      pairing_state: "CONNECTED",
+      destination_e164: "+5511987654321",
+      lead_name: "Lead de canal",
+      workspace_name: "Canal outbound",
+      attendant_name: "Ana Atendente",
+      attendant_phone_e164: "+5511912345678"
+    });
+    expect(payload && Object.keys(payload).sort()).toEqual([
+      "attendant_name",
+      "attendant_phone_e164",
+      "destination_e164",
+      "instance_name",
+      "lead_name",
+      "pairing_state",
+      "template_body",
+      "trigger",
+      "workspace_name"
+    ]);
   });
 });

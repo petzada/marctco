@@ -79,14 +79,16 @@ describe("sanitizeTelemetry", () => {
         result: "pass_complete",
         claimed: 4,
         dispatched: 3,
-        job_id: "integration-event-018f4d57"
+        job_id: "integration-event-018f4d57",
+        attempt_id: "018f4d57-2db2-7c1b-bff0-f2fcb13a46f7"
       })
     ).toEqual({
       event: "integration_event_dispatch",
       result: "pass_complete",
       claimed: 4,
       dispatched: 3,
-      job_id: "integration-event-018f4d57"
+      job_id: "integration-event-018f4d57",
+      attempt_id: "018f4d57-2db2-7c1b-bff0-f2fcb13a46f7"
     });
   });
 

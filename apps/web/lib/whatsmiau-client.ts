@@ -1,4 +1,5 @@
 import {
+  WHATSMIAU_API_BASE_URL,
   buildWhatsMiauCreateInstanceBody,
   buildWhatsMiauWebhookSetBody,
   parseWhatsAppConnectPayload,
@@ -7,7 +8,7 @@ import {
   type WhatsAppPairingState
 } from "@marctco/domain";
 
-export const WHATSMIAU_API_BASE_URL = "https://api.whatsmiau.dev/v2";
+export { WHATSMIAU_API_BASE_URL };
 
 export class WhatsMiauRequestError extends Error {
   constructor() {

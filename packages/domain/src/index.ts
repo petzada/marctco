@@ -17,6 +17,24 @@ export {
   type IntegrationEventJobData
 } from "./ingestion-jobs.js";
 export {
+  CHANNEL_OUTBOUND_INITIAL_DELAY_MS,
+  CHANNEL_OUTBOUND_JOB,
+  CHANNEL_OUTBOUND_QUEUE,
+  CHANNEL_OUTBOUND_RATE_LIMIT_MAX,
+  CHANNEL_OUTBOUND_RATE_LIMIT_WINDOW_MS,
+  channelOutboundJobId,
+  type ChannelOutboundJobData
+} from "./channel-jobs.js";
+export {
+  WHATSMIAU_API_BASE_URL,
+  buildWhatsMiauSendTextRequest,
+  classifySendTextFailure,
+  whatsMiauDigitsFromE164,
+  type MessagingProvider,
+  type SendTextResult,
+  type WhatsMiauSendTextRequest
+} from "./messaging-provider.js";
+export {
   CONTRACT_VERSION,
   LEAD_SOURCES,
   MAX_EXTERNAL_LEAD_ID_LENGTH,
@@ -210,15 +228,18 @@ export {
   CHANNEL_OUTBOUND_PROCESSING_LEASE_MS,
   decideChannelOutboundTransition,
   planFirstContactAttempt,
+  prepareChannelOutboundSend,
   type ChannelOutboundDeliveryStatus,
   type ChannelOutboundDispatchStatus,
   type ChannelOutboundFailureReason,
   type ChannelOutboundKind,
+  type ChannelOutboundSendPayload,
   type ChannelOutboundTransitionAction,
   type ChannelOutboundTransitionDecision,
   type ChannelOutboundTransitionRefusal,
   type FirstContactAttemptPlan,
-  type FirstContactAttemptRefusal
+  type FirstContactAttemptRefusal,
+  type PreparedChannelOutboundSend
 } from "./channel-outbound.js";
 export {
   WHATSAPP_PAIRING_STATES,

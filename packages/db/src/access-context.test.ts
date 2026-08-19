@@ -7,6 +7,7 @@ import {
   isUserContext,
   jobChannelAttemptId,
   jobIntegrationEventId,
+  withResolvedFeatureFlags,
   WorkspaceRole
 } from "./access-context.js";
 
@@ -138,6 +139,23 @@ describe("createJobContext", () => {
     expect("integration_event_id" in context).toBe(false);
     expect(jobChannelAttemptId(context)).toBe(attempt_id);
     expect(() => jobIntegrationEventId(context)).toThrow(/not an integration event/i);
+  });
+
+  it("attaches resolved feature flags without inventing a role", () => {
+    const workspace_id = randomUUID();
+    const attempt_id = randomUUID();
+    const context = createJobContext({
+      workspace_id,
+      origin: { type: "channel_outbound", attempt_id }
+    });
+    const flagged = withResolvedFeatureFlags(context, {
+      auto_primeiro_contato: true,
+      score_cabimento_llm: false,
+      resumo_handoff_llm: false
+    });
+    expect(flagged.feature_flags?.auto_primeiro_contato).toBe(true);
+    expect(flagged.origin).toEqual({ type: "channel_outbound", attempt_id });
+    expect("role" in flagged).toBe(false);
   });
 
   it("builds a JobContext for channel inbound from the authenticated connection", () => {

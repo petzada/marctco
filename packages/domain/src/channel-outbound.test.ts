@@ -5,7 +5,8 @@ import {
   CHANNEL_OUTBOUND_FAILURE_REASONS,
   CHANNEL_OUTBOUND_KIND,
   decideChannelOutboundTransition,
-  planFirstContactAttempt
+  planFirstContactAttempt,
+  prepareChannelOutboundSend
 } from "./channel-outbound.js";
 
 const eligible = {
@@ -226,5 +227,51 @@ describe("decideChannelOutboundTransition", () => {
         "DISPATCH"
       )
     ).toEqual({ allowed: false, reason: "ALREADY_TERMINAL" });
+  });
+});
+
+const sendable = {
+  instance_name: "marctco_11111111111141118111111111111111",
+  pairing_state: "CONNECTED" as const,
+  destination_e164: "+5511987654321",
+  trigger: "ON_ASSIGNMENT" as const,
+  template_body:
+    "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}.",
+  lead_name: "Maria",
+  workspace_name: "Assessoria Horizonte",
+  attendant_name: "Ana",
+  attendant_phone_e164: "+5511912345678"
+};
+
+describe("prepareChannelOutboundSend", () => {
+  it("renders the saved template exactly and converts the destination to digits", () => {
+    expect(prepareChannelOutboundSend(sendable)).toEqual({
+      kind: "SEND",
+      instance_name: sendable.instance_name,
+      number: "5511987654321",
+      text: "Olá Maria, sou Ana da Assessoria Horizonte. Meu WhatsApp é +5511912345678."
+    });
+  });
+
+  it("fails closed when the instance is missing or not connected", () => {
+    expect(prepareChannelOutboundSend({ ...sendable, pairing_state: "DISCONNECTED" })).toEqual({
+      kind: "FAIL",
+      reason: "INSTANCE_NOT_CONNECTED"
+    });
+    expect(prepareChannelOutboundSend({ ...sendable, instance_name: null })).toEqual({
+      kind: "FAIL",
+      reason: "INSTANCE_NOT_CONNECTED"
+    });
+  });
+
+  it("fails closed when the lead phone or assignment phone is missing", () => {
+    expect(prepareChannelOutboundSend({ ...sendable, destination_e164: null })).toEqual({
+      kind: "FAIL",
+      reason: "KNOWN_REFUSAL"
+    });
+    expect(prepareChannelOutboundSend({ ...sendable, attendant_phone_e164: null })).toEqual({
+      kind: "FAIL",
+      reason: "ATTENDANT_PHONE_MISSING"
+    });
   });
 });

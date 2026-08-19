@@ -3,10 +3,13 @@ import {
   CHANNEL_OUTBOUND_KIND,
   CHANNEL_OUTBOUND_PROCESSING_LEASE_MS,
   decideChannelOutboundTransition,
+  isWhatsAppPairingState,
   planFirstContactAttempt,
+  resolveWorkspaceSettings,
   type ChannelOutboundDeliveryStatus,
   type ChannelOutboundDispatchStatus,
   type ChannelOutboundFailureReason,
+  type ChannelOutboundSendPayload,
   type FirstContactAttemptRefusal,
   type FirstContactTrigger,
   type WhatsAppPairingState
@@ -272,6 +275,94 @@ export async function getChannelOutboundAttempt(
   return withAccessContext(prisma, job, async (transaction) => {
     const rows = await loadAttempt(transaction, job.workspace_id, attempt_id);
     return rows[0] ? toView(rows[0]) : null;
+  });
+}
+
+interface SendRow {
+  readonly instance_name: string | null;
+  readonly pairing_state: string | null;
+  readonly destination_e164: string | null;
+  readonly first_contact_trigger: FirstContactTrigger | null;
+  readonly first_contact_template_body: string | null;
+  readonly lead_name: string;
+  readonly workspace_name: string;
+  readonly attendant_name: string | null;
+  readonly attendant_phone_e164: string | null;
+}
+
+/**
+ * Reads everything the worker needs to render and send, under the job's
+ * tenant. Never returns token, apikey or a second copy of the template
+ * beyond the saved body.
+ */
+export async function loadChannelOutboundSend(
+  context: JobContext,
+  prisma: PrismaClient = sharedPrisma
+): Promise<ChannelOutboundSendPayload | null> {
+  const job = requireChannelOutbound(context);
+  const attempt_id = jobChannelAttemptId(job);
+  return withAccessContext(prisma, job, async (transaction) => {
+    const rows = await transaction.$queryRaw<SendRow[]>(Prisma.sql`
+      SELECT
+        connection.instance_name,
+        connection.pairing_state::text AS pairing_state,
+        (
+          SELECT phone.phone_e164
+          FROM person_phones AS phone
+          WHERE phone.workspace_id = opportunity.workspace_id
+            AND phone.person_id = person.id
+          ORDER BY phone.created_at, phone.id
+          LIMIT 1
+        ) AS destination_e164,
+        settings.first_contact_trigger,
+        settings.first_contact_template_body,
+        person.name AS lead_name,
+        workspace.name AS workspace_name,
+        member.display_name AS attendant_name,
+        member.whatsapp_phone_e164 AS attendant_phone_e164
+      FROM channel_outbound_attempts AS attempt
+      JOIN opportunities AS opportunity
+        ON opportunity.workspace_id = attempt.workspace_id
+       AND opportunity.id = attempt.opportunity_id
+      JOIN persons AS person
+        ON person.workspace_id = opportunity.workspace_id
+       AND person.id = opportunity.person_id
+      JOIN workspaces AS workspace
+        ON workspace.id = attempt.workspace_id
+      LEFT JOIN workspace_settings AS settings
+        ON settings.workspace_id = attempt.workspace_id
+      LEFT JOIN integration_connections AS connection
+        ON connection.workspace_id = attempt.workspace_id
+       AND connection.provider = 'WHATSMIAU'::integration_provider
+       AND connection.status = 'ACTIVE'::integration_connection_status
+      LEFT JOIN workspace_members AS member
+        ON member.workspace_id = opportunity.workspace_id
+       AND member.user_id = opportunity.assigned_user_id
+      WHERE attempt.workspace_id = ${job.workspace_id}::uuid
+        AND attempt.id = ${attempt_id}::uuid
+    `);
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+    const settings = resolveWorkspaceSettings({
+      first_contact_sla_minutes: null,
+      stagnation_days: null,
+      first_contact_trigger: row.first_contact_trigger,
+      first_contact_template_body: row.first_contact_template_body
+    });
+    const pairing_state = isWhatsAppPairingState(row.pairing_state) ? row.pairing_state : null;
+    return {
+      instance_name: row.instance_name,
+      pairing_state,
+      destination_e164: row.destination_e164,
+      trigger: settings.first_contact_trigger,
+      template_body: settings.first_contact_template_body,
+      lead_name: row.lead_name,
+      workspace_name: row.workspace_name,
+      attendant_name: row.attendant_name,
+      attendant_phone_e164: row.attendant_phone_e164
+    };
   });
 }
 

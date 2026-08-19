@@ -7,9 +7,11 @@
 
 import {
   planFirstContactDispatch,
+  renderFirstContactTemplate,
   type FirstContactDispatchRefusal,
   type FirstContactTrigger
 } from "./first-contact.js";
+import { whatsMiauDigitsFromE164 } from "./messaging-provider.js";
 import type { WhatsAppPairingState } from "./whatsapp-pairing.js";
 
 export const CHANNEL_OUTBOUND_KIND = "AUTO_FIRST_CONTACT" as const;
@@ -128,4 +130,70 @@ export function decideChannelOutboundTransition(
     return { allowed: true, dispatch_status: "DISPATCHED", delivery_status: "SENT" };
   }
   return { allowed: true, dispatch_status: "DISPATCHED", delivery_status: "FAILED" };
+}
+
+export interface ChannelOutboundSendPayload {
+  readonly instance_name: string | null;
+  readonly pairing_state: WhatsAppPairingState | null;
+  readonly destination_e164: string | null;
+  readonly trigger: FirstContactTrigger;
+  readonly template_body: string;
+  readonly lead_name: string;
+  readonly workspace_name: string;
+  readonly attendant_name: string | null;
+  readonly attendant_phone_e164: string | null;
+}
+
+export type PreparedChannelOutboundSend =
+  | {
+      readonly kind: "SEND";
+      readonly instance_name: string;
+      readonly number: string;
+      readonly text: string;
+    }
+  | {
+      readonly kind: "FAIL";
+      readonly reason: Extract<
+        ChannelOutboundFailureReason,
+        "INSTANCE_NOT_CONNECTED" | "ATTENDANT_PHONE_MISSING" | "KNOWN_REFUSAL"
+      >;
+    };
+
+/**
+ * Last local checks before HTTP. The worker sends the saved template as-is;
+ * automatic variation is out of scope.
+ */
+export function prepareChannelOutboundSend(
+  payload: ChannelOutboundSendPayload
+): PreparedChannelOutboundSend {
+  if (payload.pairing_state !== "CONNECTED" || payload.instance_name === null) {
+    return { kind: "FAIL", reason: "INSTANCE_NOT_CONNECTED" };
+  }
+  const number =
+    payload.destination_e164 === null ? null : whatsMiauDigitsFromE164(payload.destination_e164);
+  if (number === null) {
+    return { kind: "FAIL", reason: "KNOWN_REFUSAL" };
+  }
+  if (payload.trigger === "ON_ASSIGNMENT" && payload.attendant_phone_e164 === null) {
+    return { kind: "FAIL", reason: "ATTENDANT_PHONE_MISSING" };
+  }
+  const rendered = renderFirstContactTemplate({
+    trigger: payload.trigger,
+    template_body: payload.template_body,
+    values: {
+      lead_name: payload.lead_name,
+      workspace_name: payload.workspace_name,
+      attendant_name: payload.attendant_name ?? undefined,
+      attendant_phone: payload.attendant_phone_e164 ?? undefined
+    }
+  });
+  if (!rendered.ok) {
+    return { kind: "FAIL", reason: "KNOWN_REFUSAL" };
+  }
+  return {
+    kind: "SEND",
+    instance_name: payload.instance_name,
+    number,
+    text: rendered.text
+  };
 }
