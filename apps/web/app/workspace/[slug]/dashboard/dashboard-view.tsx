@@ -14,8 +14,7 @@ import { supervisorTeamEmptyState } from "../../../../lib/supervisor-team-empty-
 import { DashboardNotifications } from "./dashboard-notifications";
 
 const DashboardCharts = dynamic(
-  () => import("./dashboard-charts").then((mod) => mod.DashboardCharts),
-  { ssr: false }
+  () => import("./dashboard-charts").then((mod) => mod.DashboardCharts)
 );
 
 const COUNT_TONE: Readonly<Record<DashboardTileViewModel["tone"], string>> = {
