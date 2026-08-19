@@ -2,7 +2,9 @@
 
 > Aberto em **2026-08-17**. Não reabre decisão: registra o que já está no código e o que ainda precisa de mão humana antes da Fase 3 (Tempo).
 >
-> Autoridade: [CONTEXT.md](../CONTEXT.md) + ADRs. Specs: [fundacao-e-ingestao](./fundacao-e-ingestao/) · [operacao-do-lead](./operacao-do-lead/). Plano: [docs/plano-de-construcao.md](../docs/plano-de-construcao.md).
+> **Supersessão (2026-08-19):** a Fase 3 (Tempo) foi entregue em `039af31`. Spec, tickets e fechamento em [tempo/](./tempo/). Este arquivo permanece o fechamento das Fases 0–2; não use a seção “Como a próxima sessão abre a Fase 3” como estado atual.
+>
+> Autoridade: [CONTEXT.md](../CONTEXT.md) + ADRs. Specs: [fundacao-e-ingestao](./fundacao-e-ingestao/) · [operacao-do-lead](./operacao-do-lead/) · [tempo](./tempo/). Plano: [docs/plano-de-construcao.md](../docs/plano-de-construcao.md).
 
 ## Veredito
 
@@ -12,7 +14,7 @@
 | **1 · Ingestão** | Entregue | 16 `done`; 13 e 14 `needs-info` só no modelo Google | `POST` → Pessoa + Oportunidade + LP própria (2026-08-12) |
 | **2 · Operação do lead** | Entregue (01–07) | Tickets fechados nesta sessão | Migrations `20260814*` aplicadas (job Production migration 2026-08-17). Equipe, tag, atribuir e reatribuir conferidos no piloto. Quadro Meus leads do Supervisor: card roteado ao Atendente some do quadro — [PR #47](https://github.com/petzada/marctco/pull/47) |
 
-Nada conhecido de **código** bloqueia a Fase 3. O que bloqueia é documentação que ainda descrevia a Fase 2 como inexistente (risco de reimplementar) e a prova humana em produção da Fase 2.
+Nada conhecido de **código** bloqueava a Fase 3 na data deste fechamento. O que bloqueava era documentação que ainda descrevia a Fase 2 como inexistente (risco de reimplementar) e a prova humana em produção da Fase 2. A Fase 3 foi entregue depois — [tempo/PROMPT-HANDOFF.md](./tempo/PROMPT-HANDOFF.md).
 
 ## Etapa A — Documentação (esta sessão)
 
@@ -45,7 +47,7 @@ Não são decisão. São prova e higiene.
 | Item | Onde mora |
 |---|---|
 | WhatsApp / 1º contato | Fase 4 · [ADR-0003](../docs/adr/0003-whatsapp-instancia-unica-gatilho-atribuicao.md) |
-| Activity, SLA, Agenda, dashboard | Fase 3 — **ainda sem spec** |
+| Activity, SLA, Agenda, dashboard | Fase 3 — **entregue** · [tempo/](./tempo/) |
 | Tag na oportunidade | Fora da Fase 2, de propósito · [ADR-0020](../docs/adr/0020-tag-no-membro-define-o-time.md) |
 | Campo monetário novo / honorários | A10 · Fase 7 |
 | Ganho, perda, handoff, funil jurídico | Fase 6 |
@@ -53,6 +55,8 @@ Não são decisão. São prova e higiene.
 | Teste extra `countLeadsByMarker` para Supervisor | Lacuna de cobertura, não de código; opcional |
 
 ## Como a próxima sessão abre a Fase 3
+
+> **Supersessão.** A Fase 3 já foi entregue. Use [tempo/PROMPT-HANDOFF.md](./tempo/PROMPT-HANDOFF.md). A próxima fase de construção é a **4 · Canal**. Os três passos abaixo são o texto original de 2026-08-17; não seguir.
 
 1. Este arquivo + [plano-de-construcao.md](../docs/plano-de-construcao.md) linha **3 · Tempo**.
 2. **Não** usar [PROMPT-INICIAL.md](../PROMPT-INICIAL.md) nem o handoff antigo da Fase 2 como estado atual — são históricos da fatia que já fechou.

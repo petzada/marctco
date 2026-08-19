@@ -20,11 +20,11 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 ## Implementação
 
-Fases 0–2 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1) e [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2). Fechamento e ações manuais: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md).
+Fases 0–3 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1), [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2) e [.scratch/tempo/](./.scratch/tempo/) (3). Fechamento 0–2: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md). Fechamento da Fase 3: [.scratch/tempo/PROMPT-HANDOFF.md](./.scratch/tempo/PROMPT-HANDOFF.md) (`039af31` na branch `docs/fase-3-spec-e-tickets`). As emendas de ADR-0019 e ADR-0016 da Fase 3 estão na árvore; o ticket 09 as materializou.
 
-**Fase 3 (Tempo) está em implementação:** tickets 01, 02, 03 e 06 aceitos e integrados; retomar pelo ticket 04 no [handoff](./.scratch/tempo/PROMPT-HANDOFF.md). Spec, tickets e mapa em [.scratch/tempo/](./.scratch/tempo/). As duas emendas de ADR (0019 e 0016) que a fase exigia antes da migration do ticket 09 foram registradas em 2026-08-19.
+**Próxima: Fase 4 (Canal)** conforme [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — WhatsMiau + template de 1º contato + timeline no card. Sem spec nesta árvore ainda.
 
-[PROMPT-INICIAL.md](./PROMPT-INICIAL.md) é histórico da fatia que já fechou.
+[PROMPT-INICIAL.md](./PROMPT-INICIAL.md) e [.scratch/tempo/PROMPT-ORQUESTRACAO.md](./.scratch/tempo/PROMPT-ORQUESTRACAO.md) são históricos das fatias que já fecharam.
 
 ## Ordem de construção
 
