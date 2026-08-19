@@ -1,12 +1,14 @@
 # Spec — Tempo
 
-Status: ready-for-agent
+Status: done
+
+> **Implementada.** O Problem Statement abaixo descreve o estado **antes** da Fase 3. A Solution e o restante desta spec estão no código. Não reimplementar.
 
 > Fase 3 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md): **Activity (`due_at`, tipo, responsável) + SLA desde `arrived_at` + estagnação + Agenda + alerta ao gestor + Dashboard operacional.**
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).
 > Estado de partida: Fases 0–2 entregues — [fechamento](../fechamento-fases-0-2.md). `arrived_at` está gravado desde a ingestão, de propósito, e `previous_assigned_user_id` foi declarado "trilha mínima **até a `Activity` da Fase 3**".
 > ADRs vinculantes: 0004, 0005, 0006, 0009, 0010, 0012, 0013, 0015, 0016, 0018, 0019, 0020, 0024.
-> **Emendas de ADR desta fase (registradas em 2026-08-19, antes da migration do ticket 09):** [ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)/`CONTEXT.md` (origem do `JobContext` vira união) e [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) (sexta função privada `claim_overdue_opportunity_workspaces`). O ticket 09 implementa contra elas; os checkboxes dele continuam abertos até a migration e o Seam 3.
+> **Emendas de ADR desta fase (registradas em 2026-08-19, antes da migration do ticket 09):** [ADR-0016](../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)/`CONTEXT.md` (origem do `JobContext` vira união) e [ADR-0019](../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) (sexta função privada `claim_overdue_opportunity_workspaces`). A parada humana foi aprovada; o ticket 09 materializou função, `JobContext` e Seam 3 contra elas.
 > Costuras: as três de sempre — nenhuma quarta numerada.
 
 ---

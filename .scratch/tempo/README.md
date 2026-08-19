@@ -1,14 +1,14 @@
 # Fase 3 — Tempo
 
-Status da fatia: **em implementação.** Tickets 01, 02, 03 e 06 aceitos e integrados; retomar pelo ticket 04 conforme [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md). Spec em [spec.md](./spec.md), tickets em [issues/](./issues/).
+Status da fatia: **entregue.** Tickets 01–10 aceitos e integrados. Fechamento: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md). Spec em [spec.md](./spec.md), tickets em [issues/](./issues/).
 
 Fase 3 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Estado de partida: [fechamento das Fases 0–2](../fechamento-fases-0-2.md).
 
-## O que esta fase entrega
+## O que esta fase entregou
 
-O relógio. `arrived_at` está gravado desde a Fase 1 e nenhuma leitura o compara com o presente; a Atividade — que o plano chama de "keystone escondida do MVP" — não existe. Depois desta fase o atendente registra o que faz, a Agenda mostra o dia, o SLA de primeiro contato e a estagnação viram estado visível, o gestor é avisado sem precisar procurar, e o Dashboard responde "o que está queimando agora".
+O relógio visível na operação: o atendente registra o que faz, a Agenda mostra o dia, o SLA de primeiro contato e a estagnação viram estado visível, o gestor é avisado sem precisar procurar, e o Dashboard responde "o que está queimando agora". Antes dela, `arrived_at` já estava gravado desde a Fase 1 sem leitura comparando com o presente, e a Atividade — keystone escondida do MVP — não existia.
 
-## Ordem e dependências
+## Ordem e dependências (mapa histórico de como foi construída)
 
 ```
 01 ─┬─ 03 ── 04 ─┬─ 05
@@ -38,7 +38,7 @@ O relógio. `arrived_at` está gravado desde a Fase 1 e nenhuma leitura o compar
 
 ## O que precisava de mão humana antes do código
 
-Duas emendas de ADR, ambas **antes** da primeira migration do ticket 09. Registradas em 2026-08-19; o ticket 09 implementa contra elas, sem reabrir a parada humana:
+Duas emendas de ADR, ambas **antes** da primeira migration do ticket 09. Registradas em 2026-08-19; a parada humana foi **aprovada** e o ticket 09 **materializou** função, `JobContext` e Seam 3 contra elas, sem reabri-la:
 
 - **ADR-0019** — a lista fechada de funções `SECURITY DEFINER` vai de cinco para seis. A descoberta "quais workspaces têm lead vencido" acontece antes de existir tenant, como a da expiração de payload: `private.claim_overdue_opportunity_workspaces` devolve só `workspace_id`.
 - **ADR-0016 e CONTEXT.md** — a origem do `JobContext` vira união. Trabalho agendado sem evento de origem existe: a varredura de payload já era esse caso e o contornou com uma âncora que a varredura de SLA não tem como fabricar.

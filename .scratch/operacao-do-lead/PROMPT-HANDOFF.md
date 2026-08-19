@@ -15,7 +15,7 @@ Registro: [registro.md](./registro.md).
 ## Próximo
 
 1. [`.scratch/fechamento-fases-0-2.md`](../fechamento-fases-0-2.md) **etapa B item 3** — prova no browser de Meus leads depois do deploy do [PR #47](https://github.com/petzada/marctco/pull/47). Migrations e CONTEXT/ADR-0022 já fechados.
-2. Depois: **Fase 3 · Tempo** — a spec **ainda não existe**.
+2. Depois: **Fase 3 · Tempo** — **entregue.** Spec e fechamento em [`.scratch/tempo/`](../tempo/). Próxima construção: Fase 4 · Canal no plano.
 
 ## Não reabra
 

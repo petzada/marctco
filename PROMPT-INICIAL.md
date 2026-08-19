@@ -1,6 +1,6 @@
 # Prompt inicial para a sessão de implementação
 
-> **Fases 0–2 entregues.** Este prompt abriu a fatia quando o repositório não tinha código de produção. Não use como estado atual. Próximo: [`.scratch/fechamento-fases-0-2.md`](.scratch/fechamento-fases-0-2.md) (etapa B, manual/prod) e Fase 3 · Tempo do [plano](docs/plano-de-construcao.md) — spec ainda não existe.
+> **Fases 0–3 entregues.** Este prompt abriu a fatia quando o repositório não tinha código de produção. Não use como estado atual. Fechamento 0–2: [`.scratch/fechamento-fases-0-2.md`](.scratch/fechamento-fases-0-2.md). Fechamento Fase 3: [`.scratch/tempo/PROMPT-HANDOFF.md`](.scratch/tempo/PROMPT-HANDOFF.md). Próximo: Fase 4 · Canal do [plano](docs/plano-de-construcao.md).
 
 Cole o bloco abaixo numa sessão nova do Claude Code, na raiz do repositório clonado.
 
