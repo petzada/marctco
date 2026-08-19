@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { MAX_FIRST_CONTACT_SLA_MINUTES } from "@marctco/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createJobContext, createUserContextFromResolvedMembership } from "../src/access-context.js";
+import { createActivity } from "../src/activities.js";
+import { resolveIntakeReview } from "../src/intake-review.js";
 import { markNotificationRead, NotificationError } from "../src/notifications.js";
 import {
   claimWorkspacesWithOverdueOpportunities,
   sweepWorkspaceOpportunityClock
 } from "../src/opportunity-clock.js";
+import { updateWorkspaceSettings } from "../src/workspace-settings.js";
 
 const database_url = process.env.DATABASE_URL;
 if (!database_url) {
@@ -33,6 +37,7 @@ const neighbour_stage = randomUUID();
 const attendant_user = randomUUID();
 const other_team_user = randomUUID();
 const supervisor_user = randomUUID();
+const untagged_supervisor_user = randomUUID();
 const manager_user = randomUUID();
 const owner_user = randomUUID();
 const neighbour_manager = randomUUID();
@@ -45,6 +50,11 @@ const attendant_context = createUserContextFromResolvedMembership({
 const supervisor_context = createUserContextFromResolvedMembership({
   workspace_id: workspace,
   user_id: supervisor_user,
+  role: "SUPERVISOR"
+});
+const untagged_supervisor_context = createUserContextFromResolvedMembership({
+  workspace_id: workspace,
+  user_id: untagged_supervisor_user,
   role: "SUPERVISOR"
 });
 const manager_context = createUserContextFromResolvedMembership({
@@ -116,6 +126,64 @@ async function seedOpportunity(options: {
   return opportunity.id;
 }
 
+async function seedIsolatedTenant(name: string): Promise<{
+  readonly id: string;
+  readonly pipeline_id: string;
+  readonly entry_stage: string;
+  readonly attendant_user: string;
+  readonly owner_context: ReturnType<typeof createUserContextFromResolvedMembership>;
+  readonly attendant_context: ReturnType<typeof createUserContextFromResolvedMembership>;
+}> {
+  const id = randomUUID();
+  const pipeline_id = randomUUID();
+  const entry_stage = randomUUID();
+  const owner_user_id = randomUUID();
+  const attendant_user_id = randomUUID();
+  await seeder.workspace.create({
+    data: {
+      id,
+      slug: randomUUID(),
+      name,
+      members: {
+        create: [
+          { user_id: owner_user_id, role: "OWNER", display_name: "Direcao" },
+          { user_id: attendant_user_id, role: "ATTENDANT", display_name: "Ana" }
+        ]
+      },
+      pipelines: {
+        create: {
+          id: pipeline_id,
+          name: "Comercial",
+          type: "COMMERCIAL",
+          is_default: true,
+          stages: {
+            create: [
+              { id: entry_stage, label: "Novo lead", position: 1, role: "ENTRY" },
+              { label: "Conclusao", position: 2, role: "CLOSING" }
+            ]
+          }
+        }
+      }
+    }
+  });
+  return {
+    id,
+    pipeline_id,
+    entry_stage,
+    attendant_user: attendant_user_id,
+    owner_context: createUserContextFromResolvedMembership({
+      workspace_id: id,
+      user_id: owner_user_id,
+      role: "OWNER"
+    }),
+    attendant_context: createUserContextFromResolvedMembership({
+      workspace_id: id,
+      user_id: attendant_user_id,
+      role: "ATTENDANT"
+    })
+  };
+}
+
 beforeAll(async () => {
   await seeder.$transaction(async (transaction) => {
     await transaction.workspace.create({
@@ -159,6 +227,12 @@ beforeAll(async () => {
         { workspace_id: workspace, user_id: attendant_user, role: "ATTENDANT", display_name: "Ana" },
         { workspace_id: workspace, user_id: other_team_user, role: "ATTENDANT", display_name: "Bia" },
         { workspace_id: workspace, user_id: supervisor_user, role: "SUPERVISOR", display_name: "Sofia" },
+        {
+          workspace_id: workspace,
+          user_id: untagged_supervisor_user,
+          role: "SUPERVISOR",
+          display_name: "Sem equipe"
+        },
         { workspace_id: workspace, user_id: manager_user, role: "MANAGER", display_name: "Marina" },
         { workspace_id: workspace, user_id: owner_user, role: "OWNER", display_name: "Direcao" },
         {
@@ -330,6 +404,218 @@ describe.sequential("opportunity clock sweep", () => {
   });
 });
 
+describe.sequential("stagnation clock sweep", () => {
+  it("claims a tenant only because a contacted lead is stagnant, and a second pass updates last_detected_at", async () => {
+    const stagnant = await seedIsolatedTenant("Parado");
+    const fresh = await seedIsolatedTenant("Em movimento");
+    try {
+      await updateWorkspaceSettings(
+        stagnant.owner_context,
+        {
+          first_contact_sla_minutes: MAX_FIRST_CONTACT_SLA_MINUTES,
+          stagnation_days: 7
+        },
+        app
+      );
+      await updateWorkspaceSettings(
+        fresh.owner_context,
+        {
+          first_contact_sla_minutes: MAX_FIRST_CONTACT_SLA_MINUTES,
+          stagnation_days: 7
+        },
+        app
+      );
+
+      const stagnant_lead = await seedOpportunity({
+        workspace_id: stagnant.id,
+        pipeline_id: stagnant.pipeline_id,
+        stage_id: stagnant.entry_stage,
+        assigned_user_id: stagnant.attendant_user,
+        arrived_at: daysAgo(7),
+        first_contact_at: new Date(daysAgo(7).getTime() + 10 * 60_000),
+        last_movement_at: daysAgo(7)
+      });
+      await seedOpportunity({
+        workspace_id: fresh.id,
+        pipeline_id: fresh.pipeline_id,
+        stage_id: fresh.entry_stage,
+        assigned_user_id: fresh.attendant_user,
+        arrived_at: minutesAgo(10),
+        first_contact_at: minutesAgo(5),
+        last_movement_at: minutesAgo(5)
+      });
+
+      const claimed = await claimWorkspacesWithOverdueOpportunities(now, app);
+      const ids = claimed.map((row) => row.workspace_id);
+      expect(ids).toContain(stagnant.id);
+      expect(ids).not.toContain(fresh.id);
+
+      const first = await sweepWorkspaceOpportunityClock(clockJob(stagnant.id), now, app);
+      expect(first.upserted).toBe(1);
+      const later = new Date(now.getTime() + 60_000);
+      const second = await sweepWorkspaceOpportunityClock(clockJob(stagnant.id), later, app);
+      expect(second.upserted).toBe(1);
+
+      const rows = await seeder.notification.findMany({
+        where: { workspace_id: stagnant.id, opportunity_id: stagnant_lead }
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        type: "STAGNANT",
+        resolved_at: null
+      });
+      expect(rows[0]?.detected_at.getTime()).toBe(now.getTime());
+      expect(rows[0]?.last_detected_at.getTime()).toBe(later.getTime());
+    } finally {
+      await seeder.workspace.deleteMany({ where: { id: { in: [stagnant.id, fresh.id] } } });
+    }
+  });
+
+  it("resolves STAGNANT on the next pass after canonical movement, without a read", async () => {
+    const tenant = await seedIsolatedTenant("Movimento");
+    try {
+      await updateWorkspaceSettings(
+        tenant.owner_context,
+        {
+          first_contact_sla_minutes: MAX_FIRST_CONTACT_SLA_MINUTES,
+          stagnation_days: 7
+        },
+        app
+      );
+      const opportunity_id = await seedOpportunity({
+        workspace_id: tenant.id,
+        pipeline_id: tenant.pipeline_id,
+        stage_id: tenant.entry_stage,
+        assigned_user_id: tenant.attendant_user,
+        arrived_at: daysAgo(7),
+        first_contact_at: new Date(daysAgo(7).getTime() + 10 * 60_000),
+        last_movement_at: daysAgo(7)
+      });
+      await sweepWorkspaceOpportunityClock(clockJob(tenant.id), now, app);
+      await createActivity(
+        tenant.attendant_context,
+        {
+          opportunity_id,
+          type: "TASK",
+          title: "Retomar conversa",
+          due_at: now
+        },
+        app
+      );
+
+      const result = await sweepWorkspaceOpportunityClock(clockJob(tenant.id), now, app);
+      expect(result.resolved).toBe(1);
+      const row = await seeder.notification.findFirstOrThrow({
+        where: { workspace_id: tenant.id, opportunity_id, type: "STAGNANT" }
+      });
+      expect(row.resolved_at?.getTime()).toBe(now.getTime());
+      expect(row.read_at).toBeNull();
+    } finally {
+      await seeder.workspace.delete({ where: { id: tenant.id } });
+    }
+  });
+});
+
+describe.sequential("resolution when the cause ends", () => {
+  it.each(["WON", "LOST"] as const)(
+    "resolves after the lead is %s even when the notice was already read",
+    async (status) => {
+      const opportunity_id = await seedOpportunity({
+        arrived_at: daysAgo(7),
+        first_contact_at: new Date(daysAgo(7).getTime() + 10 * 60_000),
+        last_movement_at: daysAgo(7)
+      });
+      await sweepWorkspaceOpportunityClock(clockJob(workspace), now, app);
+      const notice = await seeder.notification.findFirstOrThrow({
+        where: { workspace_id: workspace, opportunity_id, type: "STAGNANT" }
+      });
+      await markNotificationRead(manager_context, { notification_id: notice.id, now }, app);
+
+      await seeder.opportunity.update({
+        where: { id: opportunity_id },
+        data: { status, closed_at: now }
+      });
+      const later = new Date(now.getTime() + 1_000);
+      const result = await sweepWorkspaceOpportunityClock(clockJob(workspace), later, app);
+      expect(result.resolved).toBeGreaterThanOrEqual(1);
+
+      const row = await seeder.notification.findFirstOrThrow({ where: { id: notice.id } });
+      expect(row.read_at?.getTime()).toBe(now.getTime());
+      expect(row.read_by_user_id).toBe(manager_user);
+      expect(row.resolved_at?.getTime()).toBe(later.getTime());
+    }
+  );
+
+  it("resolves the tombstone after a same-financing merge, without clearing a prior read", async () => {
+    const person = await seeder.person.create({
+      data: { workspace_id: workspace, name: "Duplicado" }
+    });
+    const canonical = await seeder.opportunity.create({
+      data: {
+        workspace_id: workspace,
+        person_id: person.id,
+        pipeline_id: pipeline,
+        stage_id: entry_stage,
+        area: "COMMERCIAL",
+        status: "OPEN",
+        arrived_at: daysAgo(10),
+        first_contact_at: new Date(daysAgo(10).getTime() + 10 * 60_000),
+        last_movement_at: daysAgo(10),
+        assigned_user_id: attendant_user
+      }
+    });
+    const absorbed = await seeder.opportunity.create({
+      data: {
+        workspace_id: workspace,
+        person_id: person.id,
+        pipeline_id: pipeline,
+        stage_id: entry_stage,
+        area: "COMMERCIAL",
+        status: "OPEN",
+        arrived_at: daysAgo(7),
+        first_contact_at: new Date(daysAgo(7).getTime() + 10 * 60_000),
+        last_movement_at: daysAgo(7),
+        assigned_user_id: attendant_user
+      }
+    });
+    const review = await seeder.intakeReview.create({
+      data: {
+        workspace_id: workspace,
+        opportunity_id: absorbed.id,
+        type: "POSSIBLE_DUPLICATE",
+        related_opportunity_id: canonical.id
+      }
+    });
+    await sweepWorkspaceOpportunityClock(clockJob(workspace), now, app);
+    const notice = await seeder.notification.findFirstOrThrow({
+      where: { opportunity_id: absorbed.id, type: "STAGNANT" }
+    });
+    await markNotificationRead(manager_context, { notification_id: notice.id, now }, app);
+
+    await resolveIntakeReview(
+      owner_context,
+      {
+        review_id: review.id,
+        resolution: "SAME_FINANCING",
+        reason: "E a mesma operacao de credito",
+        resolved_at: now
+      },
+      app
+    );
+    expect(
+      (await seeder.opportunity.findUniqueOrThrow({ where: { id: absorbed.id } }))
+        .merged_into_opportunity_id
+    ).toBe(canonical.id);
+
+    const later = new Date(now.getTime() + 1_000);
+    const result = await sweepWorkspaceOpportunityClock(clockJob(workspace), later, app);
+    expect(result.resolved).toBeGreaterThanOrEqual(1);
+    const row = await seeder.notification.findFirstOrThrow({ where: { id: notice.id } });
+    expect(row.read_at?.getTime()).toBe(now.getTime());
+    expect(row.resolved_at?.getTime()).toBe(later.getTime());
+  });
+});
+
 describe.sequential("markNotificationRead", () => {
   it("records who marked and does not resolve", async () => {
     const opportunity_id = await seedOpportunity({ arrived_at: minutesAgo(180) });
@@ -402,5 +688,32 @@ describe.sequential("markNotificationRead", () => {
     await expect(
       markNotificationRead(manager_context, { notification_id: neighbour_notice.id, now }, app)
     ).rejects.toBeInstanceOf(NotificationError);
+  });
+
+  it("hides every notice from an untagged Supervisor instead of inheriting Gestão", async () => {
+    const opportunity_id = await seedOpportunity({
+      arrived_at: minutesAgo(180),
+      assigned_user_id: attendant_user
+    });
+    await sweepWorkspaceOpportunityClock(clockJob(workspace), now, app);
+    const notice = await seeder.notification.findFirstOrThrow({
+      where: { opportunity_id, type: "FIRST_CONTACT_SLA_BREACHED" }
+    });
+
+    await expect(
+      markNotificationRead(untagged_supervisor_context, { notification_id: notice.id, now }, app)
+    ).rejects.toMatchObject({ reason: "NOT_VISIBLE" });
+    expect(await seeder.notification.findFirstOrThrow({ where: { id: notice.id } })).toMatchObject({
+      read_at: null,
+      resolved_at: null
+    });
+
+    const marked = await markNotificationRead(
+      manager_context,
+      { notification_id: notice.id, now },
+      app
+    );
+    expect(marked.read_by_user_id).toBe(manager_user);
+    expect(marked.resolved_at).toBeNull();
   });
 });
