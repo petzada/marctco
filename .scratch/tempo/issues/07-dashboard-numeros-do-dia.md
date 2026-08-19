@@ -12,13 +12,13 @@ Atendente **não tem Dashboard**: o item some da barra **e** a rota recusa, porq
 
 Este ticket entrega os números. Os gráficos são o ticket 08 e as notificações o 10 — os dois entram nesta mesma tela depois.
 
-- [ ] Rota de Dashboard sob `/workspace/:slug`, com item na barra para quem a matriz do [ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md) alcança
-- [ ] **Uma** operação nomeada responde a tela inteira, pelo mesmo motivo que `getLeadBoard` responde o quadro inteiro: seis leituras soltas viram seis `where` de quem chamou, e o item A19 do plano já registra que consulta paralela custa conexão em pooling transaction-mode
-- [ ] Os quatro tiles no escopo de cada perfil: Supervisor com tag vê o time, Gestão e Direção veem tudo
-- [ ] O tile de leads sem responsável vem **zerado** para o Supervisor — a fila sem dono não é dele ([ADR-0024](../../../docs/adr/0024-fila-sem-dono-e-da-gestao.md))
-- [ ] Atendente é recusado pela rota, não só pela ausência do item na barra
-- [ ] Supervisor **sem** tag recebe zeros com estado vazio que nomeia a causa e quem resolve, em vez de zeros que parecem defeito
-- [ ] Cada tile carrega o destino do clique, com o filtro já montado na URL da tela de destino
-- [ ] Os números vêm das mesmas funções puras que os tickets 03 e 04 criaram — o Dashboard não recalcula SLA nem estagnação por conta própria
-- [ ] Legível em tela pequena: a primeira olhada do dia é no celular
-- [ ] Segue o `DESIGN.md`, sem cor inline e sem px inline
+- [x] Rota de Dashboard sob `/workspace/:slug`, com item na barra para quem a matriz do [ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md) alcança
+- [x] **Uma** operação nomeada responde a tela inteira, pelo mesmo motivo que `getLeadBoard` responde o quadro inteiro: seis leituras soltas viram seis `where` de quem chamou, e o item A19 do plano já registra que consulta paralela custa conexão em pooling transaction-mode
+- [x] Os quatro tiles no escopo de cada perfil: Supervisor com tag vê o time, Gestão e Direção veem tudo
+- [x] O tile de leads sem responsável vem **zerado** para o Supervisor — a fila sem dono não é dele ([ADR-0024](../../../docs/adr/0024-fila-sem-dono-e-da-gestao.md))
+- [x] Atendente é recusado pela rota, não só pela ausência do item na barra
+- [x] Supervisor **sem** tag recebe zeros com estado vazio que nomeia a causa e quem resolve, em vez de zeros que parecem defeito
+- [x] Cada tile carrega o destino do clique, com o filtro já montado na URL da tela de destino
+- [x] Os números vêm das mesmas funções puras que os tickets 03 e 04 criaram — o Dashboard não recalcula SLA nem estagnação por conta própria
+- [x] Legível em tela pequena: a primeira olhada do dia é no celular
+- [x] Segue o `DESIGN.md`, sem cor inline e sem px inline

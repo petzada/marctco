@@ -1,10 +1,11 @@
-export type SupervisorTeamEmptySurface = "leads" | "team" | "board" | "agenda";
+export type SupervisorTeamEmptySurface = "leads" | "team" | "board" | "agenda" | "dashboard";
 
 const TITLES: Readonly<Record<SupervisorTeamEmptySurface, string>> = {
   leads: "Seu time ainda n\u00e3o aparece nos Leads",
   team: "Seu time ainda n\u00e3o aparece na Equipe",
   board: "Seu time ainda n\u00e3o aparece no quadro",
-  agenda: "Seu time ainda n\u00e3o aparece na Agenda"
+  agenda: "Seu time ainda n\u00e3o aparece na Agenda",
+  dashboard: "Seu time ainda n\u00e3o aparece no Dashboard"
 };
 
 /** Copy shared by Leads, Equipe and the Meus leads board (tickets 05, 03b, 07). */

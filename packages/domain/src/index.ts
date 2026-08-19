@@ -178,3 +178,16 @@ export {
   type WorkspaceSettingsWrite,
   type WorkspaceSettingsWriteParse
 } from "./workspace-settings.js";
+export {
+  OPERATIONAL_DASHBOARD_TILE_IDS,
+  buildOperationalDashboardTiles,
+  canReadOperationalDashboard,
+  canSeeUnassignedQueueOnDashboard,
+  operationalDashboardTileDestination,
+  type OperationalDashboardCounts,
+  type OperationalDashboardDestination,
+  type OperationalDashboardEmptyReason,
+  type OperationalDashboardScreen,
+  type OperationalDashboardTile,
+  type OperationalDashboardTileId
+} from "./operational-dashboard.js";

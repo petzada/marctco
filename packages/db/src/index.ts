@@ -251,3 +251,17 @@ export {
 // existing writes stamp last_movement_at and record the fact internally.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Ticket 07 — operational Dashboard tiles. Appended at the end so parallel
+// Fase 3 tickets that also touch this barrel stay additive. Ticket 08 will
+// extend this same operation with series; do not add a second dashboard read.
+// ---------------------------------------------------------------------------
+export {
+  getOperationalDashboard,
+  OperationalDashboardError,
+  type GetOperationalDashboardOptions,
+  type OperationalDashboard,
+  type OperationalDashboardEmptyState,
+  type OperationalDashboardRefusal
+} from "./operational-dashboard.js";
+

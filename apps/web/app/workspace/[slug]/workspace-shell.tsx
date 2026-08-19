@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarBlankIcon } from "@phosphor-icons/react/CalendarBlank";
+import { ChartBarIcon } from "@phosphor-icons/react/ChartBar";
 import { ColumnsIcon } from "@phosphor-icons/react/Columns";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/GlobeSimple";
@@ -32,6 +33,12 @@ interface WorkspaceShellProps {
    * of scope as Gestão on the board (ADR-0015).
    */
   readonly seesLeadsTable: boolean;
+  /**
+   * Whether this profile has the operational Dashboard. Absent for the
+   * ATTENDANT: the route refuses, hiding the item is not access control
+   * (ADR-0015).
+   */
+  readonly canReadDashboard: boolean;
 }
 
 interface NavigationProps {
@@ -50,7 +57,8 @@ export function WorkspaceShell({
   canManageIntegrations,
   canManageSettings,
   attendsLeads,
-  seesLeadsTable
+  seesLeadsTable,
+  canReadDashboard
 }: WorkspaceShellProps) {
   const pathname = usePathname();
   const mobileMenu = useRef<HTMLDetailsElement>(null);
@@ -114,7 +122,16 @@ export function WorkspaceShell({
       href: `/workspace/${slug}/agenda`,
       icon: <CalendarBlankIcon aria-hidden="true" size={20} weight="regular" />,
       label: "Agenda"
-    }
+    },
+    ...(canReadDashboard
+      ? [
+          {
+            href: `/workspace/${slug}/dashboard`,
+            icon: <ChartBarIcon aria-hidden="true" size={20} weight="regular" />,
+            label: "Dashboard"
+          }
+        ]
+      : [])
   ];
 
   return (
