@@ -319,8 +319,9 @@ describe("listLeadTimeline", () => {
     expect(page.facts[0]?.assigned_user_name).not.toMatch(UUID_PATTERN);
   });
 
-  it("replays assignment names from the fact chain instead of today's card owner", async () => {
-    const opportunity_id = await seedOpportunity({ assigned_user_id: supervisor_user });
+  it("keeps each assignment hop's names after assign, two reassignments, and a later change", async () => {
+    const opportunity_id = await seedOpportunity({ assigned_user_id: null });
+    await assignLead(manager_context, { opportunity_id, user_id: supervisor_user }, app);
     await reassignLead(
       supervisor_context,
       { opportunity_id, current_user_id: supervisor_user, user_id: attendant_user },
@@ -332,29 +333,123 @@ describe("listLeadTimeline", () => {
       app
     );
 
-    const page = await listLeadTimeline(manager_context, opportunity_id, {}, app);
-    expect(page.facts.map((fact) => fact.type)).toEqual(["REASSIGNED", "REASSIGNED"]);
-    expect(page.facts[1]).toMatchObject({
-      type: "REASSIGNED",
-      previous_assigned_user_name: "Ana Atendente",
-      assigned_user_name: "Bruno Colega"
-    });
-    expect(page.facts[0]).toMatchObject({
-      type: "REASSIGNED",
-      assigned_user_name: "Ana Atendente"
-    });
-    expect(page.facts[0]?.previous_assigned_user_name).not.toBe("Ana Atendente");
-    expect(page.facts[0]?.previous_assigned_user_name).not.toBe("Bruno Colega");
+    const afterTwoReassignments = await listLeadTimeline(manager_context, opportunity_id, {}, app);
+    expect(afterTwoReassignments.facts).toEqual([
+      expect.objectContaining({
+        type: "ASSIGNED",
+        assigned_user_name: "Sofia Supervisora",
+        previous_assigned_user_name: null
+      }),
+      expect.objectContaining({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Sofia Supervisora",
+        assigned_user_name: "Ana Atendente"
+      }),
+      expect.objectContaining({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Ana Atendente",
+        assigned_user_name: "Bruno Colega"
+      })
+    ]);
+    expect(
+      afterTwoReassignments.facts.every(
+        (fact) =>
+          (fact.assigned_user_name === null || !UUID_PATTERN.test(fact.assigned_user_name)) &&
+          (fact.previous_assigned_user_name === null ||
+            !UUID_PATTERN.test(fact.previous_assigned_user_name))
+      )
+    ).toBe(true);
+
+    await reassignLead(
+      manager_context,
+      { opportunity_id, current_user_id: other_attendant_user, user_id: same_team_user },
+      app
+    );
+
+    const afterFurtherChange = await listLeadTimeline(manager_context, opportunity_id, {}, app);
+    expect(afterFurtherChange.facts).toEqual([
+      expect.objectContaining({
+        type: "ASSIGNED",
+        assigned_user_name: "Sofia Supervisora",
+        previous_assigned_user_name: null
+      }),
+      expect.objectContaining({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Sofia Supervisora",
+        assigned_user_name: "Ana Atendente"
+      }),
+      expect.objectContaining({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Ana Atendente",
+        assigned_user_name: "Bruno Colega"
+      }),
+      expect.objectContaining({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Bruno Colega",
+        assigned_user_name: "Time ACR"
+      })
+    ]);
   });
 
-  it("names who left when a lead returns to the queue", async () => {
+  it("names who left when a lead returns to the queue, even after a later assignment", async () => {
     const opportunity_id = await seedOpportunity({ assigned_user_id: detach_target_user });
     await detachWorkspaceMember(manager_context, detach_target_user, app);
 
+    const afterReturn = await listLeadTimeline(manager_context, opportunity_id, {}, app);
+    expect(afterReturn.facts).toEqual([
+      expect.objectContaining({
+        type: "RETURNED_TO_QUEUE",
+        previous_assigned_user_name: "Carlos Desatrelado",
+        assigned_user_name: null
+      })
+    ]);
+    expect(afterReturn.facts[0]?.previous_assigned_user_name).not.toMatch(UUID_PATTERN);
+
+    await assignLead(manager_context, { opportunity_id, user_id: supervisor_user }, app);
+    const afterLaterAssignment = await listLeadTimeline(manager_context, opportunity_id, {}, app);
+    expect(afterLaterAssignment.facts).toEqual([
+      expect.objectContaining({
+        type: "RETURNED_TO_QUEUE",
+        previous_assigned_user_name: "Carlos Desatrelado",
+        assigned_user_name: null
+      }),
+      expect.objectContaining({
+        type: "ASSIGNED",
+        assigned_user_name: "Sofia Supervisora",
+        previous_assigned_user_name: null
+      })
+    ]);
+  });
+
+  it("does not invent names for historical facts that never stored assignment snapshots", async () => {
+    const opportunity_id = await seedOpportunity({ assigned_user_id: other_attendant_user });
+    await seeder.opportunityTimelineEvent.create({
+      data: {
+        workspace_id: workspace,
+        opportunity_id,
+        type: "REASSIGNED",
+        occurred_at: new Date("2026-08-19T09:00:00.000Z")
+      }
+    });
+    await reassignLead(
+      manager_context,
+      { opportunity_id, current_user_id: other_attendant_user, user_id: attendant_user },
+      app
+    );
+
     const page = await listLeadTimeline(manager_context, opportunity_id, {}, app);
-    expect(page.facts.map((fact) => fact.type)).toEqual(["RETURNED_TO_QUEUE"]);
-    expect(page.facts[0]?.previous_assigned_user_name).toBe("Carlos Desatrelado");
-    expect(page.facts[0]?.previous_assigned_user_name).not.toMatch(UUID_PATTERN);
+    expect(page.facts).toEqual([
+      expect.objectContaining({
+        type: "REASSIGNED",
+        assigned_user_name: null,
+        previous_assigned_user_name: null
+      }),
+      expect.objectContaining({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Bruno Colega",
+        assigned_user_name: "Ana Atendente"
+      })
+    ]);
   });
 
   it("applies the same Opportunity scope Fase 2 already uses", async () => {
@@ -398,7 +493,12 @@ describe("listLeadTimeline", () => {
       data: { workspace_id: workspace, name: "Pessoa mesclada" }
     });
     const canonical_id = await seedOpportunity({ person_id: person.id });
-    const absorbed_id = await seedOpportunity({ person_id: person.id });
+    const absorbed_id = await seedOpportunity({ person_id: person.id, assigned_user_id: supervisor_user });
+    await reassignLead(
+      supervisor_context,
+      { opportunity_id: absorbed_id, current_user_id: supervisor_user, user_id: attendant_user },
+      app
+    );
     await moveLeadStage(
       attendant_context,
       { opportunity_id: absorbed_id, current_stage_id: entry_stage, stage_id: contact_stage },
@@ -428,7 +528,18 @@ describe("listLeadTimeline", () => {
       has_more: false
     });
     const canonical = await listLeadTimeline(manager_context, canonical_id, {}, app);
-    expect(canonical.facts.map((fact) => fact.type)).toContain("STAGE_CHANGED");
+    expect(canonical.facts.map((fact) => fact.type)).toEqual(
+      expect.arrayContaining(["REASSIGNED", "STAGE_CHANGED"])
+    );
+    expect(canonical.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "REASSIGNED",
+          previous_assigned_user_name: "Sofia Supervisora",
+          assigned_user_name: "Ana Atendente"
+        })
+      ])
+    );
     expect(canonical.facts.some((fact) => fact.type === "SUBMISSION_REENTERED")).toBe(false);
   });
 

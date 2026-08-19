@@ -34,6 +34,59 @@ describe("buildLeadTimelineItemView", () => {
     expect(view.occurredAtLabel).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
   });
 
+  it("keeps each hop's caption after two reassignments, instead of today's owner", () => {
+    const first = buildLeadTimelineItemView(
+      fact({
+        type: "ASSIGNED",
+        assigned_user_name: "Sofia Supervisora"
+      })
+    );
+    const second = buildLeadTimelineItemView(
+      fact({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Sofia Supervisora",
+        assigned_user_name: "Ana Atendente"
+      })
+    );
+    const third = buildLeadTimelineItemView(
+      fact({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Ana Atendente",
+        assigned_user_name: "Bruno Colega"
+      })
+    );
+    const afterFurtherChange = buildLeadTimelineItemView(
+      fact({
+        type: "REASSIGNED",
+        previous_assigned_user_name: "Bruno Colega",
+        assigned_user_name: "Time ACR"
+      })
+    );
+    expect(first.caption).toBe("Atribuído a Sofia Supervisora");
+    expect(second.caption).toBe("Reatribuído de Sofia Supervisora para Ana Atendente");
+    expect(third.caption).toBe("Reatribuído de Ana Atendente para Bruno Colega");
+    expect(afterFurtherChange.caption).toBe("Reatribuído de Bruno Colega para Time ACR");
+  });
+
+  it("names who left the queue return even when a later assignment exists", () => {
+    expect(
+      buildLeadTimelineItemView(
+        fact({
+          type: "RETURNED_TO_QUEUE",
+          previous_assigned_user_name: "Carlos Desatrelado"
+        })
+      ).caption
+    ).toBe("Devolvido à fila (saída de Carlos Desatrelado)");
+    expect(
+      buildLeadTimelineItemView(
+        fact({
+          type: "ASSIGNED",
+          assigned_user_name: "Sofia Supervisora"
+        })
+      ).caption
+    ).toBe("Atribuído a Sofia Supervisora");
+  });
+
   it("drops an opaque user id instead of printing it", () => {
     const view = buildLeadTimelineItemView(
       fact({

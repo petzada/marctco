@@ -188,6 +188,8 @@ describe("last_movement_at and movement facts", () => {
       type: "STAGE_CHANGED",
       lead_submission_id: null,
       integration_event_id: null,
+      assigned_user_id: null,
+      previous_assigned_user_id: null,
       opportunity_id,
       workspace_id: workspace
     });
@@ -216,6 +218,13 @@ describe("last_movement_at and movement facts", () => {
     await assignLead(manager_context, { opportunity_id: one, user_id: supervisor_user }, app);
     expect(await movementAt(one)).not.toBeNull();
     expect((await movementFacts(one)).map((fact) => fact.type)).toEqual(["ASSIGNED"]);
+    expect(await movementFacts(one)).toEqual([
+      expect.objectContaining({
+        type: "ASSIGNED",
+        assigned_user_id: supervisor_user,
+        previous_assigned_user_id: null
+      })
+    ]);
 
     const first = await seedOpportunity({ assigned_user_id: null });
     const second = await seedOpportunity({ assigned_user_id: null });
@@ -235,6 +244,13 @@ describe("last_movement_at and movement facts", () => {
     expect(stored.previous_assigned_user_id).toBe(supervisor_user);
     expect(stored.last_movement_at).not.toBeNull();
     expect((await movementFacts(one)).map((fact) => fact.type)).toEqual(["REASSIGNED"]);
+    expect(await movementFacts(one)).toEqual([
+      expect.objectContaining({
+        type: "REASSIGNED",
+        assigned_user_id: attendant_user,
+        previous_assigned_user_id: supervisor_user
+      })
+    ]);
 
     const first = await seedOpportunity({ assigned_user_id: supervisor_user });
     const second = await seedOpportunity({ assigned_user_id: supervisor_user });
@@ -262,6 +278,13 @@ describe("last_movement_at and movement facts", () => {
       expect(stored.previous_assigned_user_id).toBe(attendant_user);
       expect(stored.last_movement_at).not.toBeNull();
       expect((await movementFacts(opportunity_id)).map((fact) => fact.type)).toEqual(["RETURNED_TO_QUEUE"]);
+      expect(await movementFacts(opportunity_id)).toEqual([
+        expect.objectContaining({
+          type: "RETURNED_TO_QUEUE",
+          assigned_user_id: null,
+          previous_assigned_user_id: attendant_user
+        })
+      ]);
     } finally {
       await seeder.workspaceMember.update({
         where: { workspace_id_user_id: { workspace_id: workspace, user_id: attendant_user } },
@@ -279,11 +302,30 @@ describe("last_movement_at and movement facts", () => {
     );
     expect(await movementAt(opportunity_id)).not.toBeNull();
     expect((await movementFacts(opportunity_id)).map((fact) => fact.type)).toEqual(["ACTIVITY_CREATED"]);
+    expect(await movementFacts(opportunity_id)).toEqual([
+      expect.objectContaining({
+        type: "ACTIVITY_CREATED",
+        assigned_user_id: null,
+        previous_assigned_user_id: null
+      })
+    ]);
 
     await completeActivity(attendant_context, created.id, app);
     expect((await movementFacts(opportunity_id)).map((fact) => fact.type)).toEqual([
       "ACTIVITY_CREATED",
       "ACTIVITY_COMPLETED"
+    ]);
+    expect(await movementFacts(opportunity_id)).toEqual([
+      expect.objectContaining({
+        type: "ACTIVITY_CREATED",
+        assigned_user_id: null,
+        previous_assigned_user_id: null
+      }),
+      expect.objectContaining({
+        type: "ACTIVITY_COMPLETED",
+        assigned_user_id: null,
+        previous_assigned_user_id: null
+      })
     ]);
   });
 
