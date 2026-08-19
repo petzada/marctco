@@ -1,14 +1,17 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import type { OperationalDashboard } from "@marctco/db";
+import type { OperationalDashboard, UnresolvedNotification } from "@marctco/db";
 import { Card } from "../../../../components/ui/card";
 import { EmptyState } from "../../../../components/ui/empty-state";
 import {
   buildDashboardChartsViewModel,
+  buildDashboardNotificationViewModel,
   buildDashboardTileViewModel,
+  burningNotificationsEmptyState,
   type DashboardTileViewModel
 } from "../../../../lib/dashboard/view-model";
 import { supervisorTeamEmptyState } from "../../../../lib/supervisor-team-empty-state";
+import { DashboardNotifications } from "./dashboard-notifications";
 
 const DashboardCharts = dynamic(
   () => import("./dashboard-charts").then((mod) => mod.DashboardCharts),
@@ -23,16 +26,19 @@ const COUNT_TONE: Readonly<Record<DashboardTileViewModel["tone"], string>> = {
 
 interface DashboardViewProps {
   readonly dashboard: OperationalDashboard;
+  readonly notifications: readonly UnresolvedNotification[];
   readonly slug: string;
 }
 
-export function DashboardView({ dashboard, slug }: DashboardViewProps) {
+export function DashboardView({ dashboard, notifications, slug }: DashboardViewProps) {
   const tiles = dashboard.tiles.map((tile) => buildDashboardTileViewModel(tile, slug));
   const charts = buildDashboardChartsViewModel(dashboard.series);
+  const notices = notifications.map((item) => buildDashboardNotificationViewModel(item, slug));
   const missingTeam =
     dashboard.empty_state?.reason === "SUPERVISOR_WITHOUT_TEAM"
       ? supervisorTeamEmptyState("dashboard")
       : null;
+  const nothingBurning = notices.length === 0 ? burningNotificationsEmptyState() : null;
 
   return (
     <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
@@ -59,6 +65,24 @@ export function DashboardView({ dashboard, slug }: DashboardViewProps) {
         </section>
 
         <DashboardCharts charts={charts} />
+
+        <section aria-label="Avisos da operação">
+          <Card className="flex flex-col gap-sm">
+            <div className="flex flex-col gap-xxs">
+              <h2 className="text-title text-ink">O que precisa de reação</h2>
+              <p className="text-caption text-ink-muted">
+                Leads estourados e parados. Marcar como lida não tira o aviso da lista.
+              </p>
+            </div>
+            {missingTeam ? (
+              <EmptyState description={missingTeam.description} title={missingTeam.title} />
+            ) : nothingBurning ? (
+              <EmptyState description={nothingBurning.description} title={nothingBurning.title} />
+            ) : (
+              <DashboardNotifications items={notices} slug={slug} />
+            )}
+          </Card>
+        </section>
       </div>
     </main>
   );

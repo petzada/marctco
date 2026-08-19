@@ -295,10 +295,13 @@ export {
   type OverdueOpportunityWorkspace
 } from "./opportunity-clock.js";
 export {
+  listUnresolvedNotifications,
   markNotificationRead,
   NotificationError,
   type MarkNotificationReadInput,
   type MarkedNotificationRead,
-  type NotificationRefusal
+  type NotificationRefusal,
+  type UnresolvedNotification,
+  type UnresolvedNotificationList
 } from "./notifications.js";
 
