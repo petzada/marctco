@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getOperationalDashboard = vi.fn();
+const listUnresolvedNotifications = vi.fn();
 const notFound = vi.fn(() => {
   throw new Error("NEXT_NOT_FOUND");
 });
@@ -10,7 +11,7 @@ const redirect = vi.fn((destination: string) => {
 });
 const resolveWorkspaceAccess = vi.fn();
 
-vi.mock("@marctco/db", () => ({ getOperationalDashboard }));
+vi.mock("@marctco/db", () => ({ getOperationalDashboard, listUnresolvedNotifications }));
 vi.mock("next/navigation", () => ({ notFound, redirect }));
 vi.mock("../../../../lib/workspace-access", () => ({ resolveWorkspaceAccess }));
 
@@ -35,6 +36,7 @@ describe("Dashboard route", () => {
       series: { arrivals: [], sla_adherence: [], open_by_stage: [] },
       empty_state: null
     });
+    listUnresolvedNotifications.mockReset().mockResolvedValue({ items: [] });
     notFound.mockClear();
     redirect.mockClear();
     resolveWorkspaceAccess.mockReset();
@@ -44,14 +46,16 @@ describe("Dashboard route", () => {
     await expect(render("ATTENDANT")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(notFound).toHaveBeenCalledOnce();
     expect(getOperationalDashboard).not.toHaveBeenCalled();
+    expect(listUnresolvedNotifications).not.toHaveBeenCalled();
   });
 
   it.each(["SUPERVISOR", "MANAGER", "OWNER"] as const)(
-    "reads the named dashboard operation for %s",
+    "reads dashboard numbers and unresolved notices together for %s",
     async (role) => {
       await render(role);
       expect(notFound).not.toHaveBeenCalled();
       expect(getOperationalDashboard).toHaveBeenCalledOnce();
+      expect(listUnresolvedNotifications).toHaveBeenCalledOnce();
     }
   );
 });

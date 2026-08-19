@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getOperationalDashboard } from "@marctco/db";
+import { getOperationalDashboard, listUnresolvedNotifications } from "@marctco/db";
 import { notFound, redirect } from "next/navigation";
 import { canReadDashboard } from "../../../../lib/dashboard-access";
 import { resolveWorkspaceAccess } from "../../../../lib/workspace-access";
@@ -11,9 +11,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Server Component reading `getOperationalDashboard` directly (ADR-0013).
- * Access is refused here for Atendente; hiding the sidebar item is not
- * enough (ADR-0015).
+ * Server Component reading the Dashboard tiles/series and the unresolved
+ * notification list in parallel (ADR-0013). Access is refused here for
+ * Atendente; hiding the sidebar item is not enough (ADR-0015).
  */
 export default async function DashboardPage({
   params
@@ -27,8 +27,14 @@ export default async function DashboardPage({
     notFound();
   }
 
-  const dashboard = await getOperationalDashboard(access.workspace.context, {
-    now: new Date()
-  });
-  return <DashboardView dashboard={dashboard} slug={slug} />;
+  const context = access.workspace.context;
+  const dashboardPromise = getOperationalDashboard(context, { now: new Date() });
+  const notificationsPromise = listUnresolvedNotifications(context);
+  const [dashboard, notifications] = await Promise.all([
+    dashboardPromise,
+    notificationsPromise
+  ]);
+  return (
+    <DashboardView dashboard={dashboard} notifications={notifications.items} slug={slug} />
+  );
 }

@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { buildOperationalDashboardTiles } from "@marctco/domain";
-import { buildDashboardChartsViewModel, buildDashboardTileViewModel } from "./view-model";
+import {
+  buildDashboardChartsViewModel,
+  buildDashboardNotificationViewModel,
+  buildDashboardTileViewModel,
+  burningNotificationsEmptyState
+} from "./view-model";
 
 const slug = "11111111-1111-4111-8111-111111111111";
+const opportunity_id = "22222222-2222-4222-8222-222222222222";
+const detected_at = new Date("2026-08-19T12:00:00.000Z");
 
 describe("buildDashboardTileViewModel", () => {
   it("labels the four tiles in PT-BR and keeps zeros clickable", () => {
@@ -60,5 +67,53 @@ describe("buildDashboardChartsViewModel", () => {
     expect(charts.sla_adherence[0]?.rateLabel).toBe("50%");
     expect(charts.sla_adherence[1]?.rateLabel).toBe("Sem resultado");
     expect(charts.open_by_stage[0]?.share).toBe(0.75);
+  });
+});
+
+describe("buildDashboardNotificationViewModel", () => {
+  it("links the lead under the current workspace slug and distinguishes read from unread", () => {
+    const unread = buildDashboardNotificationViewModel(
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        opportunity_id,
+        person_name: "Ana Time",
+        type: "FIRST_CONTACT_SLA_BREACHED",
+        detected_at,
+        read_at: null
+      },
+      slug
+    );
+    expect(unread.href).toBe(`/workspace/${slug}/leads/${opportunity_id}`);
+    expect(unread.type_label).toBe("SLA estourado");
+    expect(unread.read).toBe(false);
+    expect(unread.tone).toBe("danger");
+    expect(unread.detected_label).toBe("19/08/2026 09:00");
+
+    const read = buildDashboardNotificationViewModel(
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        opportunity_id,
+        person_name: "Bia Parada",
+        type: "STAGNANT",
+        detected_at,
+        read_at: detected_at
+      },
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    );
+    expect(read.href).toBe(
+      `/workspace/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/leads/${opportunity_id}`
+    );
+    expect(read.type_label).toBe("Parado");
+    expect(read.read).toBe(true);
+    expect(read.tone).toBe("warning");
+  });
+});
+
+describe("burningNotificationsEmptyState", () => {
+  it("says in PT-BR that nothing is burning", () => {
+    const copy = burningNotificationsEmptyState();
+    expect(copy.title).toBe("Nada queimando agora");
+    expect(copy.description).toContain("estourou");
+    expect(copy.description).toContain("parado");
   });
 });

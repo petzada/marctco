@@ -1,13 +1,16 @@
 import type {
   ArrivalDayPoint,
   CategoricalChartToken,
+  NotificationType,
   OpenByStagePoint,
   OperationalDashboardSeries,
   OperationalDashboardTile,
   OperationalDashboardTileId,
   SlaAdherenceDayPoint
 } from "@marctco/domain";
-import { dashboardTileHref } from "./hrefs";
+import { formatArrivedAt } from "../leads/row-view-model";
+import { markerPresentation } from "../leads/markers";
+import { dashboardLeadHref, dashboardTileHref } from "./hrefs";
 
 const LABELS: Readonly<Record<OperationalDashboardTileId, string>> = {
   sla_breached: "SLA estourado",
@@ -61,6 +64,52 @@ function burningTone(id: OperationalDashboardTileId): DashboardTileTone {
       throw new Error(`Unhandled dashboard tile: ${JSON.stringify(unhandled)}`);
     }
   }
+}
+
+export interface DashboardNotificationSource {
+  readonly id: string;
+  readonly opportunity_id: string;
+  readonly person_name: string;
+  readonly type: NotificationType;
+  readonly detected_at: Date;
+  readonly read_at: Date | null;
+}
+
+export type DashboardNotificationTone = "danger" | "warning";
+
+export interface DashboardNotificationViewModel {
+  readonly id: string;
+  readonly href: string;
+  readonly person_name: string;
+  readonly type_label: string;
+  readonly detected_label: string;
+  readonly read: boolean;
+  readonly tone: DashboardNotificationTone;
+}
+
+export function burningNotificationsEmptyState(): {
+  readonly title: string;
+  readonly description: string;
+} {
+  return {
+    title: "Nada queimando agora",
+    description: "Nenhum lead estourou o SLA nem ficou parado. A varredura avisa quando isso mudar."
+  };
+}
+
+export function buildDashboardNotificationViewModel(
+  item: DashboardNotificationSource,
+  slug: string
+): DashboardNotificationViewModel {
+  return {
+    id: item.id,
+    href: dashboardLeadHref(slug, item.opportunity_id),
+    person_name: item.person_name,
+    type_label: markerPresentation(item.type).label,
+    detected_label: formatArrivedAt(item.detected_at),
+    read: item.read_at !== null,
+    tone: item.type === "STAGNANT" ? "warning" : "danger"
+  };
 }
 
 export interface ArrivalChartPoint {

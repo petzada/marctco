@@ -5,7 +5,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createJobContext, createUserContextFromResolvedMembership } from "../src/access-context.js";
 import { createActivity } from "../src/activities.js";
 import { resolveIntakeReview } from "../src/intake-review.js";
-import { markNotificationRead, NotificationError } from "../src/notifications.js";
+import {
+  listUnresolvedNotifications,
+  markNotificationRead,
+  NotificationError
+} from "../src/notifications.js";
 import {
   claimWorkspacesWithOverdueOpportunities,
   sweepWorkspaceOpportunityClock
@@ -98,10 +102,11 @@ async function seedOpportunity(options: {
   readonly first_contact_at?: Date | null;
   readonly last_movement_at?: Date | null;
   readonly merged_into_opportunity_id?: string | null;
+  readonly person_name?: string;
 } = {}): Promise<string> {
   const workspace_id = options.workspace_id ?? workspace;
   const person = await seeder.person.create({
-    data: { workspace_id, name: "Lead do relogio" }
+    data: { workspace_id, name: options.person_name ?? "Lead do relogio" }
   });
   const arrived_at = options.arrived_at ?? minutesAgo(10);
   const status = options.status ?? "OPEN";
@@ -715,5 +720,147 @@ describe.sequential("markNotificationRead", () => {
     );
     expect(marked.read_by_user_id).toBe(manager_user);
     expect(marked.resolved_at).toBeNull();
+  });
+});
+
+describe.sequential("listUnresolvedNotifications", () => {
+  it("lists only unresolved notices in profile scope, keeps a read row, and drops a resolved row without deleting it", async () => {
+    const team_lead = await seedOpportunity({
+      arrived_at: minutesAgo(180),
+      assigned_user_id: attendant_user,
+      person_name: "Ana Time"
+    });
+    const other_lead = await seedOpportunity({
+      arrived_at: minutesAgo(180),
+      assigned_user_id: other_team_user,
+      person_name: "Bia Outro"
+    });
+    const neighbour_lead = await seedOpportunity({
+      workspace_id: neighbour_workspace,
+      assigned_user_id: neighbour_manager,
+      arrived_at: minutesAgo(180),
+      person_name: "Vizinha"
+    });
+    await sweepWorkspaceOpportunityClock(clockJob(workspace), now, app);
+    await sweepWorkspaceOpportunityClock(clockJob(neighbour_workspace), now, app);
+
+    const listed = await listUnresolvedNotifications(manager_context, app);
+    const listed_ids = listed.items.map((item) => item.opportunity_id);
+    expect(listed_ids).toContain(team_lead);
+    expect(listed_ids).toContain(other_lead);
+    expect(listed_ids).not.toContain(neighbour_lead);
+    expect(listed.items.find((item) => item.opportunity_id === team_lead)).toMatchObject({
+      person_name: "Ana Time",
+      type: "FIRST_CONTACT_SLA_BREACHED",
+      read_at: null
+    });
+
+    const team_notice = listed.items.find((item) => item.opportunity_id === team_lead);
+    expect(team_notice).toBeDefined();
+    await markNotificationRead(
+      manager_context,
+      { notification_id: team_notice!.id, now },
+      app
+    );
+    const after_read = await listUnresolvedNotifications(manager_context, app);
+    const still_listed = after_read.items.find((item) => item.id === team_notice!.id);
+    expect(still_listed?.read_at?.getTime()).toBe(now.getTime());
+    expect(still_listed?.person_name).toBe("Ana Time");
+
+    const supervisor_ids = (await listUnresolvedNotifications(supervisor_context, app)).items.map(
+      (item) => item.opportunity_id
+    );
+    expect(supervisor_ids).toContain(team_lead);
+    expect(supervisor_ids).not.toContain(other_lead);
+
+    await seeder.notification.update({
+      where: { id: team_notice!.id },
+      data: { resolved_at: now }
+    });
+    const after_resolve = await listUnresolvedNotifications(manager_context, app);
+    expect(after_resolve.items.map((item) => item.id)).not.toContain(team_notice!.id);
+    expect(
+      await seeder.notification.findFirstOrThrow({ where: { id: team_notice!.id } })
+    ).toMatchObject({ resolved_at: now });
+
+    await expect(listUnresolvedNotifications(attendant_context, app)).rejects.toMatchObject({
+      reason: "FORBIDDEN"
+    });
+    expect(
+      (await listUnresolvedNotifications(untagged_supervisor_context, app)).items
+    ).toEqual([]);
+
+    const neighbour_ids = (await listUnresolvedNotifications(neighbour_context, app)).items.map(
+      (item) => item.opportunity_id
+    );
+    expect(neighbour_ids).toContain(neighbour_lead);
+    expect(neighbour_ids).not.toContain(team_lead);
+    expect(
+      (await listUnresolvedNotifications(manager_context, app)).items.map(
+        (item) => item.opportunity_id
+      )
+    ).not.toContain(neighbour_lead);
+  });
+
+  it("never lists a notice from another workspace even when the same OWNER sits in both", async () => {
+    const other_id = randomUUID();
+    const other_pipeline = randomUUID();
+    const other_stage = randomUUID();
+    await seeder.workspace.create({
+      data: {
+        id: other_id,
+        slug: randomUUID(),
+        name: "Outra captacao",
+        members: {
+          create: [{ user_id: owner_user, role: "OWNER", display_name: "Direcao" }]
+        },
+        pipelines: {
+          create: {
+            id: other_pipeline,
+            name: "Comercial",
+            type: "COMMERCIAL",
+            is_default: true,
+            stages: {
+              create: [
+                { id: other_stage, label: "Novo lead", position: 1, role: "ENTRY" },
+                { label: "Conclusao", position: 2, role: "CLOSING" }
+              ]
+            }
+          }
+        }
+      }
+    });
+    try {
+      const here = await seedOpportunity({
+        arrived_at: minutesAgo(180),
+        assigned_user_id: attendant_user,
+        person_name: "Aqui"
+      });
+      const there = await seedOpportunity({
+        workspace_id: other_id,
+        pipeline_id: other_pipeline,
+        stage_id: other_stage,
+        assigned_user_id: owner_user,
+        arrived_at: minutesAgo(180),
+        person_name: "La"
+      });
+      await sweepWorkspaceOpportunityClock(clockJob(workspace), now, app);
+      await sweepWorkspaceOpportunityClock(clockJob(other_id), now, app);
+
+      const here_list = await listUnresolvedNotifications(owner_context, app);
+      const there_context = createUserContextFromResolvedMembership({
+        workspace_id: other_id,
+        user_id: owner_user,
+        role: "OWNER"
+      });
+      const there_list = await listUnresolvedNotifications(there_context, app);
+
+      expect(here_list.items.map((item) => item.opportunity_id)).toContain(here);
+      expect(here_list.items.map((item) => item.opportunity_id)).not.toContain(there);
+      expect(there_list.items.map((item) => item.opportunity_id)).toEqual([there]);
+      expect(there_list.items.map((item) => item.person_name)).toEqual(["La"]);
+    } finally {
+      await seeder.workspace.delete({ where: { id: other_id } });
+    }
   });
 });

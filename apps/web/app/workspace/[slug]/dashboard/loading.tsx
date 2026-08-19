@@ -14,6 +14,9 @@ export default function DashboardLoading() {
           <div className="h-40 rounded-lg border border-hairline bg-surface-inset" key={index} />
         ))}
       </section>
+      <section aria-label="Carregando avisos">
+        <div className="h-56 rounded-lg border border-hairline bg-surface-inset" />
+      </section>
     </main>
   );
 }
