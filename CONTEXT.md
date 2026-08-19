@@ -78,6 +78,10 @@ _Avoid_: Confundir com o instante do recebimento em todos os casos, reconstruir 
 Compromisso de atendimento preso a um Lead: tipo, responsável, vencimento e descrição. O atendente registra o que faz — ligação, mensagem, reunião ou tarefa —, conclui o que executou, reagenda o que o cliente adiou e cancela o que não vai acontecer. Concluir e cancelar são resultados diferentes: só a conclusão prova atendimento. Toda atividade tem um Lead; não existe evento órfão. A vencida e não concluída permanece visível, em destaque. Quem marca trabalho para quem segue o perfil: Atendente só para si, Supervisor para o time, Gestão e Direção para qualquer membro ativo — e nunca para alguém que não alcança aquele lead.
 _Avoid_: Evento sem lead, tratar cancelamento como conclusão, amarrar o tipo a um canal, apagar a vencida, atividade recorrente, segunda regra de escopo baseada no responsável
 
+**Dashboard operacional**:
+Primeira tela da manhã da Gestão, da Direção e do Supervisor com time: os números que queimam agora e os gráficos que dizem se o dia é pior que ontem — chegadas por dia na janela recente, aderência ao SLA por dia, leads em aberto por etapa do funil comercial padrão. Tudo no escopo do perfil, numa operação nomeada só. Atendente não tem esta tela. Paleta dos gráficos vive no `DESIGN.md`, não no componente.
+_Avoid_: Montar `where` na tela, um endpoint por gráfico, improvisar cor de série a partir de tom semântico, recálculo de SLA fora de `firstContactSla`, Analytics histórico nesta tela
+
 **Marcador**:
 Pendência anexada a uma Oportunidade que já existe e já pode ser atendida. Sinaliza, nunca bloqueia, e é sempre resolvível. Quantos houver, o usuário os alcança por um único ponto de entrada no lead. Os marcadores não moram todos no mesmo lugar, mas quem responde "o que este lead tem" é um só — a pergunta "quais leads têm este aviso" é outra, e pertence aos contadores.
 _Avoid_: Fila de revisão, portão antes da Oportunidade, um rótulo por tipo espalhado pela tela, marcador que não tem resolução, cada tela remontando a lista por conta própria

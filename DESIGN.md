@@ -58,6 +58,31 @@ Density sits deliberately between the two. Apple's marketing pace (one tile per 
 
 The dot/pill fill uses the base tone; any **text** on white uses the `-ink` variant, which clears 4.5:1. The `-surface` variant is the pill background, always paired with `-ink` text.
 
+### Data visualization
+> Resolves the Known Gaps entry below. A single-accent system has no categorical sequence, and pipeline charts (this phase) plus Analytics (Fase 7) cannot improvise one from success / warning / danger. The sequence is derived separately; semantic tones stay status-only.
+
+**Categorical sequence** — eight steps. Adjacent steps differ by hue, not only by lightness, so two neighbouring stages remain distinguishable on `{colors.canvas}`. The first step is Action Blue so a single-series chart matches the rest of the chrome; every later step is a hue that is not a semantic tone.
+
+| Token | Hex | Neighbour contrast |
+|---|---|---|
+| `{colors.chart-1}` | #0066cc | Action Blue. First series, and the only categorical step that is also a brand token. |
+| `{colors.chart-2}` | #8a4f24 | Umber. Warm brown against the preceding blue; not `{colors.warning}`. |
+| `{colors.chart-3}` | #1a7a78 | Sea. Cool teal against umber; not `{colors.success}`. |
+| `{colors.chart-4}` | #6b3d91 | Grape. Violet against teal. |
+| `{colors.chart-5}` | #c4a035 | Gold. Yellow-gold against grape; not `{colors.warning}` (#c76a00). |
+| `{colors.chart-6}` | #2c4a7c | Slate navy. Deep blue against gold, darker than `{colors.chart-1}` so a wrap-around pair still splits. |
+| `{colors.chart-7}` | #9a5b7d | Dusty rose. Muted magenta against navy; not `{colors.danger}`. |
+| `{colors.chart-8}` | #4a6b52 | Sage. Muted green against rose; not `{colors.success}` (#27a644). |
+
+**Overflow.** When there are more series than tokens, restart at `{colors.chart-1}` (`index modulo 8`). Do not invent a ninth hue. Do not pad the sequence with `{colors.success}`, `{colors.warning}`, or `{colors.danger}` — those remain status.
+
+**Axis and grid.** Derived from the surface ladder that already exists; no third gray.
+- `{colors.chart-axis}` aliases `{colors.ink-muted}` — tick labels, axis titles.
+- `{colors.chart-grid}` aliases `{colors.hairline}` — the workhorse 1px rule, used as a grid line on `{colors.canvas}`.
+- Plot fill is `{colors.canvas}`. Cursor / hover hairline is `{colors.hairline-strong}`.
+
+**Semantic state on a chart.** A mark that means estourado, atrasado, cumprido, or parado uses the semantic set (`{colors.danger}`, `{colors.warning}`, `{colors.success}` and their `-ink` / `-surface` variants). Those tones never occupy a slot in the categorical sequence. A single quantitative series (chegadas, taxa de aderência) uses `{colors.chart-1}`, not a semantic fill.
+
 ### Brand Gradient
 **No decorative gradients.** Both source systems ship zero gradient tokens, and the unified system keeps that. Depth comes from surface steps and hairlines; atmosphere comes from imagery. A gradient on this canvas would be the loudest element on the page.
 
@@ -111,7 +136,7 @@ Inter is the primary, not a substitute — it is the closest open-source equival
 
 ### Spacing System
 - **Base unit:** 4px. Every structural value is a multiple; no odd values, no typography-derived spacing.
-- **Tokens:** `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.md}` 16px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.xxl}` 48px · `{spacing.section}` 80px · `{spacing.section-lg}` 96px.
+- **Tokens:** `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.md}` 16px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.xxl}` 48px · `{spacing.section}` 80px · `{spacing.section-lg}` 96px · `{spacing.chart-plot}` 240px (plot area of `{component.chart}`).
 - **Section vertical padding:** `{spacing.section}` (80px) on app and standard marketing sections; `{spacing.section-lg}` (96px) on full-bleed marketing openers. Sections stack edge-to-edge with 0 gap — the surface change provides the break.
 - **Card padding:** `{spacing.lg}` (24px) default; `{spacing.xl}` (32px) on testimonial and detail panels; `{spacing.xxl}` (48px) on CTA banners.
 - **Button padding:** 8px vertical · 14px horizontal (compact) — 12px · 20px on the large marketing CTA.
@@ -119,7 +144,7 @@ Inter is the primary, not a substitute — it is the closest open-source equival
 - **Table cell padding:** 12px vertical · 16px horizontal.
 
 ### Grid & Container
-- **Max content width:** 1280px default. 1440px on data-dense app grids and tables. 720px on prose-heavy sections — long-form copy must never run the full 1280px measure.
+- **Max content width:** 1280px default. 1440px on data-dense app grids and tables. 720px on prose-heavy sections — long-form copy must never run the full 1280px measure. `{min-width.chart-track}` is 640px: the horizontal scroll track of `{component.chart}` on small viewports.
 - **Column patterns:** 3-up card grids at desktop, 2-up at tablet, 1-up at mobile. Product screenshot panels span the full content width — they are the protagonist.
 - **Gutters:** `{spacing.lg}` (24px) between cards.
 - **App shell:** 240px fixed sidebar on `{colors.canvas-sunken}` + fluid work area on `{colors.canvas}`, hairline between them.
@@ -251,6 +276,8 @@ Radii do not mix within a grammar. A button is 8px; a card is 12px; a panel is 1
 
 **`empty-state`** — Centered stack on `{colors.canvas}`: icon at 32px in `{colors.ink-disabled}`, headline in `{typography.title}`, one line of `{typography.body-sm}` in `{colors.ink-muted}`, one `{component.button-primary}`. Vertical padding `{spacing.xxl}`.
 
+**`chart`** — Operational plot inside `{component.card}`. Title in `{typography.title}` `{colors.ink}`; helper in `{typography.caption}` `{colors.ink-muted}`. Plot area height `{spacing.chart-plot}` (240px). Grid in `{colors.chart-grid}`, ticks in `{typography.caption}` with `{colors.chart-axis}` and tabular numerals. Series fills walk `{colors.chart-1}`…`{colors.chart-8}` in order; a single series uses `{colors.chart-1}`. Semantic marks (estourado, atrasado) use the semantic set, never a categorical slot. On viewports below 768px the plot keeps `{min-width.chart-track}` (640px) and scrolls horizontally inside its own frame — the page does not squeeze the ticks past legibility. Inset from plot to axis is `{spacing.xs}`. No hex and no invented px in the component: `{token.refs}` only.
+
 ### Inputs & Forms
 
 **`text-input`** — Background `{colors.canvas}`, text `{colors.ink}` in `{typography.body}`, 1px `{colors.hairline}` border, rounded `{rounded.md}` (8px), padding 8px × 12px, min-height 40px (44px on touch). Placeholder in `{colors.ink-muted}`.
@@ -308,7 +335,7 @@ Radii do not mix within a grammar. A button is 8px; a card is 12px; a panel is 1
 ### Don't
 
 - Don't ship a dark theme, a dark-mode toggle, or a dark card. The one permitted dark surface is `{component.cta-banner-inverted}`, once per page, as the closing band.
-- Don't introduce a second brand accent. Semantic tones are not accents — they never fill a CTA and never fill a section.
+- Don't introduce a second brand accent. Semantic tones are not accents — they never fill a CTA and never fill a section. Chart series walk `{colors.chart-1}` through `{colors.chart-8}`; they never borrow a semantic tone to pad the sequence.
 - Don't add a shadow to a card, a button, a table, or text. Shadow belongs to overlays that can be dismissed and to product screenshots.
 - Don't pill-round buttons or inputs. The pill reads as consumer marketing and dissolves the boundary between action and status.
 - Don't use gradients, spotlight cards, glows, or mesh backgrounds anywhere.
@@ -347,6 +374,7 @@ The structural breakpoints that matter for agents: **1280px** (content lock), **
 - **Card grids**: 3-up → 2-up at 1024px → 1-up below 768px.
 - **Data tables**: full table → horizontal scroll with a frozen first column at 1024px → stacked `{component.card}` per record below 480px.
 - **Kanban board**: side-by-side columns → horizontal scroll-snap strip below 768px.
+- **Charts**: full plot → own `overflow-x` scroller below 768px, track `{min-width.chart-track}`, so ticks stay readable. The page does not shrink the plot.
 - **Display type**: `{typography.display-xl}` 64px → 48px at 1024px → 40px at 768px → 32px at 480px.
 
 ### Image Behavior
@@ -394,7 +422,7 @@ Where the two source systems disagreed, this is what was decided and why.
 ## Known Gaps
 
 - **Motion and transition timing are undocumented.** Neither source specifies durations or easing curves. Until formalized, use 150ms `ease-out` for state changes and 200ms for overlay entry, and record the tokens here once they settle.
-- **Data visualization has no palette.** Pipeline charts and revenue graphs need a categorical sequence, and a single-accent system provides no basis for one. Derive it separately; do not improvise from the semantic tones.
+- ~~Data visualization has no palette.~~ **Resolved by ticket 08**: categorical sequence `{colors.chart-1}`…`{colors.chart-8}`, overflow by modulo 8, axis/grid aliased from `{colors.ink-muted}` / `{colors.hairline}`, and the rule that semantic status never enters the sequence — see "Colors > Data visualization" and `{component.chart}`. Analytics and Ranking (Fase 7) inherit this; they do not invent hues in the component.
 - **The Linear lavender is not carried over.** If brand strategy later favors a distinct hue over Apple's blue, the accent is the one safely swappable token — any replacement must clear 4.5:1 against `{colors.canvas}` and carry hover, pressed, focus, and subtle variants.
 - **Dark mode is explicitly out of scope.** The surface ladder was designed for light only; a dark variant would need its own ladder, not an inversion of this one.
 - **Email and PDF surfaces** (proposals, contracts, notification emails) are not covered. Their constraints differ enough — no backdrop-filter, limited font loading — to warrant their own token subset.

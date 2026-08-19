@@ -137,6 +137,12 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Origem do job | `JobOrigin` | União discriminada `{ type: "integration_event", integration_event_id } \| { type: "scheduled_sweep", sweep: ScheduledSweepName }`. O `type` evita colidir com o `kind` do `AccessContext` (`"user" \| "job"`). Evento de integração é linha real do tenant; passada agendada é nome fechado — nunca âncora fabricada ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md)) |
 | Passada agendada | `ScheduledSweepName` | `PAYLOAD_EXPIRY \| OPPORTUNITY_CLOCK`. `PAYLOAD_EXPIRY` é a retenção de payload ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)); `OPPORTUNITY_CLOCK` é a varredura dos relógios de SLA e estagnação. Lista fechada: nome novo entra aqui antes do código |
 | Descoberta de workspaces com relógio vencido | `private.claim_overdue_opportunity_workspaces` | Sexta função da lista fechada ([ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). Devolve somente `workspace_id`. Não é `provision_workspace` |
+| Dashboard operacional | `getOperationalDashboard` | Uma operação nomeada devolve tiles e séries no escopo do perfil. Atendente é recusado. Sem `where` montado pela tela |
+| Janela recente do Dashboard | `OPERATIONAL_DASHBOARD_RECENT_DAYS` | 14 dias civis inclusive o corrente, fuso `OPERATIONAL_DASHBOARD_TIME_ZONE` (`America/Sao_Paulo`) |
+| Série de chegadas | `ArrivalDayPoint` | Contagem de Oportunidades cuja `arrived_at` cai naquele dia da janela; mescladas fora |
+| Série de aderência ao SLA | `SlaAdherenceDayPoint` | Por dia de chegada: `MET` / (`MET` + `BREACHED`) via `firstContactSla`. `PENDING` não entra no denominador; dia sem resultado tem `adherence` nulo |
+| Série de etapa | `OpenByStagePoint` | Leads `OPEN` não mesclados no funil comercial padrão, uma barra por etapa na ordem de `position`, inclusive zero |
+| Cor categórica de série | `categoricalChartToken` | `{colors.chart-1}`…`{colors.chart-8}` com overflow `index modulo 8`. Estado semântico não ocupa slot |
 
 ## Regras
 

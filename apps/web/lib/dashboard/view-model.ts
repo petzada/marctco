@@ -1,4 +1,12 @@
-import type { OperationalDashboardTile, OperationalDashboardTileId } from "@marctco/domain";
+import type {
+  ArrivalDayPoint,
+  CategoricalChartToken,
+  OpenByStagePoint,
+  OperationalDashboardSeries,
+  OperationalDashboardTile,
+  OperationalDashboardTileId,
+  SlaAdherenceDayPoint
+} from "@marctco/domain";
 import { dashboardTileHref } from "./hrefs";
 
 const LABELS: Readonly<Record<OperationalDashboardTileId, string>> = {
@@ -53,4 +61,74 @@ function burningTone(id: OperationalDashboardTileId): DashboardTileTone {
       throw new Error(`Unhandled dashboard tile: ${JSON.stringify(unhandled)}`);
     }
   }
+}
+
+export interface ArrivalChartPoint {
+  readonly day: string;
+  readonly label: string;
+  readonly count: number;
+}
+
+export interface SlaAdherenceChartPoint {
+  readonly day: string;
+  readonly label: string;
+  readonly adherence: number | null;
+  readonly rateLabel: string;
+}
+
+export interface StageChartPoint {
+  readonly stage_id: string;
+  readonly label: string;
+  readonly count: number;
+  readonly color: CategoricalChartToken;
+  readonly share: number;
+}
+
+export interface DashboardChartsViewModel {
+  readonly arrivals: readonly ArrivalChartPoint[];
+  readonly sla_adherence: readonly SlaAdherenceChartPoint[];
+  readonly open_by_stage: readonly StageChartPoint[];
+}
+
+export function formatDashboardDayLabel(day: string): string {
+  const parts = day.split("-");
+  const month = parts[1];
+  const date = parts[2];
+  if (month === undefined || date === undefined) {
+    return day;
+  }
+  return `${date}/${month}`;
+}
+
+export function formatSlaAdherenceLabel(adherence: number | null): string {
+  if (adherence === null) {
+    return "Sem resultado";
+  }
+  return `${Math.round(adherence * 100)}%`;
+}
+
+export function buildDashboardChartsViewModel(
+  series: OperationalDashboardSeries
+): DashboardChartsViewModel {
+  const stageTotal = series.open_by_stage.reduce((sum, point) => sum + point.count, 0);
+  return {
+    arrivals: series.arrivals.map((point: ArrivalDayPoint) => ({
+      day: point.day,
+      label: formatDashboardDayLabel(point.day),
+      count: point.count
+    })),
+    sla_adherence: series.sla_adherence.map((point: SlaAdherenceDayPoint) => ({
+      day: point.day,
+      label: formatDashboardDayLabel(point.day),
+      adherence: point.adherence,
+      rateLabel: formatSlaAdherenceLabel(point.adherence)
+    })),
+    open_by_stage: series.open_by_stage.map((point: OpenByStagePoint) => ({
+      stage_id: point.stage_id,
+      label: point.label,
+      count: point.count,
+      color: point.color,
+      share: stageTotal === 0 ? 0 : point.count / stageTotal
+    }))
+  };
 }

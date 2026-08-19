@@ -32,6 +32,7 @@ describe("Dashboard route", () => {
   beforeEach(() => {
     getOperationalDashboard.mockReset().mockResolvedValue({
       tiles: [],
+      series: { arrivals: [], sla_adherence: [], open_by_stage: [] },
       empty_state: null
     });
     notFound.mockClear();
