@@ -8,7 +8,13 @@ O piloto é um grupo: a **Hugs** é a holding, e ACR e REAL são empresas dela. 
 
 **Status:** accepted · 2026-08-12
 
-> **Confirmado em 2026-08-17** no recorte operacional do piloto: um workspace, uma conta Pluga, campanhas exclusivas por equipe. A exclusividade é prática de mídia, não roteamento — a Gestão (workspace inteiro, não recortada por tag) continua atribuindo da fila única. N automações na mesma conta Pluga colam o mesmo webhook e o mesmo segredo; o unique `(workspace_id, provider)` não se quebra. “Sub-empresa” não é termo: é a tag do Supervisor, nascida no convite. Não reabre este ADR nem o [ADR-0015](./0015-perfis-de-acesso-e-escopo.md).
+> **Confirmado em 2026-08-17** no recorte operacional do piloto: um workspace, uma conta Pluga, campanhas exclusivas por equipe. A exclusividade é prática de mídia, não roteamento — a Gestão (workspace inteiro, não recortada por tag) continua atribuindo da fila única. N automações na mesma conta Pluga colam o mesmo webhook e o mesmo segredo; o unique `(workspace_id, provider)` **ainda vigente** não se quebra nesse recorte. “Sub-empresa” não é termo de tenant: a tag do Supervisor nomeia o time ([ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)); a marca do grupo é `Company` ([ADR-0029](./0029-empresa-e-agrupamento-de-equipe.md)). Não reabre o [ADR-0015](./0015-perfis-de-acesso-e-escopo.md).
+>
+> **Emendado pelo [ADR-0030](./0030-workspace-e-fronteira-do-dono.md):** a fronteira é o **dono**, não a fila de entrada. Campanha exclusiva de sub-empresa **não** abre workspace novo — ela ganha conexão própria dentro do mesmo tenant ([ADR-0031](./0031-conexao-na-chave-idempotente.md)), porque separar tenant custa a detecção de duplicado da mesma pessoa. A objeção abaixo ("o unique `(workspace_id, provider)` admite uma Pluga por workspace") deixa de valer quando o ticket 19 cair o unique; até lá, o piloto opera com uma conexão Pluga e o unique vigente.
+>
+> **Emendado pelo [ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md):** o time do Supervisor exclui os outros `SUPERVISOR`, então "dono atual e destino compartilham tag com o ator" deixa de alcançar o lead de outro Supervisor.
+>
+> Permanece inalterado o que mais importa aqui: **a campanha não roteia o lead**, e a distribuição em dois níveis é decisão humana da Gestão.
 
 Fecha o recorte do piloto com o grupo Hugs, campanhas mistas e campanhas separadas. Emenda a leitura estrita do [ADR-0002](./0002-workspace-tags-times.md) (“um workspace por grupo”). Não reabre tag na oportunidade ([ADR-0020](./0020-tag-no-membro-define-o-time.md)): “este lead é da equipe X” é atribuir a um membro tagueado X.
 
