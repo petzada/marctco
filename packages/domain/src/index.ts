@@ -215,3 +215,10 @@ export {
   type OperationalDashboardTileId,
   type SlaAdherenceDayPoint
 } from "./operational-dashboard.js";
+export {
+  canActOnManagementNotifications,
+  clockNotificationTypes,
+  NOTIFICATION_TYPES,
+  type ClockNotificationOpportunity,
+  type NotificationType
+} from "./notifications.js";

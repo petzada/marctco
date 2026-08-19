@@ -94,6 +94,11 @@ const isolation_cases = [
     write_sql: `INSERT INTO member_tags (workspace_id, user_id, tag_id) VALUES ('${workspace_b}', '${user_b}', '${tag_b_unapplied}')`
   },
   {
+    table_name: "notifications",
+    read_sql: "SELECT workspace_id AS tenant_id FROM notifications ORDER BY workspace_id",
+    write_sql: `INSERT INTO notifications (id, workspace_id, opportunity_id, type, detected_at, last_detected_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'STAGNANT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+  },
+  {
     table_name: "opportunities",
     read_sql: "SELECT workspace_id AS tenant_id FROM opportunities ORDER BY workspace_id",
     write_sql: `INSERT INTO opportunities (id, workspace_id, person_id, pipeline_id, stage_id, area, arrived_at, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${person_b}', '${pipeline_b}', '${stage_b_entry}', 'COMMERCIAL', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
@@ -401,6 +406,24 @@ beforeAll(async () => {
         }
       ]
     });
+    await transaction.notification.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "STAGNANT",
+          detected_at: new Date(),
+          last_detected_at: new Date()
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: opportunity_b,
+          type: "STAGNANT",
+          detected_at: new Date(),
+          last_detected_at: new Date()
+        }
+      ]
+    });
     await transaction.workspaceFlag.createMany({
       data: [
         { workspace_id: workspace_a, key: "auto_primeiro_contato" },
@@ -485,6 +508,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       "integration_events",
       "lead_submissions",
       "member_tags",
+      "notifications",
       "opportunities",
       "opportunity_timeline_events",
       "person_emails",
@@ -565,14 +589,15 @@ describe("Seam 3: RLS and schema invariants", () => {
         AND namespace.nspname NOT LIKE 'pg_toast%'
       ORDER BY namespace.nspname, procedure.proname
     `;
-    // Five, not four: ticket 15 materialized the payload expiry sweep, whose
-    // discovery is circular for the same reason `claim_pending_events` is —
-    // setting the GUC needs the `workspace_id` only the read reveals (ADR-0019,
-    // emendado). Its answer is the narrowest of the five: tenant ids and one
-    // event id, never a payload.
+    // Six, not five: ticket 09 materialized the opportunity-clock sweep, whose
+    // discovery is circular for the same reason `claim_expired_payload_workspaces`
+    // is — setting the GUC needs the `workspace_id` only the read reveals
+    // (ADR-0019, emendado). Its answer is the narrowest of the six: tenant ids,
+    // never an opportunity, a person or a payload.
     const allowed = new Set([
       "private.claim_pending_events",
       "private.claim_expired_payload_workspaces",
+      "private.claim_overdue_opportunity_workspaces",
       "private.provision_workspace",
       "private.resolve_workspace_by_token_hash",
       "private.resolve_user_workspaces"
@@ -584,6 +609,48 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(
       function_names.filter((function_name) => !allowed.has(function_name))
     ).toEqual([]);
+    expect(function_names).toHaveLength(6);
+  });
+
+  it("rejects a seventh SECURITY DEFINER name — verified deliberately", async () => {
+    const probe = "rls_seam3_probe_seventh";
+    await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_migrator");
+      await transaction.$executeRawUnsafe(`
+        CREATE FUNCTION private.${probe}() RETURNS uuid
+        LANGUAGE sql
+        SECURITY DEFINER
+        SET search_path = pg_catalog
+        AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$
+      `);
+
+      const functions = await transaction.$queryRaw<
+        Array<{ schema_name: string; function_name: string }>
+      >`
+        SELECT namespace.nspname::text AS schema_name, procedure.proname::text AS function_name
+        FROM pg_proc AS procedure
+        JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+        WHERE procedure.prosecdef
+          AND namespace.nspname <> 'information_schema'
+          AND namespace.nspname <> 'pg_catalog'
+          AND namespace.nspname NOT LIKE 'pg_toast%'
+        ORDER BY namespace.nspname, procedure.proname
+      `;
+      const allowed = new Set([
+        "private.claim_pending_events",
+        "private.claim_expired_payload_workspaces",
+        "private.claim_overdue_opportunity_workspaces",
+        "private.provision_workspace",
+        "private.resolve_workspace_by_token_hash",
+        "private.resolve_user_workspaces"
+      ]);
+      const function_names = functions.map((row) => `${row.schema_name}.${row.function_name}`);
+      expect(function_names.filter((function_name) => !allowed.has(function_name))).toEqual([
+        `private.${probe}`
+      ]);
+
+      await transaction.$executeRawUnsafe(`DROP FUNCTION private.${probe}()`);
+    });
   });
 
   it("keeps campaign and form as nullable text on opportunities, under the existing RLS, with no extra SECURITY DEFINER", async () => {
@@ -610,7 +677,10 @@ describe("Seam 3: RLS and schema invariants", () => {
       WHERE schemaname = 'public' AND tablename = 'opportunities'
       ORDER BY policyname
     `;
-    expect(policies).toEqual([{ policy_name: "opportunities_workspace_isolation" }]);
+    expect(policies).toEqual([
+      { policy_name: "opportunities_private_definer_select" },
+      { policy_name: "opportunities_workspace_isolation" }
+    ]);
   });
 
   it("has an index whose leading column scopes every business table by workspace", async () => {
@@ -1796,7 +1866,7 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       WHERE namespace.nspname = 'private' AND procedure.prosecdef
     `;
 
-    expect(functions.length).toBeGreaterThanOrEqual(5);
+    expect(functions.length).toBeGreaterThanOrEqual(6);
     for (const routine of functions) {
       expect(routine.search_path, routine.function_name).toEqual(["search_path=pg_catalog"]);
       expect(routine.public_can_execute, routine.function_name).toBe(false);
@@ -2168,5 +2238,121 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
     });
     expect(stored.assigned_user_id).toBe(user_a);
     expect(stored.previous_assigned_user_id).toBeNull();
+  });
+
+  it("indexes unresolved notifications for the dashboard question, only in the migration", async () => {
+    const rows = await client.$queryRaw<Array<{ index_name: string; predicate: string | null }>>`
+      SELECT class.relname::text AS index_name, pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'notifications_workspace_id_detected_at_unresolved_idx'
+    `;
+    expect(rows).toEqual([
+      {
+        index_name: "notifications_workspace_id_detected_at_unresolved_idx",
+        predicate: "(resolved_at IS NULL)"
+      }
+    ]);
+  });
+
+  it("lets the opportunity-clock sweep find tenants without a tenant, and answers only with workspace_id", async () => {
+    const overdue_id = randomUUID();
+    const person_id = randomUUID();
+    await client.$executeRawUnsafe(`
+      INSERT INTO persons (id, workspace_id, name, updated_at)
+      VALUES ('${person_id}', '${workspace_a}', 'Overdue', CURRENT_TIMESTAMP)
+    `);
+    await client.$executeRawUnsafe(`
+      INSERT INTO opportunities (
+        id, workspace_id, person_id, pipeline_id, stage_id, area, arrived_at, updated_at
+      ) VALUES (
+        '${overdue_id}', '${workspace_a}', '${person_id}', '${carded_pipeline_a}',
+        '${carded_stage_a}', 'COMMERCIAL', CURRENT_TIMESTAMP - INTERVAL '3 hours', CURRENT_TIMESTAMP
+      )
+    `);
+
+    try {
+      const discovered = await client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+        return transaction.$queryRaw<Array<Record<string, unknown>>>`
+          SELECT *
+          FROM private.claim_overdue_opportunity_workspaces(CURRENT_TIMESTAMP)
+        `;
+      });
+
+      const row = discovered.find((candidate) => candidate.workspace_id === workspace_a);
+      expect(row).toBeDefined();
+      expect(Object.keys(row ?? {}).sort()).toEqual(["workspace_id"]);
+    } finally {
+      await client.$executeRawUnsafe(`DELETE FROM opportunities WHERE id = '${overdue_id}'`);
+      await client.$executeRawUnsafe(`DELETE FROM persons WHERE id = '${person_id}'`);
+    }
+  });
+
+  it("keeps the opportunity-clock resolver owned, scoped and executable only as declared", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private'
+        AND procedure.proname = 'claim_overdue_opportunity_workspaces'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: "marctco_private_definer",
+        search_path: ["search_path=pg_catalog"],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+  });
+
+  it("never lets the clock-sweep executor read a person, a contact or a payload", async () => {
+    const privileges = await client.$queryRaw<
+      Array<{
+        reads_opportunity_clock: boolean;
+        reads_person: boolean;
+        reads_phone: boolean;
+        reads_raw: boolean;
+        writes_opportunities: boolean;
+        writes_notifications: boolean;
+      }>
+    >`
+      SELECT
+        has_column_privilege('marctco_private_definer', 'public.opportunities', 'arrived_at', 'SELECT') AS reads_opportunity_clock,
+        has_table_privilege('marctco_private_definer', 'public.persons', 'SELECT') AS reads_person,
+        has_table_privilege('marctco_private_definer', 'public.person_phones', 'SELECT') AS reads_phone,
+        has_column_privilege('marctco_private_definer', 'public.integration_events', 'raw', 'SELECT') AS reads_raw,
+        has_table_privilege('marctco_private_definer', 'public.opportunities', 'UPDATE') AS writes_opportunities,
+        has_table_privilege('marctco_private_definer', 'public.notifications', 'UPDATE') AS writes_notifications
+    `;
+    expect(privileges).toEqual([
+      {
+        reads_opportunity_clock: true,
+        reads_person: false,
+        reads_phone: false,
+        reads_raw: false,
+        writes_opportunities: false,
+        writes_notifications: false
+      }
+    ]);
   });
 });

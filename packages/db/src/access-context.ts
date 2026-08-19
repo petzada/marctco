@@ -12,6 +12,14 @@ export const WorkspaceRole = PrismaWorkspaceRole;
 
 const KNOWN_ROLES: ReadonlySet<string> = new Set(Object.values(PrismaWorkspaceRole));
 
+export const SCHEDULED_SWEEP_NAMES = ["PAYLOAD_EXPIRY", "OPPORTUNITY_CLOCK"] as const;
+export type ScheduledSweepName = (typeof SCHEDULED_SWEEP_NAMES)[number];
+const KNOWN_SWEEPS: ReadonlySet<string> = new Set(SCHEDULED_SWEEP_NAMES);
+
+export type JobOrigin =
+  | { readonly type: "integration_event"; readonly integration_event_id: string }
+  | { readonly type: "scheduled_sweep"; readonly sweep: ScheduledSweepName };
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function assertUuid(value: string, label: string): void {
@@ -47,16 +55,17 @@ export interface UserContext {
 }
 
 /**
- * Built once per job, from the `workspace_id` the authenticated ingestion
- * handler wrote onto the job (apps/worker, ADR-0007). Carries no user and
- * no role: the worker never acts on anyone's behalf, and inventing a role
- * for it to fill the field is exactly what ADR-0015 forbids.
+ * Built once per job. Carries no user and no role: the worker never acts
+ * on anyone's behalf, and inventing a role for it to fill the field is
+ * exactly what ADR-0015 forbids. Origin is a discriminated union so a
+ * scheduled sweep does not have to fabricate an integration-event anchor
+ * (ADR-0016, emendado 2026-08-19).
  */
 export interface JobContext {
   readonly [jobContextBrand]: true;
   readonly kind: "job";
   readonly workspace_id: string;
-  readonly integration_event_id: string;
+  readonly origin: JobOrigin;
   /** The worker shares this slot; resolved values are never process-global. */
   readonly feature_flags?: ResolvedFeatureFlags;
 }
@@ -101,19 +110,26 @@ export function createUserContextFromResolvedMembership(input: CreateUserContext
   } as UserContext;
 }
 
-export interface CreateJobContextInput {
-  readonly workspace_id: string;
-  readonly integration_event_id: string;
-}
+export type CreateJobContextInput =
+  | { readonly workspace_id: string; readonly integration_event_id: string }
+  | { readonly workspace_id: string; readonly origin: JobOrigin };
 
 /** The only constructor of `JobContext`. */
 export function createJobContext(input: CreateJobContextInput): JobContext {
   assertUuid(input.workspace_id, "workspace_id");
-  assertUuid(input.integration_event_id, "integration_event_id");
+  const origin = "origin" in input ? input.origin : {
+    type: "integration_event" as const,
+    integration_event_id: input.integration_event_id
+  };
+  if (origin.type === "integration_event") {
+    assertUuid(origin.integration_event_id, "integration_event_id");
+  } else if (!KNOWN_SWEEPS.has(origin.sweep)) {
+    throw new Error(`Unknown scheduled sweep, refusing to build a JobContext: ${JSON.stringify(origin.sweep)}`);
+  }
   return {
     kind: "job",
     workspace_id: input.workspace_id,
-    integration_event_id: input.integration_event_id
+    origin
   } as JobContext;
 }
 
@@ -123,4 +139,12 @@ export function isUserContext(context: AccessContext): context is UserContext {
 
 export function isJobContext(context: AccessContext): context is JobContext {
   return context.kind === "job";
+}
+
+/** The event id a processing job carries. Scheduled sweeps have none. */
+export function jobIntegrationEventId(context: JobContext): string {
+  if (context.origin.type !== "integration_event") {
+    throw new Error("JobContext origin is not an integration event");
+  }
+  return context.origin.integration_event_id;
 }

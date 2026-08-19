@@ -143,6 +143,13 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Série de aderência ao SLA | `SlaAdherenceDayPoint` | Por dia de chegada: `MET` / (`MET` + `BREACHED`) via `firstContactSla`. `PENDING` não entra no denominador; dia sem resultado tem `adherence` nulo |
 | Série de etapa | `OpenByStagePoint` | Leads `OPEN` não mesclados no funil comercial padrão, uma barra por etapa na ordem de `position`, inclusive zero |
 | Cor categórica de série | `categoricalChartToken` | `{colors.chart-1}`…`{colors.chart-8}` com overflow `index modulo 8`. Estado semântico não ocupa slot |
+| Notificação | `Notification` | Aviso persistido na Oportunidade. Sem destinatário; quem enxerga é o escopo de perfil. Nome genérico de propósito: a Fase 6 acrescenta o aviso de atendimento concluído no mesmo model — nunca `SlaAlert` |
+| Tipo da notificação | `NotificationType` | `FIRST_CONTACT_SLA_BREACHED \| STAGNANT` nesta fase |
+| Detectada em | `Notification.detected_at` | Primeira passada que viu a causa. Não se move nas passadas seguintes |
+| Última detecção | `Notification.last_detected_at` | Atualizado por `ON CONFLICT` a cada passada em que a causa ainda vale |
+| Lida em | `Notification.read_at` | Do aviso, não de cada leitor. Nulo até alguém marcar. Marcar como lida **não** resolve |
+| Quem marcou como lida | `Notification.read_by_user_id` | Usuário do `UserContext` que marcou; nulo enquanto não lida. Completo junto de `read_at` |
+| Resolvida em | `Notification.resolved_at` | Escrito quando a causa acaba. Resolver **não** exige leitura. Nulo enquanto a causa permanece |
 
 ## Regras
 

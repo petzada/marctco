@@ -217,3 +217,7 @@ _Avoid_: Usar `updated_at` como proxy de fechamento, inferir fechamento de etapa
 **Estado de SLA de primeiro contato**:
 Se o lead ainda espera dentro do limite (pendente), se foi atendido dentro do limite (cumprido) ou se estourou o limite (estourado) — com ou sem atendimento tardio. Função pura, relógio corrido. A duração termina em `first_contact_at` quando houve contato, em `closed_at` quando ganho ou perda sem contato, ou em `now` enquanto ainda está aberto sem contato. Ganho e perda sem nenhuma atividade concluída param de esperar atendimento e não contam como atendidos.
 _Avoid_: Horário comercial, feriado, tratar ganho ou perda como atendimento, uma segunda função para a tela e outra para o alerta, deixar o relógio correr após fechamento sem contato
+
+**Notificação**:
+Aviso persistido na Oportunidade de que o SLA de primeiro contato estourou ou de que o lead está parado. Uma linha por lead e por tipo; a varredura seguinte atualiza a detecção, não cria segunda linha. Não tem destinatário: quem enxerga é o escopo de perfil da operação nomeada. `read_at` é do aviso, não de cada leitor — marcar como lida não resolve, e resolver não exige leitura. Some da lista de gestão quando a causa acaba (primeiro contato, movimento, ganho, perda ou mesclagem), sem apagar a linha. O Atendente não a recebe: o sinal dele é a atividade vencida na Agenda.
+_Avoid_: Destinatário na tabela, estado de leitura por usuário, uma linha nova a cada passada, tratar lida como resolvida, e-mail ou push nesta fase, Atendente na superfície de gestão

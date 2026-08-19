@@ -180,6 +180,7 @@ model Workspace {
   feature_flags               WorkspaceFlag[]
   tags                        Tag[]
   activities                  Activity[]
+  notifications               Notification[]
   settings                    WorkspaceSettings?
 
   @@map("workspaces")
@@ -215,6 +216,7 @@ model WorkspaceMember {
   completed_activities  Activity[] @relation("ActivityCompletedBy")
   timeline_assigned_events OpportunityTimelineEvent[] @relation("TimelineAssignedMember")
   timeline_previous_assigned_events OpportunityTimelineEvent[] @relation("TimelinePreviousAssignedMember")
+  read_notifications    Notification[] @relation("NotificationReadBy")
 
   @@id([workspace_id, user_id])
   @@index([user_id])
@@ -530,6 +532,7 @@ model Opportunity {
   related_reviews            IntakeReview[]             @relation("IntakeReviewRelatedOpportunity")
   timeline_events            OpportunityTimelineEvent[]
   activities                 Activity[]
+  notifications              Notification[]
 
   // Two partial indexes back the Leads screen (ticket 12), declared only in
   // the migration: `opportunities_workspace_id_arrived_at_id_active_idx`
@@ -696,4 +699,37 @@ model WorkspaceSettings {
   workspace                   Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
   @@map("workspace_settings")
+}
+
+/// Persistable management alert on an Opportunity. One row per lead and
+/// type: the sweep upserts `last_detected_at` and never invents a second
+/// line. No recipient column — who sees it is profile scope (ADR-0005).
+enum NotificationType {
+  FIRST_CONTACT_SLA_BREACHED
+  STAGNANT
+
+  @@map("notification_type")
+}
+
+model Notification {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id     String           @db.Uuid
+  opportunity_id   String           @db.Uuid
+  type             NotificationType
+  detected_at      DateTime         @db.Timestamptz(6)
+  last_detected_at DateTime         @db.Timestamptz(6)
+  read_at          DateTime?        @db.Timestamptz(6)
+  read_by_user_id  String?          @db.Uuid
+  resolved_at      DateTime?        @db.Timestamptz(6)
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  workspace        Workspace        @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  opportunity      Opportunity      @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: Cascade)
+  read_by_member   WorkspaceMember? @relation("NotificationReadBy", fields: [workspace_id, read_by_user_id], references: [workspace_id, user_id], onDelete: Restrict)
+
+  // Partial index of unresolved rows by detected_at lives only in the
+  // migration: `(workspace_id, detected_at DESC) WHERE resolved_at IS NULL`.
+  // The Prisma schema DSL cannot express a WHERE predicate on @@index.
+  @@unique([workspace_id, opportunity_id, type])
+  @@index([workspace_id])
+  @@map("notifications")
 }

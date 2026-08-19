@@ -1,6 +1,6 @@
 # 09 — Notificação: model, detecção e varredura agendada
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 03 (estado de SLA), 04 (estado de estagnação)
 
@@ -12,25 +12,25 @@ Este ticket entrega o model, a detecção e a varredura, verificáveis por teste
 
 ## Duas emendas de ADR, antes da migration
 
-Nenhuma das duas é reabertura de decisão. Os textos foram registrados em 2026-08-19; este ticket **materializa** função, `JobContext` e Seam 3 contra eles. Fazer as emendas **depois** da migration significaria reescrever teste de Seam 3 e tipo de contexto com código em cima. Os checkboxes abaixo continuam abertos até essa materialização.
+Nenhuma das duas é reabertura de decisão. Os textos foram registrados em 2026-08-19; este ticket **materializa** função, `JobContext` e Seam 3 contra eles. Fazer as emendas **depois** da migration significaria reescrever teste de Seam 3 e tipo de contexto com código em cima.
 
 1. **Sexta função privada** — [ADR-0019](../../../docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md). Descobrir "quais workspaces têm lead vencido" acontece antes de existir tenant, exatamente como a função que o ticket 15 da Fase 1 criou para a expiração de payload. A lista fechada passa de cinco para seis nomes: `private.claim_overdue_opportunity_workspaces`, retorno só `workspace_id`. *Alternativa rejeitada:* esticar a função de payload para responder também isto — ela é nomeada e indexada para outra pergunta, e as duas varreduras têm cadências separadas por natureza (90 dias contra 5 minutos).
 
 2. **Origem do `JobContext`** — [ADR-0016](../../../docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md) e [CONTEXT.md](../../../CONTEXT.md). A forma antiga carregava *"workspace e o evento que o originou"*, e a varredura de payload contornou isso com um evento âncora. **A varredura de SLA não tem âncora possível:** um lead liberado da quarentena não tem evento de integração para apontar. A origem é união — evento de integração **ou** passada agendada nomeada (`PAYLOAD_EXPIRY | OPPORTUNITY_CLOCK`). *Alternativa rejeitada:* âncora falsa apontando para um evento qualquer do workspace, que grava no banco uma causalidade que não existe e envenena qualquer auditoria futura.
 
-- [ ] `Notification` existe com verbete novo no `CONTEXT.md` e linha nova no mapeamento do [ADR-0005](../../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md), escritos **antes** da migration
-- [ ] `NotificationType` é `FIRST_CONTACT_SLA_BREACHED | STAGNANT` — nome genérico de propósito, porque a Fase 6 acrescenta o aviso de atendimento concluído no mesmo model
-- [ ] `UNIQUE(workspace_id, opportunity_id, type)`: é a constraint que faz a varredura ser idempotente, e não um `SELECT` que veio antes — mesma disciplina do [ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)
-- [ ] A segunda passada **não** cria segunda linha: atualiza `last_detected_at` por `ON CONFLICT ... DO UPDATE`
-- [ ] Sem coluna de destinatário e sem estado de leitura por usuário — quem enxerga é decidido pelo escopo de perfil da operação nomeada, como todo o resto do sistema
-- [ ] `resolved_at` é escrito quando a causa acaba; `read_at`/`read_by_user_id` são de quem marcou. **Marcar como lida não resolve, e resolver não exige leitura**
-- [ ] Índice parcial `(workspace_id, detected_at DESC) WHERE resolved_at IS NULL`
-- [ ] A ADR-0019 é emendada e o Seam 3 passa a esperar **seis** nomes, continuando a reprovar o sétimo; a função nova tem executor `NOLOGIN`, `search_path` fixado e grants mínimos
-- [ ] O `JobContext` aceita origem de passada agendada, com o `CONTEXT.md` e o ADR-0016 emendados
-- [ ] A varredura escreve sob isolamento de tenant como qualquer outra escrita — **sem bypass de RLS**
-- [ ] A varredura roda com o Redis fora
-- [ ] A falha de um workspace registra log e não interrompe a passada dos outros
-- [ ] Intervalo configurável por variável de ambiente, com piso validado e recusa de valor inválido na configuração
-- [ ] A detecção usa as **mesmas** funções puras dos tickets 03 e 04 — tela e alerta não podem discordar
-- [ ] Mudar o SLA em Configurações reavalia os leads em aberto na passada seguinte, e não só os que chegarem depois
-- [ ] Seam 3 verde: `notifications` sob as varreduras de RLS, policy e índice, e nenhum registro ativo apontando para registro mesclado
+- [x] `Notification` existe com verbete novo no `CONTEXT.md` e linha nova no mapeamento do [ADR-0005](../../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md), escritos **antes** da migration
+- [x] `NotificationType` é `FIRST_CONTACT_SLA_BREACHED | STAGNANT` — nome genérico de propósito, porque a Fase 6 acrescenta o aviso de atendimento concluído no mesmo model
+- [x] `UNIQUE(workspace_id, opportunity_id, type)`: é a constraint que faz a varredura ser idempotente, e não um `SELECT` que veio antes — mesma disciplina do [ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)
+- [x] A segunda passada **não** cria segunda linha: atualiza `last_detected_at` por `ON CONFLICT ... DO UPDATE`
+- [x] Sem coluna de destinatário e sem estado de leitura por usuário — quem enxerga é decidido pelo escopo de perfil da operação nomeada, como todo o resto do sistema
+- [x] `resolved_at` é escrito quando a causa acaba; `read_at`/`read_by_user_id` são de quem marcou. **Marcar como lida não resolve, e resolver não exige leitura**
+- [x] Índice parcial `(workspace_id, detected_at DESC) WHERE resolved_at IS NULL`
+- [x] A ADR-0019 é emendada e o Seam 3 passa a esperar **seis** nomes, continuando a reprovar o sétimo; a função nova tem executor `NOLOGIN`, `search_path` fixado e grants mínimos
+- [x] O `JobContext` aceita origem de passada agendada, com o `CONTEXT.md` e o ADR-0016 emendados
+- [x] A varredura escreve sob isolamento de tenant como qualquer outra escrita — **sem bypass de RLS**
+- [x] A varredura roda com o Redis fora
+- [x] A falha de um workspace registra log e não interrompe a passada dos outros
+- [x] Intervalo configurável por variável de ambiente, com piso validado e recusa de valor inválido na configuração
+- [x] A detecção usa as **mesmas** funções puras dos tickets 03 e 04 — tela e alerta não podem discordar
+- [x] Mudar o SLA em Configurações reavalia os leads em aberto na passada seguinte, e não só os que chegarem depois
+- [x] Seam 3 verde: `notifications` sob as varreduras de RLS, policy e índice, e nenhum registro ativo apontando para registro mesclado

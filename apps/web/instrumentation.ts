@@ -16,4 +16,7 @@ export async function register(): Promise<void> {
   // where the queue is absent (ADR-0014).
   const { startPayloadExpirySweep } = await import("./lib/payload-expiry-sweep");
   startPayloadExpirySweep();
+
+  const { startOpportunityClockSweep } = await import("./lib/opportunity-clock-sweep");
+  startOpportunityClockSweep();
 }
