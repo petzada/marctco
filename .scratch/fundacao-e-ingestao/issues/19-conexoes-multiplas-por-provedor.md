@@ -16,7 +16,7 @@ Hoje o sistema só está seguro por acidente: nenhuma LP do piloto numera, entã
 
 ## Por que a urgência é antes da segunda LP, não antes da Fase 2
 
-Enquanto houver uma conexão por provedor, a colisão não tem como acontecer. O risco nasce no minuto em que o cliente conecta a segunda landing page — e é esse o gatilho, não o calendário. Fazer antes disso é barato; depois, é reconciliar envio de produção à mão, que é exatamente o que o [ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md) chama de ponto mais irreversível do sistema.
+A colisão é da **chave**, não da quantidade de conexões: duas LPs que compartilham o mesmo token e numeram o próprio `1` já se engolem hoje ([ADR-0031](../../../docs/adr/0031-conexao-na-chave-idempotente.md)). Separar conexões sem corrigir a chave não fecha o furo. O gatilho operacional continua sendo a segunda landing page — é quando a numeração independente deixa de ser teórica. Fazer antes disso é barato; depois, é reconciliar envio de produção à mão, que é exatamente o que o [ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md) chama de ponto mais irreversível do sistema.
 
 ## Acceptance criteria
 

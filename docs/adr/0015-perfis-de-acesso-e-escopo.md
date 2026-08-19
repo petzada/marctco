@@ -7,6 +7,8 @@ Quatro perfis, e nenhum a mais: **Atendente**, **Supervisor**, **Gestão**, **Di
 > **Emendado pelo [ADR-0024](./0024-fila-sem-dono-e-da-gestao.md):** a fila sem dono saiu do escopo do Supervisor. Ele alcança o time e reatribui dentro dele; ver e atribuir o monte sem dono é da Gestão e da Direção.
 >
 > **Emendado pelo [ADR-0027](./0027-sem-papel-de-plataforma.md):** os quatro perfis são do cliente. Não há Super Admin do SaaS nem quinto valor no enum.
+>
+> **Emendado pelo [ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md):** o time exclui os outros `SUPERVISOR`. Sem isso, dois Supervisores com a mesma tag reatribuem o lead um do outro e nenhuma recusa dispara.
 
 ## O problema
 
@@ -27,7 +29,7 @@ Acrescentar valor a enum depois é aditivo e barato; remover depois, não. Se um
 | UI (PT-BR) | Código | Responde por |
 |---|---|---|
 | Atendente | `ATTENDANT` | Os leads atribuídos a ele |
-| Supervisor | `SUPERVISOR` | O time dele (quem compartilha tag) — **não** a fila sem dono ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)) |
+| Supervisor | `SUPERVISOR` | O time dele (quem compartilha tag, **menos os outros `SUPERVISOR`**) — **não** a fila sem dono ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md), [ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)) |
 | Gestão | `MANAGER` | A operação inteira do workspace |
 | Direção | `OWNER` | A operação **e** a conta: membros, papéis, integrações |
 
@@ -35,7 +37,7 @@ Acrescentar valor a enum depois é aditivo e barato; remover depois, não. Se um
 
 ## Escopo por tela
 
-**eu** = apenas o que lhe é atribuído · **time** = membros que compartilham tag com o Supervisor, e as oportunidades atribuídas a eles · **tudo** = workspace inteiro · **Supervisor ou si** = destino da fila: um `SUPERVISOR` `ACTIVE` **com ao menos uma tag**, ou o próprio ator ([ADR-0025](./0025-destino-da-fila-e-supervisor-ou-ator.md)). A **fila sem dono** não é “time”: aparece só para Gestão e Direção, na tabela de Leads e na atribuição ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). Editar card e resolver identidade do Supervisor são o time já atribuído. Atribuir e reatribuir aceitam um card ou vários, sempre para um destino ([ADR-0026](./0026-atribuicao-em-massa.md)).
+**eu** = apenas o que lhe é atribuído · **time** = membros que compartilham tag com o Supervisor, **menos os outros `SUPERVISOR`**, e as oportunidades atribuídas a eles ([ADR-0028](./0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md)) · **tudo** = workspace inteiro · **Supervisor ou si** = destino da fila: um `SUPERVISOR` `ACTIVE` **com ao menos uma tag**, ou o próprio ator ([ADR-0025](./0025-destino-da-fila-e-supervisor-ou-ator.md)). A **fila sem dono** não é “time”: aparece só para Gestão e Direção, na tabela de Leads e na atribuição ([ADR-0024](./0024-fila-sem-dono-e-da-gestao.md)). Editar card e resolver identidade do Supervisor são o time já atribuído. Atribuir e reatribuir aceitam um card ou vários, sempre para um destino ([ADR-0026](./0026-atribuicao-em-massa.md)).
 
 A distribuição do lead tem **dois níveis**, e a matriz existe para sustentá-los: Gestão ou Direção tira o lead da fila sem dono e o entrega ao **Supervisor** da equipe; o Supervisor repassa ao **Atendente** do seu time. O segundo movimento é uma reatribuição — o lead já tem dono — e é por isso que a linha de reatribuir não é exclusiva de Gestão para cima ([ADR-0022](./0022-workspace-e-fronteira-de-captacao.md)).
 

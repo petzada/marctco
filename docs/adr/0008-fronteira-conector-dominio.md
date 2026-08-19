@@ -4,6 +4,8 @@ O CRM é dono de um contrato canônico versionado de entrada. A Pluga mapeia Met
 
 **Status:** accepted · 2026-08-04
 
+> **Emendado pelo [ADR-0031](./0031-conexao-na-chave-idempotente.md):** um provedor admite N conexões no mesmo workspace, cada uma com nome, token e destino próprios. A superfície da conexão deixa de ser "uma Pluga, uma LP" e passa a ser a lista de conexões da tela. O conector continua no worker e continua sem conhecer funil, Person nem Opportunity.
+
 ## Por que o conector roda no worker
 
 Decorre do 200-sempre e da outbox ([ADR-0007](./0007-ingestao-idempotencia.md)): o request autentica, persiste o bruto e responde, sem interpretar. A conexão autenticada registra a origem declarada; o worker valida e interpreta o contrato quando o dispatcher entregar o evento.

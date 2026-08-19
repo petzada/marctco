@@ -33,6 +33,8 @@ Os tickets **08** e **09** nasceram depois da implementação de 01–07. São t
 
 A **Fase 3 · Tempo** segue em `docs/fase-3-spec-e-tickets` e não espera 08/09.
 
+Prova humana restante da Fase 2: [`.scratch/fechamento-fases-0-2.md`](../fechamento-fases-0-2.md) etapa B item 3 — passada visual de Meus leads depois do [PR #47](https://github.com/petzada/marctco/pull/47).
+
 ## Não reabra
 
 Autoridade: `CONTEXT.md` + ADRs 0024–0031.

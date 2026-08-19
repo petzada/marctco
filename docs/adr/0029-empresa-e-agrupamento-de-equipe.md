@@ -22,7 +22,7 @@ O caminho de leitura é a derivação:
 Opportunity → responsável → equipe (tag) → empresa
 ```
 
-Quando o relatório virar requisito concreto — Fase 7, junto de honorários, item A10 do [plano](../plano-de-construcao.md) — a forma prevista é **snapshot no Ganho** de responsável, equipe e empresa, porque um lead que passa da equipe Y para a equipe Z e é ganho lá pertence a Z. Até lá a semântica fica aberta de propósito.
+Quando o relatório virar requisito concreto — Fase 7, junto de honorários, item A10 do [plano](../plano-de-construcao.md) — a forma prevista é **snapshot no Ganho** (Fase 6) de responsável, equipe e empresa, porque um lead que passa da equipe Y para a equipe Z e é ganho lá pertence a Z. Até lá a semântica fica aberta de propósito.
 
 O número do diretor não está bloqueado por esta decisão: está bloqueado por honorários, que derivam da análise de cabimento e não existem ainda.
 

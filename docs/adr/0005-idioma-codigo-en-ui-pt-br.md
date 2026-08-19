@@ -86,7 +86,8 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Etapa de entrada | `Stage.role = ENTRY` | Onde o lead ingerido nasce |
 | Etapa de conclusão | `Stage.role = CLOSING` | Fim do fluxo em aberto; não é ganho nem perdido |
 | Conector de origem | `LeadSourceConnector` | — |
-| Conexão de integração | `IntegrationConnection` | — |
+| Conexão de integração | `IntegrationConnection` | Um provedor admite N no mesmo workspace ([ADR-0031](./0031-conexao-na-chave-idempotente.md)) |
+| Nome da conexão | `IntegrationConnection.name` | Texto do cliente ("LP institucional", "Pluga ACR"). Unicidade por `(workspace_id, lower(name))` |
 | Superfície de integração | `IntegrationSurface` | Tipo da camada web, não model: liga o segmento de URL da tela ao `IntegrationProvider` que ela administra, para que as duas não voltem a divergir |
 | Evento de integração | `IntegrationEvent` | — |
 | Estado de despacho do evento | `IntegrationEvent.dispatch_status` | `PENDING \| DISPATCHED`; outbox PostgreSQL → BullMQ |

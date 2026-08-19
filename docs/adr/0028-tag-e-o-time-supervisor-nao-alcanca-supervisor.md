@@ -20,7 +20,7 @@ A ambiguidade "marca ou time" era a causa. Enquanto a tag pudesse significar as 
 - **Tag com dono: no máximo um Supervisor por tag,** garantido por constraint. Recusada: bloqueia dois Supervisores coexistirem na mesma equipe — turnos, ou uma equipe grande com dois responsáveis — e uma constraint é muito mais difícil de afrouxar depois do que uma linha numa função pura.
 - **Semântica E em vez de OU** (time = quem compartilha *todas* as tags). Recusada: quebra a história 4 (a mesma pessoa atende mais de um time) e torna o escopo dependente da ordem em que a Direção aplicou os rótulos.
 
-**Consequences:** a função pura do time, no ticket 05, exclui do conjunto os membros com papel `SUPERVISOR` que não sejam o ator. O `UserContext` continua sem tags ([spec](../../.scratch/operacao-do-lead/spec.md)); o join em `MemberTag` continua dentro da operação nomeada.
+**Consequences:** a função pura do time, no ticket 09, exclui do conjunto os membros com papel `SUPERVISOR` que não sejam o ator. O `UserContext` continua sem tags ([spec](../../.scratch/operacao-do-lead/spec.md)); o join em `MemberTag` continua dentro da operação nomeada.
 
 Um **Atendente** com duas tags continua no time de dois Supervisores, e os dois o alcançam. É consequência aceita e não defeito: os dois de fato o supervisionam, e é exatamente o que a história 4 pediu. A exclusão vale entre pares que **comandam**, não entre quem é comandado.
 

@@ -20,7 +20,7 @@ Status: **travada**. Alternativas rejeitadas (NestJS split, Clerk, Better Auth, 
 > | §3 Tag “aplica-se a membros e, se útil, a oportunidades” | Tag que define o time vive no **membro** e nomeia o **time**, nunca a marca; o time exclui os outros Supervisores. Tag na oportunidade, se existir, não computa escopo e não se herda; fica fora da Fase 2 — [ADR-0020](./docs/adr/0020-tag-no-membro-define-o-time.md), [ADR-0028](./docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md) |
 > | §3 marca/filial como recorte | A empresa do grupo é `Company` + `Tag.company_id`: agrupa equipes **para leitura** e nunca isola dado, decide escopo, roteia lead ou vira coluna da Oportunidade — [ADR-0029](./docs/adr/0029-empresa-e-agrupamento-de-equipe.md) |
 > | §1 uma conexão de integração por provedor | Um provedor admite **N conexões** no mesmo workspace, e a conexão entra na chave idempotente do envio — sem isso, duas LPs que numeram por conta própria engolem lead uma da outra — [ADR-0031](./docs/adr/0031-conexao-na-chave-idempotente.md) |
-> | §10 item 7 / §11 “tags filtram oportunidades” · “um workspace por grupo cliente” | Time filtra por tag no **membro**. Workspace = fronteira de captação — [ADR-0020](./docs/adr/0020-tag-no-membro-define-o-time.md) · [ADR-0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) |
+> | §10 item 7 / §11 “tags filtram oportunidades” · “um workspace por grupo cliente” | Time filtra por tag no **membro**. Workspace = fronteira do **dono** — [ADR-0020](./docs/adr/0020-tag-no-membro-define-o-time.md) · [ADR-0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) · [ADR-0030](./docs/adr/0030-workspace-e-fronteira-do-dono.md) |
 
 ---
 
