@@ -39,12 +39,12 @@ O que uma pessoa responde dentro do workspace, e portanto o que ela alcança. S�
 _Avoid_: Perfil sem escopo declarado, esconder botão como controle de acesso, papel para staff da marctco, Super Admin do SaaS, `ADMIN` global, confundir com tag de time, Supervisor alcançando lead de outro Supervisor, Supervisor com a fila sem dono no escopo, RLS por papel, escopo por empresa, motor `can()`, entidade Team, tratar assessoria como se fosse o tenant, Gestão recortada por tag, sub-empresa como perfil
 
 **Contexto de acesso**:
-Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e a origem do trabalho — um Evento de integração real ou uma Passada agendada. Ambas isolam pelo workspace, um tenant por transação; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
+Os fatos que decidem o que uma requisição ou um job alcança, reunidos num valor só, construído num ponto só e exigido por toda leitura e toda escrita. Tem duas formas, porque quem trabalha em nome de uma pessoa e quem trabalha em nome da fila não são a mesma coisa: a da pessoa carrega workspace, quem ela é e seu perfil de acesso; a do job carrega workspace e a origem do trabalho — um Evento de integração real, uma Passada agendada, uma Tentativa outbound de canal ou um webhook inbound autenticado numa Conexão WhatsMiau. Ambas isolam pelo workspace, um tenant por transação; só a primeira tem escopo de perfil, e é por isso que um job não alcança a tela de ninguém. Nasce validado contra a associação ao workspace e morre com o escopo que o criou; nunca vive em variável de módulo, porque um processo serve tenants diferentes. Na Fase 4 as feature flags já resolvidas entram nele, pelo mesmo motivo.
 _Avoid_: Workspace e papel viajando separados, papel como parâmetro que ninguém usa, papel inventado para o job preencher campo, contexto em singleton ou cache sem chave de workspace, montar o contexto em cada tela, terceiro tipo de contexto para manutenção, evento âncora fabricado
 
 **Origem do job**:
-O que nomeia o trabalho de um job: um Evento de integração real, ou uma Passada agendada. União discriminada. Não alarga o que o job alcança — o isolamento continua sendo o workspace.
-_Avoid_: Evento âncora, origem opcional, job sem origem, job sem workspace
+O que nomeia o trabalho de um job: um Evento de integração real, uma Passada agendada, uma Tentativa outbound de canal, ou o webhook inbound de uma Conexão WhatsMiau. União discriminada. Não alarga o que o job alcança — o isolamento continua sendo o workspace. Canal outbound aponta para a tentativa; canal inbound aponta para a conexão já autenticada pelo hash. Nenhum dos dois fabrica Evento de integração nem se disfarça de Passada agendada.
+_Avoid_: Evento âncora, origem opcional, job sem origem, job sem workspace, inventar integration_event_id para o canal
 
 **Passada agendada**:
 Trabalho de manutenção disparado pelo relógio da aplicação, sem Evento de integração que o origine. O nome é fechado: expiração de payload, relógios de SLA e estagnação. A varredura descobre os workspaces por função privada e então escreve sob o mesmo isolamento de tenant de qualquer job.
@@ -123,8 +123,8 @@ Adaptador que conhece a forma do payload de uma origem de lead e a converte para
 _Avoid_: Conector que normaliza ou decide regra de negócio, integração como sinônimo de conector
 
 **Contrato canônico de entrada**:
-O vocabulário de campos que o CRM publica e que toda origem preenche — versionado, de chaves planas, sem campo de negócio obrigatório. Quem converte a forma de uma origem para ele é o Conector de origem; na liberação da quarentena quem o preenche é o gestor, lendo o payload cru ao lado. Campo desconhecido não quebra o processamento e continua guardado no bruto.
-_Avoid_: Esperar "o formato nativo" de uma ferramenta de automação — não existe; rejeitar por HTTP um JSON autenticado que faltou campo; validar o mesmo dado de novo camada abaixo
+O vocabulário de campos que o CRM publica e que toda origem preenche — versionado, de chaves planas, sem campo de negócio obrigatório. Quem converte a forma de uma origem para ele é o Conector de origem; na liberação da quarentena quem o preenche é o gestor, lendo o payload cru ao lado. Campo desconhecido não quebra o processamento e continua guardado no bruto. Inclui o opt-in de WhatsApp como verdadeiro, falso ou ausente — o conector traduz o campo da origem e não infere consentimento.
+_Avoid_: Esperar "o formato nativo" de uma ferramenta de automação — não existe; rejeitar por HTTP um JSON autenticado que faltou campo; validar o mesmo dado de novo camada abaixo; inferir opt-in de telefone, campanha ou provedor
 
 **Lead normalizado**:
 A submissão depois que o domínio a interpretou: telefone em E.164 com Brasil como país padrão, CPF só dígitos com dígito verificador conferido, e-mail em minúsculas, valor monetário em decimal com o texto original preservado ao lado. É valor, não entidade — não tem identidade nem ciclo de vida. Campo que não pôde ser lido vira diagnóstico sem o valor dentro, nunca motivo para recusar a submissão.
@@ -171,8 +171,8 @@ Payload bruto recebido de uma origem, persistido transacionalmente como outbox a
 _Avoid_: Confundir com EnvioLead (que já é lead interpretado), publicar no Redis antes do commit, descartar o bruto antes de processar, guardar o mesmo payload em dois lugares
 
 **Evento da linha do tempo da Oportunidade**:
-Fato imutável que aconteceu com uma Oportunidade e precisa continuar visível depois de reprocessamento ou mesclagem. A ingestão grava reenvio recebido e EnvioLead absorvido como reentrada, e estes dois continuam deduplicando pelo evento de integração. A Fase 3 acrescenta os fatos de movimento — mudança de etapa, atribuição, reatribuição, retorno à fila, atividade marcada e atividade concluída — que não têm evento de integração e não deduplicam: dois movimentos iguais em instantes diferentes são dois fatos. Os fatos `ASSIGNED`, `REASSIGNED` e `RETURNED_TO_QUEUE` carregam no próprio evento os ids tipados e imutáveis do destinatário (`assigned_user_id`) e de quem saiu (`previous_assigned_user_id`); a leitura resolve o nome pelo `WorkspaceMember` daquele workspace. Fatos anteriores à coluna nascem nulos: o banco não inventa a cadeia que não gravou. Quando uma Oportunidade é mesclada, seus eventos são transferidos para a canônica — nenhuma leitura segue a lápide.
-_Avoid_: Reconstituir evento a partir do estado atual do card, gravar texto de UI ou nome como snapshot no domínio, anexar evento novo à Oportunidade absorvida, transformar a linha do tempo em model genérico das fases futuras, deixar a retransmissão inerte reanimar o relógio de estagnação
+Fato imutável que aconteceu com uma Oportunidade e precisa continuar visível depois de reprocessamento ou mesclagem. A ingestão grava reenvio recebido e EnvioLead absorvido como reentrada, e estes dois continuam deduplicando pelo evento de integração. A Fase 3 acrescenta os fatos de movimento — mudança de etapa, atribuição, reatribuição, retorno à fila, atividade marcada e atividade concluída — que não têm evento de integração e não deduplicam: dois movimentos iguais em instantes diferentes são dois fatos. Os fatos `ASSIGNED`, `REASSIGNED` e `RETURNED_TO_QUEUE` carregam no próprio evento os ids tipados e imutáveis do destinatário (`assigned_user_id`) e de quem saiu (`previous_assigned_user_id`); a leitura resolve o nome pelo `WorkspaceMember` daquele workspace. Fatos anteriores à coluna nascem nulos: o banco não inventa a cadeia que não gravou. A Fase 4 acrescenta o Fato de mensagem — envio automático aceito, falha terminal e resposta inbound — na mesma lista ordenada, sem virar inbox. Quando uma Oportunidade é mesclada, seus eventos são transferidos para a canônica — nenhuma leitura segue a lápide.
+_Avoid_: Reconstituir evento a partir do estado atual do card, gravar texto de UI ou nome como snapshot no domínio, anexar evento novo à Oportunidade absorvida, transformar a linha do tempo em model genérico das fases futuras, deixar a retransmissão inerte reanimar o relógio de estagnação, chamar fato de mensagem de entrega ou leitura
 
 **Expiração do payload**:
 Passados 90 dias, o conteúdo bruto do Evento de integração é apagado e a linha permanece: some o dado pessoal, fica o fato de que aquele lead chegou, de onde, quando e no que deu. Evento em quarentena não expira enquanto estiver em quarentena, porque é justamente o payload que o gestor precisa ler para completar.
@@ -191,7 +191,7 @@ Interruptor do catálogo, ligado pela marctco por workspace, que libera capacida
 _Avoid_: Flag por módulo para packaging, interruptor que o gestor edita, variável de ambiente, toggle de UI
 
 **Configuração de workspace**:
-Escolha operacional que o gestor da assessoria edita na tela, alterando o comportamento de uma capacidade que a feature flag já liberou. O que é mera consequência de dado existente (integração conectada, funil jurídico ativo) não é nem flag nem configuração. A linha é opcional: workspace que nunca tocou em Configurações usa o padrão do domínio, e ausência nunca desliga o relógio.
+Escolha operacional que o gestor da assessoria edita na tela, alterando o comportamento de uma capacidade que a feature flag já liberou. O que é mera consequência de dado existente (integração conectada, funil jurídico ativo) não é nem flag nem configuração. A linha é opcional: workspace que nunca tocou em Configurações usa o padrão do domínio, e ausência nunca desliga o relógio. Na Fase 4 inclui o Gatilho do primeiro contato e o Template de primeiro contato.
 _Avoid_: Feature flag, preferência pessoal do usuário, pré-condição de dado, ausência como desligamento, semear a linha no provisionamento
 
 **SLA de primeiro contato**:
@@ -211,8 +211,8 @@ Se o lead ainda anda dentro do limite (em movimento) ou se passou do limite sem 
 _Avoid_: Horário comercial, uma segunda função para a tela e outra para o alerta, contar fechado como parado
 
 **Primeiro contato**:
-Instante em que alguém falou com esta pessoa pela primeira vez. Nesta fase é a primeira Atividade concluída daquele lead; a Fase 4 acrescenta a mensagem de WhatsApp na mesma coluna, sem trocar o significado. Anulável e escrito uma vez: a segunda conclusão não sobrescreve, e atribuir ou mover etapa não preenchem.
-_Avoid_: Parar o relógio na atribuição, inferir do responsável, sobrescrever na segunda conclusão, reconstruir varrendo atividades a cada tela
+Instante em que alguém falou com esta pessoa pela primeira vez. A evidência é a primeira entre: Atividade concluída, HTTP 2xx do envio automático de WhatsApp (política local de aceite, não entrega nem leitura) ou resposta inbound do cliente. Anulável e escrito uma vez: quem chegar primeiro ganha; a segunda evidência não sobrescreve. Atribuir, enfileirar, iniciar o HTTP ou falhar o envio não preenchem.
+_Avoid_: Parar o relógio na atribuição, inferir do responsável, sobrescrever na segunda evidência, chamar HTTP 2xx de entrega ou leitura, reconstruir varrendo atividades a cada tela
 
 **Fechamento**:
 Instante em que a Oportunidade deixa de estar em aberto e passa a ganho ou perda. Gravado em `closed_at`, anulável enquanto `status` for `OPEN` e obrigatório quando for `WON` ou `LOST`. Para o relógio de SLA, encerra a espera quando não houve primeiro contato: a duração congela nesse instante e nunca conta como atendimento. A operação nomeada de concluir atendimento da Fase 6 preencherá a coluna; caminhos legados que já fecham o card (como arquivar spam na quarentena) também a gravam.
@@ -225,3 +225,39 @@ _Avoid_: Horário comercial, feriado, tratar ganho ou perda como atendimento, um
 **Notificação**:
 Aviso persistido na Oportunidade de que o SLA de primeiro contato estourou ou de que o lead está parado. Uma linha por lead e por tipo; a varredura seguinte atualiza a detecção, não cria segunda linha. Não tem destinatário: quem enxerga é o escopo de perfil da operação nomeada. `read_at` é do aviso, não de cada leitor — marcar como lida não resolve, e resolver não exige leitura. Some da lista de gestão quando a causa acaba (primeiro contato, movimento, ganho, perda ou mesclagem), sem apagar a linha. O Atendente não a recebe: o sinal dele é a atividade vencida na Agenda.
 _Avoid_: Destinatário na tabela, estado de leitura por usuário, uma linha nova a cada passada, tratar lida como resolvida, e-mail ou push nesta fase, Atendente na superfície de gestão
+
+**Opt-in de WhatsApp**:
+Evidência persistida de que o lead consentiu receber contato por WhatsApp. No contrato canônico chega como verdadeiro, falso ou ausente; o EnvioLead guarda o que veio, e a Oportunidade copia o snapshot da submissão que a criou ou liberou. Disparo automático exige verdadeiro: ausente, falso ou ilegível falha fechado e não cria tentativa. O conector só traduz o campo da origem — telefone presente, campanha ou provedor não valem como consentimento.
+_Avoid_: Inferir opt-in de telefone, tratar ausência como verdadeiro, segundo opt-in inventado na hora do envio, pedir de novo no worker
+
+**Conexão WhatsMiau**:
+A conexão de integração do provedor WhatsMiau no workspace: o número da empresa que envia o primeiro contato automático. A credencial `apikey` é da **conta** Whatsmiau, server-side da marctco, e alcança todas as instâncias dessa conta — a API não conhece workspace. O tenant persiste só o identificador público da instância (`instanceName`) e o hash do token de webhook; o segredo nunca volta ao browser depois da criação. No máximo uma conexão WhatsMiau não desligada por workspace, por constraint parcial — N conexões por provedor no geral continua valendo para Pluga e landing page. Estado administrativo (ativa ou desligada) e Estado de pareamento são distintos.
+_Avoid_: apikey no tenant ou no browser, restaurar uma conexão por provedor, tratar a conta Whatsmiau como tenant, inbox, instância por atendente, TTL de QR atribuído ao provedor
+
+**Estado de pareamento**:
+Como a instância WhatsMiau está vista pelo CRM, distinto do estado administrativo da conexão. Valores canônicos: desconectada, conectando, aguardando QR, conectada, suspensa e erro. Mapeiam os oficiais `closed`, `connecting`, `qr-code`, `open` e o flag `suspended`; no webhook, `close` e `closed` são a mesma desconexão. Erro é normalização local — falha HTTP, payload inválido ou estado desconhecido — não um valor da API. `statusReason` se preserva sem inventar categoria.
+_Avoid_: ERROR como estado oficial, TTL de QR, tratar `qr-code` como conectada, classificar logout ou suspensão pelo `statusReason`, confundir com ativa/desligada da conexão
+
+**Gatilho do primeiro contato**:
+Escolha da Gestão sobre **quando** tentar o WhatsApp automático: na atribuição a um Atendente (padrão), na chegada da Oportunidade, ou desligado. É configuração de workspace, não feature flag e não o relógio de SLA. Atribuir ao Supervisor não dispara: a mensagem só promete atendente nomeado quando o card chega ao Atendente.
+_Avoid_: Confundir com `auto_primeiro_contato`, com `first_contact_at` ou com o SLA; disparar na entrega ao Supervisor; ausência de linha como desligado
+
+**Template de primeiro contato**:
+O texto editável da mensagem automática, com variáveis `{{snake_case}}` cujo conjunto depende do gatilho. Na atribuição inclui nome e telefone do Atendente; na chegada, não. Recusa na escrita se a variável for inválida para o gatilho ou se o texto estiver vazio com gatilho ativo e flag ligada. O worker envia o texto salvo — não o altera em silêncio.
+_Avoid_: Variável de atendente no gatilho de chegada, variar o texto no worker, validar só na hora do envio
+
+**Tentativa outbound**:
+A intenção durável de enviar **uma** mensagem automática de primeiro contato para aquela Oportunidade. Nasce na mesma transação que cria o card (na chegada) ou entrega o lead ao Atendente (na atribuição). Ela mesma é o outbox Postgres: o dispatcher a publica na fila; o HTTP só acontece depois. A primeira tentativa — pendente, em processamento ou terminal — bloqueia novo planejamento. Sem flag, gatilho incompatível, opt-in, telefone do lead ou lead fechado/mesclado: não nasce tentativa. Instância desconectada ou Atendente sem telefone, depois do gatilho elegível: nasce terminal e observável.
+_Avoid_: Redis como única cópia da intenção, segunda tentativa na reatribuição, chamar `sendText` na transação da atribuição, evento de integração fabricado como âncora
+
+**Estado de publicação**:
+Se a Tentativa outbound já foi entregue à fila. Pendente ou despachada. Recuperável antes do HTTP; distinto do Estado de entrega.
+_Avoid_: Confundir com aceite do envio, tratar despachada como primeiro contato
+
+**Estado de entrega**:
+O resultado local da Tentativa outbound: na fila, em processamento, aceita pelo HTTP 2xx ou falha. Aceite é política local do `sendText`, não entrega no aparelho nem leitura — isso exigiria `messages.update`, fora do escopo. Depois que a chamada HTTP começa, qualquer resultado não-2xx, timeout, crash ou lease vencido termina em falha e não reenvia: a API não documenta chave de idempotência, ID de correlação nem garantia de exatamente uma entrega.
+_Avoid_: Entregue, lida, `DELIVERY_ACK`, retry de `sendText` depois de a chamada começar, inventar identificador externo, chamar aceite HTTP de entrega
+
+**Fato de mensagem**:
+Evento imutável na linha do tempo da Oportunidade sobre o canal: envio automático aceito, tentativa automática encerrada sem envio, ou mensagem recebida via webhook. Coexiste com movimento, ingestão e atividade na mesma lista ordenada. Não é inbox, não é thread e não afirma entrega nem leitura.
+_Avoid_: Inbox, "entregue", "lida", gravar o thread completo, fato para eco outbound (`fromMe`)

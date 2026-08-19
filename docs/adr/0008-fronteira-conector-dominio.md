@@ -5,6 +5,8 @@ O CRM é dono de um contrato canônico versionado de entrada. A Pluga mapeia Met
 **Status:** accepted · 2026-08-04
 
 > **Emendado pelo [ADR-0031](./0031-conexao-na-chave-idempotente.md):** um provedor admite N conexões no mesmo workspace, cada uma com nome, token e destino próprios. A superfície da conexão deixa de ser "uma Pluga, uma LP" e passa a ser a lista de conexões da tela. O conector continua no worker e continua sem conhecer funil, Person nem Opportunity.
+>
+> **Emendado pela Fase 4 (ticket 00):** o contrato `v1` ganha `whatsapp_opt_in: boolean | null`. Ausente, falso ou ilegível falha fechado no disparo automático. O conector traduz o campo da origem e não infere consentimento de telefone, campanha ou provedor.
 
 ## Por que o conector roda no worker
 
@@ -49,6 +51,7 @@ O núcleo usa chaves planas e estáveis, compatíveis com o editor da Pluga:
 
 - `schema_version`, `external_lead_id`, `occurred_at`;
 - nome, telefones, e-mails e CPF;
+- `whatsapp_opt_in` (`boolean | null`) — evidência de consentimento; o conector traduz, não infere;
 - `financing_type`, instituição financeira e valor bruto da parcela, todos opcionais;
 - `form_id`, `campaign_id`, `adset_id`, `ad_id` e plataforma, todos opcionais;
 - respostas adicionais e propriedades desconhecidas, preservadas no payload bruto.
