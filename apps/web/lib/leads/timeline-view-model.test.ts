@@ -114,4 +114,16 @@ describe("buildLeadTimelineItemView", () => {
       ).caption
     ).toBe("Atividade concluída: Ligação sem resposta");
   });
+
+  it("names channel facts without claiming delivery or a read receipt", () => {
+    expect(buildLeadTimelineItemView(fact({ type: "WHATSAPP_OUTBOUND_SENT" })).caption).toBe(
+      "Envio aceito pelo canal"
+    );
+    expect(buildLeadTimelineItemView(fact({ type: "WHATSAPP_OUTBOUND_FAILED" })).caption).toBe(
+      "Tentativa automática encerrada sem envio"
+    );
+    expect(buildLeadTimelineItemView(fact({ type: "WHATSAPP_INBOUND_RECEIVED" })).caption).toBe(
+      "Resposta recebida no WhatsApp"
+    );
+  });
 });

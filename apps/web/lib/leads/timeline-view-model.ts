@@ -84,6 +84,12 @@ function captionFor(fact: LeadTimelineFact): string {
       const labeled = title ?? activityKind;
       return labeled ? `Atividade concluída: ${labeled}` : "Atividade concluída";
     }
+    case "WHATSAPP_OUTBOUND_SENT":
+      return "Envio aceito pelo canal";
+    case "WHATSAPP_OUTBOUND_FAILED":
+      return "Tentativa automática encerrada sem envio";
+    case "WHATSAPP_INBOUND_RECEIVED":
+      return "Resposta recebida no WhatsApp";
     default: {
       const unknown: never = type;
       return unknown;

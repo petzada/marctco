@@ -172,6 +172,9 @@ enum OpportunityTimelineEventType {
   RETURNED_TO_QUEUE
   ACTIVITY_CREATED
   ACTIVITY_COMPLETED
+  WHATSAPP_OUTBOUND_SENT
+  WHATSAPP_OUTBOUND_FAILED
+  WHATSAPP_INBOUND_RECEIVED
 
   @@map("opportunity_timeline_event_type")
 }
@@ -197,6 +200,7 @@ model Workspace {
   activities                  Activity[]
   notifications               Notification[]
   settings                    WorkspaceSettings?
+  channel_outbound_attempts   ChannelOutboundAttempt[]
 
   @@map("workspaces")
 }
@@ -541,9 +545,9 @@ model Opportunity {
   merged_into_opportunity_id String?                    @db.Uuid
   created_at                 DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime                   @updatedAt @db.Timestamptz(6)
-  /// Instant of the first evidence of attendance. Written once, on the first
-  /// completed Activity of this lead (Fase 4 will also fill this column from
-  /// a WhatsApp message). Assignment and stage moves never write it.
+  /// Instant of the first evidence of attendance. Written once: first
+  /// completed Activity, HTTP 2xx of automatic WhatsApp sendText, or inbound
+  /// reply. Assignment, enqueue and a failed send never write it.
   first_contact_at           DateTime?                  @db.Timestamptz(6)
   /// Instant the Opportunity became WON or LOST. Null while OPEN; required
   /// when closed (DB CHECK). Ends the first-contact SLA when there was no
@@ -565,6 +569,7 @@ model Opportunity {
   timeline_events            OpportunityTimelineEvent[]
   activities                 Activity[]
   notifications              Notification[]
+  channel_outbound_attempts  ChannelOutboundAttempt[]
 
   // Two partial indexes back the Leads screen (ticket 12), declared only in
   // the migration: `opportunities_workspace_id_arrived_at_id_active_idx`
@@ -666,6 +671,70 @@ model OpportunityTimelineEvent {
   @@index([workspace_id, assigned_user_id])
   @@index([workspace_id, previous_assigned_user_id])
   @@map("opportunity_timeline_events")
+}
+
+enum ChannelOutboundAttemptKind {
+  AUTO_FIRST_CONTACT
+
+  @@map("channel_outbound_attempt_kind")
+}
+
+enum ChannelOutboundDispatchStatus {
+  PENDING
+  DISPATCHED
+
+  @@map("channel_outbound_dispatch_status")
+}
+
+enum ChannelOutboundDeliveryStatus {
+  QUEUED
+  PROCESSING
+  SENT
+  FAILED
+
+  @@map("channel_outbound_delivery_status")
+}
+
+enum ChannelOutboundFailureReason {
+  INSTANCE_NOT_CONNECTED
+  ATTENDANT_PHONE_MISSING
+  KNOWN_REFUSAL
+  UNCERTAIN_EXTERNAL
+
+  @@map("channel_outbound_failure_reason")
+}
+
+/// One automatic first-contact WhatsApp attempt per Opportunity. This row is
+/// the Postgres outbox: publication (`dispatch_status`) is recoverable
+/// before HTTP; delivery after PROCESSING never returns to the queue.
+model ChannelOutboundAttempt {
+  id                      String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id            String                         @db.Uuid
+  opportunity_id          String                         @db.Uuid
+  kind                    ChannelOutboundAttemptKind     @default(AUTO_FIRST_CONTACT)
+  dispatch_status         ChannelOutboundDispatchStatus  @default(PENDING)
+  delivery_status         ChannelOutboundDeliveryStatus  @default(QUEUED)
+  failure_reason          ChannelOutboundFailureReason?
+  /// Optional provider identifier. Null unless the adapter supplied one;
+  /// sendText does not document a response id, so SENT may stay null.
+  provider_message_id     String?
+  dispatch_lease_until    DateTime?                      @db.Timestamptz(6)
+  processing_lease_until  DateTime?                      @db.Timestamptz(6)
+  dispatched_at           DateTime?                      @db.Timestamptz(6)
+  sent_at                 DateTime?                      @db.Timestamptz(6)
+  failed_at               DateTime?                      @db.Timestamptz(6)
+  created_at              DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                       @updatedAt @db.Timestamptz(6)
+  workspace               Workspace                      @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  opportunity             Opportunity                    @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: Cascade)
+
+  @@unique([workspace_id, id])
+  @@unique([workspace_id, opportunity_id, kind])
+  @@index([workspace_id])
+  // Pending-dispatch and processing-lease partial indexes live only in the
+  // migration: Prisma's @@index cannot express WHERE, and the claim function
+  // is the only reader of those predicates.
+  @@map("channel_outbound_attempts")
 }
 
 /// Work the attendant records on a Lead. There is no orphan event: every

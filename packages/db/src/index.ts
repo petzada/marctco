@@ -3,6 +3,7 @@ export {
   createJobContext,
   isJobContext,
   isUserContext,
+  jobChannelAttemptId,
   jobIntegrationEventId,
   SCHEDULED_SWEEP_NAMES,
   WorkspaceRole,
@@ -320,4 +321,24 @@ export {
   type WhatsAppConnectionView,
   type WhatsAppWebhookSecretCommit
 } from "./whatsapp-connection.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 03a — Canal: outbound attempt / Postgres outbox. Appended at the
+// end so parallel Fase 4 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  ChannelOutboundError,
+  acceptChannelOutboundAttempt,
+  beginChannelOutboundAttempt,
+  claimPendingChannelAttempts,
+  dispatchChannelOutboundAttempt,
+  failChannelOutboundAttempt,
+  getChannelOutboundAttempt,
+  planAndRecordChannelOutboundAttempt,
+  type ChannelOutboundAttemptView,
+  type ChannelOutboundRefusal,
+  type PendingChannelAttempt,
+  type PlanChannelOutboundAttemptInput,
+  type PlannedChannelOutboundAttempt
+} from "./channel-outbound.js";
 

@@ -202,6 +202,25 @@ export {
   type FirstContactTrigger
 } from "./first-contact.js";
 export {
+  CHANNEL_OUTBOUND_DELIVERY_STATUSES,
+  CHANNEL_OUTBOUND_DISPATCH_LEASE_MS,
+  CHANNEL_OUTBOUND_DISPATCH_STATUSES,
+  CHANNEL_OUTBOUND_FAILURE_REASONS,
+  CHANNEL_OUTBOUND_KIND,
+  CHANNEL_OUTBOUND_PROCESSING_LEASE_MS,
+  decideChannelOutboundTransition,
+  planFirstContactAttempt,
+  type ChannelOutboundDeliveryStatus,
+  type ChannelOutboundDispatchStatus,
+  type ChannelOutboundFailureReason,
+  type ChannelOutboundKind,
+  type ChannelOutboundTransitionAction,
+  type ChannelOutboundTransitionDecision,
+  type ChannelOutboundTransitionRefusal,
+  type FirstContactAttemptPlan,
+  type FirstContactAttemptRefusal
+} from "./channel-outbound.js";
+export {
   WHATSAPP_PAIRING_STATES,
   WHATSMIAU_CREATE_INSTANCE_DEFAULTS,
   WHATSMIAU_WEBHOOK_EVENTS,

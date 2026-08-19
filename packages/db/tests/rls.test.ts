@@ -43,6 +43,8 @@ const integration_event_a = randomUUID();
 const integration_event_b = randomUUID();
 const opportunity_a = randomUUID();
 const opportunity_b = randomUUID();
+const channel_opportunity_a = randomUUID();
+const channel_opportunity_b = randomUUID();
 const lead_submission_a = randomUUID();
 const lead_submission_b = randomUUID();
 // Workspace A's card lives on a pipeline of its own, because the pipeline
@@ -65,6 +67,12 @@ const isolation_cases = [
     table_name: "activities",
     read_sql: "SELECT workspace_id AS tenant_id FROM activities ORDER BY workspace_id",
     write_sql: `INSERT INTO activities (id, workspace_id, opportunity_id, assigned_user_id, type, title, due_at, status, created_by_user_id, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', '${user_b}', 'TASK', 'Cross-workspace', CURRENT_TIMESTAMP, 'OPEN', '${user_b}', CURRENT_TIMESTAMP)`
+  },
+  {
+    table_name: "channel_outbound_attempts",
+    read_sql:
+      "SELECT workspace_id AS tenant_id FROM channel_outbound_attempts ORDER BY workspace_id",
+    write_sql: `INSERT INTO channel_outbound_attempts (id, workspace_id, opportunity_id, kind, dispatch_status, delivery_status, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', '${opportunity_b}', 'AUTO_FIRST_CONTACT', 'PENDING', 'QUEUED', CURRENT_TIMESTAMP)`
   },
   {
     table_name: "intake_reviews",
@@ -325,6 +333,24 @@ beforeAll(async () => {
           stage_id: stage_b_entry,
           area: "COMMERCIAL",
           arrived_at: new Date()
+        },
+        {
+          id: channel_opportunity_a,
+          workspace_id: workspace_a,
+          person_id: person_a,
+          pipeline_id: carded_pipeline_a,
+          stage_id: carded_stage_a,
+          area: "COMMERCIAL",
+          arrived_at: new Date()
+        },
+        {
+          id: channel_opportunity_b,
+          workspace_id: workspace_b,
+          person_id: person_b,
+          pipeline_id: pipeline_b,
+          stage_id: stage_b_entry,
+          area: "COMMERCIAL",
+          arrived_at: new Date()
         }
       ]
     });
@@ -403,6 +429,20 @@ beforeAll(async () => {
           title: "Ligar para o lead B",
           due_at: new Date(),
           created_by_user_id: user_b
+        }
+      ]
+    });
+    await transaction.channelOutboundAttempt.createMany({
+      data: [
+        {
+          workspace_id: workspace_a,
+          opportunity_id: channel_opportunity_a,
+          kind: "AUTO_FIRST_CONTACT"
+        },
+        {
+          workspace_id: workspace_b,
+          opportunity_id: channel_opportunity_b,
+          kind: "AUTO_FIRST_CONTACT"
         }
       ]
     });
@@ -503,6 +543,7 @@ describe("Seam 3: RLS and schema invariants", () => {
 
     expect(rows.map((row) => row.table_name)).toEqual([
       "activities",
+      "channel_outbound_attempts",
       "intake_reviews",
       "integration_connections",
       "integration_events",
@@ -589,15 +630,16 @@ describe("Seam 3: RLS and schema invariants", () => {
         AND namespace.nspname NOT LIKE 'pg_toast%'
       ORDER BY namespace.nspname, procedure.proname
     `;
-    // Six, not five: ticket 09 materialized the opportunity-clock sweep, whose
-    // discovery is circular for the same reason `claim_expired_payload_workspaces`
-    // is — setting the GUC needs the `workspace_id` only the read reveals
-    // (ADR-0019, emendado). Its answer is the narrowest of the six: tenant ids,
-    // never an opportunity, a person or a payload.
+    // Seven, not six: ticket 03a materialized the channel outbox, whose
+    // discovery is circular for the same reason `claim_pending_events` is —
+    // setting the GUC needs the `workspace_id` only the read reveals
+    // (ADR-0019, emendado Fase 4). Its answer is the narrowest of the seven:
+    // `(attempt_id, workspace_id)`, never a phone, a body or an opportunity.
     const allowed = new Set([
       "private.claim_pending_events",
       "private.claim_expired_payload_workspaces",
       "private.claim_overdue_opportunity_workspaces",
+      "private.claim_pending_channel_attempts",
       "private.provision_workspace",
       "private.resolve_workspace_by_token_hash",
       "private.resolve_user_workspaces"
@@ -609,11 +651,11 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(
       function_names.filter((function_name) => !allowed.has(function_name))
     ).toEqual([]);
-    expect(function_names).toHaveLength(6);
+    expect(function_names).toHaveLength(7);
   });
 
-  it("rejects a seventh SECURITY DEFINER name — verified deliberately", async () => {
-    const probe = "rls_seam3_probe_seventh";
+  it("rejects an eighth SECURITY DEFINER name — verified deliberately", async () => {
+    const probe = "rls_seam3_probe_eighth";
     await client.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_migrator");
       await transaction.$executeRawUnsafe(`
@@ -640,6 +682,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         "private.claim_pending_events",
         "private.claim_expired_payload_workspaces",
         "private.claim_overdue_opportunity_workspaces",
+        "private.claim_pending_channel_attempts",
         "private.provision_workspace",
         "private.resolve_workspace_by_token_hash",
         "private.resolve_user_workspaces"
@@ -1941,7 +1984,7 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       WHERE namespace.nspname = 'private' AND procedure.prosecdef
     `;
 
-    expect(functions.length).toBeGreaterThanOrEqual(6);
+    expect(functions.length).toBeGreaterThanOrEqual(7);
     for (const routine of functions) {
       expect(routine.search_path, routine.function_name).toEqual(["search_path=pg_catalog"]);
       expect(routine.public_can_execute, routine.function_name).toBe(false);
@@ -2427,6 +2470,126 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
         reads_raw: false,
         writes_opportunities: false,
         writes_notifications: false
+      }
+    ]);
+  });
+
+  it("lets the channel dispatcher find pending attempts without a tenant, and returns nothing else", async () => {
+    const attempt_id = randomUUID();
+    await client.$executeRawUnsafe(`
+      INSERT INTO channel_outbound_attempts (
+        id, workspace_id, opportunity_id, kind, dispatch_status, delivery_status, updated_at
+      ) VALUES (
+        '${attempt_id}', '${workspace_a}', '${opportunity_a}',
+        'AUTO_FIRST_CONTACT', 'PENDING', 'QUEUED', CURRENT_TIMESTAMP
+      )
+    `);
+
+    try {
+      const claimed = await client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+        return transaction.$queryRaw<Array<Record<string, unknown>>>`
+          SELECT * FROM private.claim_pending_channel_attempts(
+            50::integer,
+            CURRENT_TIMESTAMP
+          )
+        `;
+      });
+
+      const claimed_attempt = claimed.find((row) => row.attempt_id === attempt_id);
+      expect(claimed_attempt).toBeDefined();
+      expect(Object.keys(claimed_attempt ?? {}).sort()).toEqual(["attempt_id", "workspace_id"]);
+      expect(claimed_attempt).toEqual({ attempt_id, workspace_id: workspace_a });
+    } finally {
+      await client.$executeRawUnsafe(
+        `DELETE FROM channel_outbound_attempts WHERE id = '${attempt_id}'`
+      );
+    }
+  });
+
+  it("keeps the channel-attempt resolver owned, scoped and executable only as declared", async () => {
+    const functions = await client.$queryRaw<
+      Array<{
+        owner_name: string;
+        search_path: string[] | null;
+        public_can_execute: boolean;
+        app_can_execute: boolean;
+        worker_can_execute: boolean;
+      }>
+    >`
+      SELECT
+        pg_get_userbyid(procedure.proowner)::text AS owner_name,
+        procedure.proconfig AS search_path,
+        EXISTS (
+          SELECT 1
+          FROM aclexplode(COALESCE(procedure.proacl, acldefault('f', procedure.proowner))) AS privilege
+          WHERE privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS public_can_execute,
+        has_function_privilege('marctco_app', procedure.oid, 'EXECUTE') AS app_can_execute,
+        has_function_privilege('marctco_worker', procedure.oid, 'EXECUTE') AS worker_can_execute
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private'
+        AND procedure.proname = 'claim_pending_channel_attempts'
+    `;
+    expect(functions).toEqual([
+      {
+        owner_name: "marctco_channel_claimer",
+        search_path: ["search_path=pg_catalog"],
+        public_can_execute: false,
+        app_can_execute: true,
+        worker_can_execute: false
+      }
+    ]);
+  });
+
+  it("never lets the channel claimer read a person, a phone, a body or a payload", async () => {
+    const privileges = await client.$queryRaw<
+      Array<{
+        reads_attempt_id: boolean;
+        reads_workspace: boolean;
+        reads_opportunity: boolean;
+        reads_person: boolean;
+        reads_phone: boolean;
+        reads_raw: boolean;
+        reads_opportunities: boolean;
+        reads_timeline: boolean;
+        inserts_timeline: boolean;
+        reads_provider_message_id: boolean;
+        owner_can_login: boolean;
+        owner_bypasses_rls: boolean;
+      }>
+    >`
+      SELECT
+        has_column_privilege('marctco_channel_claimer', 'public.channel_outbound_attempts', 'id', 'SELECT') AS reads_attempt_id,
+        has_column_privilege('marctco_channel_claimer', 'public.channel_outbound_attempts', 'workspace_id', 'SELECT') AS reads_workspace,
+        has_column_privilege('marctco_channel_claimer', 'public.channel_outbound_attempts', 'opportunity_id', 'SELECT') AS reads_opportunity,
+        has_table_privilege('marctco_channel_claimer', 'public.persons', 'SELECT') AS reads_person,
+        has_table_privilege('marctco_channel_claimer', 'public.person_phones', 'SELECT') AS reads_phone,
+        has_column_privilege('marctco_channel_claimer', 'public.integration_events', 'raw', 'SELECT') AS reads_raw,
+        has_table_privilege('marctco_channel_claimer', 'public.opportunities', 'SELECT') AS reads_opportunities,
+        has_table_privilege('marctco_channel_claimer', 'public.opportunity_timeline_events', 'SELECT') AS reads_timeline,
+        has_table_privilege('marctco_channel_claimer', 'public.opportunity_timeline_events', 'INSERT') AS inserts_timeline,
+        has_column_privilege('marctco_channel_claimer', 'public.channel_outbound_attempts', 'provider_message_id', 'SELECT') AS reads_provider_message_id,
+        owner.rolcanlogin AS owner_can_login,
+        owner.rolbypassrls AS owner_bypasses_rls
+      FROM pg_roles AS owner
+      WHERE owner.rolname = 'marctco_channel_claimer'
+    `;
+    expect(privileges).toEqual([
+      {
+        reads_attempt_id: true,
+        reads_workspace: true,
+        reads_opportunity: true,
+        reads_person: false,
+        reads_phone: false,
+        reads_raw: false,
+        reads_opportunities: false,
+        reads_timeline: false,
+        inserts_timeline: true,
+        reads_provider_message_id: false,
+        owner_can_login: false,
+        owner_bypasses_rls: false
       }
     ]);
   });

@@ -38,6 +38,15 @@ const sweepContext = createJobContext({
 });
 void sweepContext;
 
+const channelOutboundContext = createJobContext({
+  workspace_id: "11111111-1111-1111-1111-111111111111",
+  origin: {
+    type: "channel_outbound",
+    attempt_id: "66666666-6666-6666-8666-666666666666"
+  }
+});
+void channelOutboundContext;
+
 // A UserContext is exactly what the operation asks for: this must compile.
 representativeUserOnlyOperation(userContext);
 
