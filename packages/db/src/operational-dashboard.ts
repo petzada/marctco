@@ -153,15 +153,7 @@ export async function getOperationalDashboard(
             ) AS present
           `
         : Promise.resolve([{ present: true }]);
-
-    const [settingsRows, opportunities, activities, tagRows] = await Promise.all([
-      settingsPromise,
-      opportunitiesPromise,
-      activitiesPromise,
-      tagPromise
-    ]);
-
-    const stages = await transaction.$queryRaw<DashboardStageRow[]>(Prisma.sql`
+    const stagesPromise = transaction.$queryRaw<DashboardStageRow[]>(Prisma.sql`
       SELECT stage.id AS stage_id, stage.label, stage.position
       FROM stages AS stage
       JOIN pipelines AS commercial
@@ -172,6 +164,14 @@ export async function getOperationalDashboard(
         AND commercial.is_default = true
       ORDER BY stage.position ASC
     `);
+
+    const [settingsRows, opportunities, activities, tagRows, stages] = await Promise.all([
+      settingsPromise,
+      opportunitiesPromise,
+      activitiesPromise,
+      tagPromise,
+      stagesPromise
+    ]);
 
     const settings = resolveWorkspaceSettings(toStored(settingsRows[0]));
     const counts = {

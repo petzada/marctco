@@ -10,8 +10,9 @@ import {
 } from "../../../../lib/dashboard/view-model";
 import { supervisorTeamEmptyState } from "../../../../lib/supervisor-team-empty-state";
 
-const DashboardCharts = dynamic(() =>
-  import("./dashboard-charts").then((mod) => mod.DashboardCharts)
+const DashboardCharts = dynamic(
+  () => import("./dashboard-charts").then((mod) => mod.DashboardCharts),
+  { ssr: false }
 );
 
 const COUNT_TONE: Readonly<Record<DashboardTileViewModel["tone"], string>> = {
