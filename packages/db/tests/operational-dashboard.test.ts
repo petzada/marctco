@@ -27,6 +27,7 @@ const neighbour_workspace = randomUUID();
 const pipeline = randomUUID();
 const neighbour_pipeline = randomUUID();
 const entry_stage = randomUUID();
+const mid_stage = randomUUID();
 const neighbour_stage = randomUUID();
 
 const attendant_user = randomUUID();
@@ -166,7 +167,8 @@ beforeAll(async () => {
         stages: {
           create: [
             { id: entry_stage, label: "Novo lead", position: 1, role: "ENTRY" },
-            { label: "Conclusao", position: 2, role: "CLOSING" }
+            { id: mid_stage, label: "Em atendimento", position: 2, role: "NORMAL" },
+            { label: "Conclusao", position: 3, role: "CLOSING" }
           ]
         }
       }
@@ -396,5 +398,109 @@ describe("getOperationalDashboard", () => {
     expect(dashboard.tiles[0]?.destination.query).toEqual({ clock: "sla-breached" });
     expect(dashboard.tiles[2]?.destination.query).toEqual({ responsible: "unassigned" });
     expect(dashboard.tiles[3]?.destination.query).toEqual({ due: "overdue" });
+  });
+
+  it("returns fourteen arrival days, SLA points and every default-funnel stage", async () => {
+    const dashboard = await getOperationalDashboard(untagged_supervisor_context, { now }, app);
+    expect(dashboard.series.arrivals).toHaveLength(14);
+    expect(dashboard.series.sla_adherence).toHaveLength(14);
+    expect(dashboard.series.arrivals[0]?.day).toBe("2026-08-06");
+    expect(dashboard.series.arrivals[13]?.day).toBe("2026-08-19");
+    expect(dashboard.series.open_by_stage.map((point) => point.label)).toEqual([
+      "Novo lead",
+      "Em atendimento",
+      "Conclusao"
+    ]);
+    expect(dashboard.series.open_by_stage.every((point) => point.count === 0)).toBe(true);
+  });
+
+  it("counts a closed arrival in the window and ignores merged and out-of-window leads", async () => {
+    const before = await getOperationalDashboard(manager_context, { now }, app);
+    const todayCount =
+      before.series.arrivals.find((point) => point.day === "2026-08-19")?.count ?? 0;
+    const yesterdayCount =
+      before.series.arrivals.find((point) => point.day === "2026-08-18")?.count ?? 0;
+
+    const canonical = await seedOpportunity({ arrived_at: minutesAgo(10) });
+    const wonYesterday = await seedOpportunity({
+      status: "WON",
+      arrived_at: new Date("2026-08-18T15:00:00.000Z")
+    });
+    const outside = await seedOpportunity({
+      status: "LOST",
+      arrived_at: new Date("2026-08-01T15:00:00.000Z")
+    });
+    const merged = await seedOpportunity({
+      arrived_at: minutesAgo(5),
+      merged_into_opportunity_id: canonical
+    });
+
+    const after = await getOperationalDashboard(manager_context, { now }, app);
+    expect(after.series.arrivals.find((point) => point.day === "2026-08-19")?.count).toBe(
+      todayCount + 1
+    );
+    expect(after.series.arrivals.find((point) => point.day === "2026-08-18")?.count).toBe(
+      yesterdayCount + 1
+    );
+    await seeder.opportunity.delete({ where: { id: merged } });
+    await seeder.opportunity.deleteMany({
+      where: { id: { in: [canonical, wonYesterday, outside] } }
+    });
+  });
+
+  it("computes SLA adherence from firstContactSla, leaving pending days without a rate", async () => {
+    const before = await getOperationalDashboard(manager_context, { now }, app);
+    const beforeEighteenth = before.series.sla_adherence.find((point) => point.day === "2026-08-18");
+    const beforeNineteenth = before.series.sla_adherence.find((point) => point.day === "2026-08-19");
+    const met = await seedOpportunity({
+      arrived_at: new Date("2026-08-18T12:00:00.000Z"),
+      first_contact_at: new Date("2026-08-18T13:00:00.000Z")
+    });
+    const breached = await seedOpportunity({
+      arrived_at: new Date("2026-08-18T12:00:00.000Z"),
+      first_contact_at: new Date("2026-08-18T15:00:00.000Z")
+    });
+    const pending = await seedOpportunity({ arrived_at: minutesAgo(10) });
+    const after = await getOperationalDashboard(manager_context, { now }, app);
+    const eighteenth = after.series.sla_adherence.find((point) => point.day === "2026-08-18");
+    const nineteenth = after.series.sla_adherence.find((point) => point.day === "2026-08-19");
+    expect((eighteenth?.met ?? 0) - (beforeEighteenth?.met ?? 0)).toBe(1);
+    expect((eighteenth?.breached ?? 0) - (beforeEighteenth?.breached ?? 0)).toBe(1);
+    expect((nineteenth?.pending ?? 0) - (beforeNineteenth?.pending ?? 0)).toBe(1);
+    await seeder.opportunity.deleteMany({ where: { id: { in: [met, breached, pending] } } });
+  });
+
+  it("groups open default-funnel leads by stage and keeps empty stages at zero", async () => {
+    const entryLead = await seedOpportunity({ stage_id: entry_stage, arrived_at: minutesAgo(8) });
+    const talkLead = await seedOpportunity({ stage_id: mid_stage, arrived_at: minutesAgo(8) });
+    const talkLeadTwo = await seedOpportunity({ stage_id: mid_stage, arrived_at: minutesAgo(8) });
+    const dashboard = await getOperationalDashboard(manager_context, { now }, app);
+    const byId = new Map(dashboard.series.open_by_stage.map((point) => [point.stage_id, point.count]));
+    expect(byId.get(entry_stage)).toBeGreaterThanOrEqual(1);
+    expect(byId.get(mid_stage)).toBeGreaterThanOrEqual(2);
+    expect(dashboard.series.open_by_stage.some((point) => point.count === 0)).toBe(true);
+    await seeder.opportunity.deleteMany({
+      where: { id: { in: [entryLead, talkLead, talkLeadTwo] } }
+    });
+  });
+
+  it("scopes series to the Supervisor's team the same way it scopes tiles", async () => {
+    const teamLead = await seedOpportunity({
+      assigned_user_id: attendant_user,
+      arrived_at: minutesAgo(15)
+    });
+    const otherLead = await seedOpportunity({
+      assigned_user_id: other_team_user,
+      arrived_at: minutesAgo(15)
+    });
+    const supervisorView = await getOperationalDashboard(supervisor_context, { now }, app);
+    const managerView = await getOperationalDashboard(manager_context, { now }, app);
+    const supervisorToday =
+      supervisorView.series.arrivals.find((point) => point.day === "2026-08-19")?.count ?? 0;
+    const managerToday =
+      managerView.series.arrivals.find((point) => point.day === "2026-08-19")?.count ?? 0;
+    expect(managerToday).toBeGreaterThan(supervisorToday);
+    expect(supervisorToday).toBeGreaterThanOrEqual(1);
+    await seeder.opportunity.deleteMany({ where: { id: { in: [teamLead, otherLead] } } });
   });
 });

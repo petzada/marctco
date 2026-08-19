@@ -187,15 +187,31 @@ export {
   type WorkspaceSettingsWriteParse
 } from "./workspace-settings.js";
 export {
+  CATEGORICAL_CHART_COLOR_COUNT,
+  OPERATIONAL_DASHBOARD_RECENT_DAYS,
   OPERATIONAL_DASHBOARD_TILE_IDS,
+  OPERATIONAL_DASHBOARD_TIME_ZONE,
+  buildOperationalDashboardSeries,
   buildOperationalDashboardTiles,
+  calendarDateKey,
   canReadOperationalDashboard,
   canSeeUnassignedQueueOnDashboard,
+  categoricalChartToken,
   operationalDashboardTileDestination,
+  operationalDashboardWindowDays,
+  operationalDashboardWindowStart,
+  startOfZonedDay,
+  type ArrivalDayPoint,
+  type CategoricalChartToken,
+  type DashboardSeriesOpportunity,
+  type DashboardStage,
+  type OpenByStagePoint,
   type OperationalDashboardCounts,
   type OperationalDashboardDestination,
   type OperationalDashboardEmptyReason,
   type OperationalDashboardScreen,
+  type OperationalDashboardSeries,
   type OperationalDashboardTile,
-  type OperationalDashboardTileId
+  type OperationalDashboardTileId,
+  type SlaAdherenceDayPoint
 } from "./operational-dashboard.js";

@@ -252,9 +252,8 @@ export {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Ticket 07 — operational Dashboard tiles. Appended at the end so parallel
-// Fase 3 tickets that also touch this barrel stay additive. Ticket 08 will
-// extend this same operation with series; do not add a second dashboard read.
+// Ticket 07 — operational Dashboard tiles. Ticket 08 extends this same
+// operation with series; do not add a second dashboard read.
 // ---------------------------------------------------------------------------
 export {
   getOperationalDashboard,

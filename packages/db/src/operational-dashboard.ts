@@ -1,13 +1,18 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
+  buildOperationalDashboardSeries,
   buildOperationalDashboardTiles,
   canReadOperationalDashboard,
   canSeeUnassignedQueueOnDashboard,
   firstContactSla,
   isActivityOverdue,
+  operationalDashboardWindowStart,
   resolveWorkspaceSettings,
   stagnation,
+  type DashboardSeriesOpportunity,
+  type FirstContactSlaOpportunityStatus,
   type OperationalDashboardEmptyReason,
+  type OperationalDashboardSeries,
   type OperationalDashboardTile,
   type ResolvedWorkspaceSettings
 } from "@marctco/domain";
@@ -32,12 +37,13 @@ export interface OperationalDashboardEmptyState {
 }
 
 /**
- * The Dashboard screen's only query. Tiles (and, in ticket 08, series) live
- * here so the page never assembles a `where` and never opens six pooled
- * connections for one look at the morning (ADR-0013, item A19).
+ * The Dashboard screen's only query. Tiles and series live here so the page
+ * never assembles a `where` and never opens extra pooled connections for
+ * one look at the morning (ADR-0013, item A19).
  */
 export interface OperationalDashboard {
   readonly tiles: readonly OperationalDashboardTile[];
+  readonly series: OperationalDashboardSeries;
   readonly empty_state: OperationalDashboardEmptyState | null;
 }
 
@@ -56,6 +62,16 @@ interface OpportunityClockRow {
   readonly closed_at: Date | null;
   readonly last_movement_at: Date | null;
   readonly assigned_user_id: string | null;
+  readonly status: FirstContactSlaOpportunityStatus;
+  readonly stage_id: string;
+  readonly pipeline_is_default: boolean;
+  readonly pipeline_type: "COMMERCIAL" | "LEGAL";
+}
+
+interface DashboardStageRow {
+  readonly stage_id: string;
+  readonly label: string;
+  readonly position: number;
 }
 
 interface OverdueActivityRow {
@@ -67,10 +83,10 @@ interface TagPresenceRow {
 }
 
 /**
- * Answers the four numbers of the morning in the actor's profile scope.
- * Atendente is refused here, not only by a missing nav item. Supervisor
- * without a tag gets zeros plus an empty state that names the cause
- * (ADR-0015, ADR-0024). Ticket 08 will add series to this same return.
+ * Answers the four numbers of the morning and the three series, in the
+ * actor's profile scope. Atendente is refused here, not only by a missing
+ * nav item. Supervisor without a tag gets zeros plus an empty state that
+ * names the cause (ADR-0015, ADR-0024).
  */
 export async function getOperationalDashboard(
   context: UserContext,
@@ -83,6 +99,7 @@ export async function getOperationalDashboard(
 
   const now = options.now;
   const seesUnassigned = canSeeUnassignedQueueOnDashboard(context.role);
+  const windowStart = operationalDashboardWindowStart(now);
 
   return withAccessContext(prisma, context, async (transaction) => {
     const settingsPromise = transaction.$queryRaw<SettingsRow[]>`
@@ -96,11 +113,21 @@ export async function getOperationalDashboard(
         opportunity.first_contact_at,
         opportunity.closed_at,
         opportunity.last_movement_at,
-        opportunity.assigned_user_id
+        opportunity.assigned_user_id,
+        opportunity.status,
+        opportunity.stage_id,
+        pipeline.is_default AS pipeline_is_default,
+        pipeline.type AS pipeline_type
       FROM opportunities AS opportunity
+      JOIN pipelines AS pipeline
+        ON pipeline.workspace_id = opportunity.workspace_id
+       AND pipeline.id = opportunity.pipeline_id
       WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
-        AND opportunity.status = 'OPEN'::opportunity_status
         AND opportunity.merged_into_opportunity_id IS NULL
+        AND (
+          opportunity.status = 'OPEN'::opportunity_status
+          OR opportunity.arrived_at >= ${windowStart}
+        )
         ${opportunityScopeSql(context, "opportunity")}
     `);
     const activitiesPromise = transaction.$queryRaw<OverdueActivityRow[]>(Prisma.sql`
@@ -134,6 +161,18 @@ export async function getOperationalDashboard(
       tagPromise
     ]);
 
+    const stages = await transaction.$queryRaw<DashboardStageRow[]>(Prisma.sql`
+      SELECT stage.id AS stage_id, stage.label, stage.position
+      FROM stages AS stage
+      JOIN pipelines AS commercial
+        ON commercial.workspace_id = stage.workspace_id
+       AND commercial.id = stage.pipeline_id
+      WHERE stage.workspace_id = ${context.workspace_id}::uuid
+        AND commercial.type = 'COMMERCIAL'::pipeline_type
+        AND commercial.is_default = true
+      ORDER BY stage.position ASC
+    `);
+
     const settings = resolveWorkspaceSettings(toStored(settingsRows[0]));
     const counts = {
       sla_breached: 0,
@@ -141,8 +180,22 @@ export async function getOperationalDashboard(
       unassigned: 0,
       overdue_activities: 0
     };
+    const window_opportunities: DashboardSeriesOpportunity[] = [];
+    const open_stage_ids: string[] = [];
 
     for (const opportunity of opportunities) {
+      const status = clockStatus(opportunity.status);
+      if (opportunity.arrived_at >= windowStart) {
+        window_opportunities.push({
+          arrived_at: opportunity.arrived_at,
+          first_contact_at: opportunity.first_contact_at,
+          closed_at: opportunity.closed_at,
+          status
+        });
+      }
+      if (status !== "OPEN") {
+        continue;
+      }
       if (isSlaBreached(opportunity, settings, now)) {
         counts.sla_breached += 1;
       }
@@ -151,6 +204,9 @@ export async function getOperationalDashboard(
       }
       if (seesUnassigned && opportunity.assigned_user_id === null) {
         counts.unassigned += 1;
+      }
+      if (opportunity.pipeline_is_default && opportunity.pipeline_type === "COMMERCIAL") {
+        open_stage_ids.push(opportunity.stage_id);
       }
     }
 
@@ -163,9 +219,23 @@ export async function getOperationalDashboard(
     const missingTeam = context.role === "SUPERVISOR" && tagRows[0]?.present !== true;
     return {
       tiles: buildOperationalDashboardTiles(counts),
+      series: buildOperationalDashboardSeries({
+        now,
+        settings,
+        window_opportunities,
+        stages,
+        open_stage_ids
+      }),
       empty_state: missingTeam ? { reason: "SUPERVISOR_WITHOUT_TEAM" } : null
     };
   });
+}
+
+function clockStatus(status: FirstContactSlaOpportunityStatus): FirstContactSlaOpportunityStatus {
+  if (status === "WON" || status === "LOST") {
+    return status;
+  }
+  return "OPEN";
 }
 
 function toStored(row: SettingsRow | undefined): {

@@ -132,6 +132,12 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Estado de estagnação | `StagnationState: MOVING \| STAGNANT` | Função pura `stagnation` em `packages/domain`. Ancora em `arrived_at` quando `last_movement_at` é nulo. `WON`/`LOST`/mesclado nunca é `STAGNANT` |
 | Duração sem movimento | `Stagnation.duration_ms` | Milissegundos corridos do âncora (`last_movement_at` ou `arrived_at`) até `now` |
 | Marcador de lead parado | `Marker = … \| STAGNANT` | `markersFor` recebe o estado de estagnação ao lado do de SLA e devolve o parado como mais um marcador. Os contadores do topo **não** passam por ela ([ADR-0018](./0018-marcador-como-modulo.md)) |
+| Dashboard operacional | `getOperationalDashboard` | Uma operação nomeada devolve tiles e séries no escopo do perfil. Atendente é recusado. Sem `where` montado pela tela |
+| Janela recente do Dashboard | `OPERATIONAL_DASHBOARD_RECENT_DAYS` | 14 dias civis inclusive o corrente, fuso `OPERATIONAL_DASHBOARD_TIME_ZONE` (`America/Sao_Paulo`) |
+| Série de chegadas | `ArrivalDayPoint` | Contagem de Oportunidades cuja `arrived_at` cai naquele dia da janela; mescladas fora |
+| Série de aderência ao SLA | `SlaAdherenceDayPoint` | Por dia de chegada: `MET` / (`MET` + `BREACHED`) via `firstContactSla`. `PENDING` não entra no denominador; dia sem resultado tem `adherence` nulo |
+| Série de etapa | `OpenByStagePoint` | Leads `OPEN` não mesclados no funil comercial padrão, uma barra por etapa na ordem de `position`, inclusive zero |
+| Cor categórica de série | `categoricalChartToken` | `{colors.chart-1}`…`{colors.chart-8}` com overflow `index modulo 8`. Estado semântico não ocupa slot |
 
 ## Regras
 

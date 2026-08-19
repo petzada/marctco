@@ -1,12 +1,18 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import type { OperationalDashboard } from "@marctco/db";
 import { Card } from "../../../../components/ui/card";
 import { EmptyState } from "../../../../components/ui/empty-state";
 import {
+  buildDashboardChartsViewModel,
   buildDashboardTileViewModel,
   type DashboardTileViewModel
 } from "../../../../lib/dashboard/view-model";
 import { supervisorTeamEmptyState } from "../../../../lib/supervisor-team-empty-state";
+
+const DashboardCharts = dynamic(() =>
+  import("./dashboard-charts").then((mod) => mod.DashboardCharts)
+);
 
 const COUNT_TONE: Readonly<Record<DashboardTileViewModel["tone"], string>> = {
   danger: "text-danger",
@@ -21,6 +27,7 @@ interface DashboardViewProps {
 
 export function DashboardView({ dashboard, slug }: DashboardViewProps) {
   const tiles = dashboard.tiles.map((tile) => buildDashboardTileViewModel(tile, slug));
+  const charts = buildDashboardChartsViewModel(dashboard.series);
   const missingTeam =
     dashboard.empty_state?.reason === "SUPERVISOR_WITHOUT_TEAM"
       ? supervisorTeamEmptyState("dashboard")
@@ -49,6 +56,8 @@ export function DashboardView({ dashboard, slug }: DashboardViewProps) {
             <DashboardTileCard key={tile.id} tile={tile} />
           ))}
         </section>
+
+        <DashboardCharts charts={charts} />
       </div>
     </main>
   );
