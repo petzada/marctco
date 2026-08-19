@@ -32,7 +32,9 @@ export const ingestionTimelineConflictTarget = Prisma.sql`
  * Stamps `last_movement_at` and writes one immutable movement fact per
  * opportunity, in the same transaction the caller already opened. Empty
  * id lists are a no-op so batch operations that claimed nothing do not
- * insert a stray row.
+ * insert a stray row. Assignment facts copy typed user ids from the
+ * already-updated Opportunity: destination on ASSIGNED/REASSIGNED, who
+ * left on REASSIGNED/RETURNED_TO_QUEUE. Other types leave both null.
  */
 export async function stampOpportunityMovement(
   transaction: ScopedTransactionClient,
@@ -47,6 +49,7 @@ export async function stampOpportunityMovement(
   }
 
   const ids = Prisma.join(input.opportunity_ids.map((id) => Prisma.sql`${id}::uuid`));
+  const eventType = Prisma.sql`${input.type}::opportunity_timeline_event_type`;
   await transaction.$executeRaw(Prisma.sql`
     WITH stamped AS (
       UPDATE opportunities
@@ -55,19 +58,33 @@ export async function stampOpportunityMovement(
         updated_at = CURRENT_TIMESTAMP
       WHERE workspace_id = ${input.workspace_id}::uuid
         AND id IN (${ids})
-      RETURNING id, workspace_id, last_movement_at
+      RETURNING id, workspace_id, last_movement_at, assigned_user_id, previous_assigned_user_id
     )
     INSERT INTO opportunity_timeline_events (
       workspace_id, opportunity_id, type, lead_submission_id,
-      integration_event_id, occurred_at
+      integration_event_id, occurred_at, assigned_user_id, previous_assigned_user_id
     )
     SELECT
       stamped.workspace_id,
       stamped.id,
-      ${input.type}::opportunity_timeline_event_type,
+      ${eventType},
       NULL,
       NULL,
-      stamped.last_movement_at
+      stamped.last_movement_at,
+      CASE
+        WHEN ${eventType} IN (
+          'ASSIGNED'::opportunity_timeline_event_type,
+          'REASSIGNED'::opportunity_timeline_event_type
+        ) THEN stamped.assigned_user_id
+        ELSE NULL
+      END,
+      CASE
+        WHEN ${eventType} IN (
+          'REASSIGNED'::opportunity_timeline_event_type,
+          'RETURNED_TO_QUEUE'::opportunity_timeline_event_type
+        ) THEN stamped.previous_assigned_user_id
+        ELSE NULL
+      END
     FROM stamped
   `);
 }

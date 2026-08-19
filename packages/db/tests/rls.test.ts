@@ -447,6 +447,9 @@ afterAll(async () => {
   await client.activity.deleteMany({
     where: { workspace_id: { in: disposable_workspace_ids } }
   });
+  await client.opportunityTimelineEvent.deleteMany({
+    where: { workspace_id: { in: disposable_workspace_ids } }
+  });
   await client.workspaceMember.deleteMany({
     where: { workspace_id: { in: disposable_workspace_ids } }
   });
@@ -2097,5 +2100,73 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       where: { opportunity_id: opportunity_a, type: "STAGE_CHANGED" }
     });
     expect(movement).toBe(2);
+  });
+
+  it("keeps assignment snapshots on timeline facts nullable, indexed, and bound to this workspace's members", async () => {
+    const columns = await client.$queryRaw<
+      Array<{ column_name: string; is_nullable: string }>
+    >`
+      SELECT column_name, is_nullable
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'opportunity_timeline_events'
+        AND column_name IN ('assigned_user_id', 'previous_assigned_user_id')
+      ORDER BY column_name
+    `;
+    expect(columns).toEqual([
+      { column_name: "assigned_user_id", is_nullable: "YES" },
+      { column_name: "previous_assigned_user_id", is_nullable: "YES" }
+    ]);
+
+    const indexes = await client.$queryRaw<Array<{ index_name: string }>>`
+      SELECT class.relname::text AS index_name
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname IN (
+        'opportunity_timeline_events_workspace_id_assigned_user_id_idx',
+        'opportunity_timeline_events_workspace_id_previous_assigned__idx'
+      )
+      ORDER BY class.relname
+    `;
+    expect(indexes).toEqual([
+      { index_name: "opportunity_timeline_events_workspace_id_assigned_user_id_idx" },
+      { index_name: "opportunity_timeline_events_workspace_id_previous_assigned__idx" }
+    ]);
+
+    await expect(
+      client.opportunityTimelineEvent.create({
+        data: {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "ASSIGNED",
+          assigned_user_id: user_b,
+          occurred_at: new Date()
+        }
+      })
+    ).rejects.toThrow(/foreign key/i);
+
+    await expect(
+      client.opportunityTimelineEvent.create({
+        data: {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "REASSIGNED",
+          previous_assigned_user_id: user_b,
+          occurred_at: new Date()
+        }
+      })
+    ).rejects.toThrow(/foreign key/i);
+
+    const stored = await client.opportunityTimelineEvent.create({
+      data: {
+        workspace_id: workspace_a,
+        opportunity_id: opportunity_a,
+        type: "ASSIGNED",
+        assigned_user_id: user_a,
+        occurred_at: new Date()
+      }
+    });
+    expect(stored.assigned_user_id).toBe(user_a);
+    expect(stored.previous_assigned_user_id).toBeNull();
   });
 });

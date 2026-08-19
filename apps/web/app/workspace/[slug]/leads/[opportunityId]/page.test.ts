@@ -3,11 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getLead = vi.fn();
 const listLeadActivities = vi.fn();
+const listLeadTimeline = vi.fn();
 const listTeam = vi.fn();
 const getWorkspaceSettings = vi.fn();
 const resolveWorkspaceAccess = vi.fn();
 
-vi.mock("@marctco/db", () => ({ getLead, listLeadActivities, listTeam, getWorkspaceSettings }));
+vi.mock("@marctco/db", () => ({
+  getLead,
+  listLeadActivities,
+  listLeadTimeline,
+  listTeam,
+  getWorkspaceSettings
+}));
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
 vi.mock("next/link", () => ({ default: (props: { href: string; children: unknown }) => props.children }));
 vi.mock("../../../../../lib/workspace-access", () => ({ resolveWorkspaceAccess }));
@@ -35,6 +42,7 @@ describe("Lead card page", () => {
       missing_phone: false
     });
     listLeadActivities.mockReset().mockResolvedValue([]);
+    listLeadTimeline.mockReset().mockResolvedValue({ facts: [], has_more: false });
     listTeam.mockReset().mockResolvedValue([]);
     getWorkspaceSettings.mockReset().mockResolvedValue({
       first_contact_sla_minutes: 120,
@@ -51,6 +59,7 @@ describe("Lead card page", () => {
     await LeadCardPage({ params: Promise.resolve({ slug, opportunityId }) });
     expect(getLead).toHaveBeenCalledOnce();
     expect(listLeadActivities).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
+    expect(listLeadTimeline).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
     expect(listTeam).not.toHaveBeenCalled();
   });
 

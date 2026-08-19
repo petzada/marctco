@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getLead, getWorkspaceSettings, listLeadActivities, listTeam } from "@marctco/db";
+import { getLead, getWorkspaceSettings, listLeadActivities, listLeadTimeline, listTeam } from "@marctco/db";
 import { LeadCardContent } from "../../../../../../components/leads/lead-card-content";
 import { LeadCardModalShell } from "../../../../../../components/leads/lead-card-modal-shell";
 import { resolveWorkspaceAccess } from "../../../../../../lib/workspace-access";
@@ -21,9 +21,10 @@ export default async function LeadCardInterceptedModal({
 
   const context = access.workspace.context;
   try {
-    const [lead, activities, teammates, clockSettings] = await Promise.all([
+    const [lead, activities, timeline, teammates, clockSettings] = await Promise.all([
       getLead(context, opportunityId),
       listLeadActivities(context, opportunityId),
+      listLeadTimeline(context, opportunityId),
       context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context),
       getWorkspaceSettings(context)
     ]);
@@ -31,6 +32,7 @@ export default async function LeadCardInterceptedModal({
       <LeadCardModalShell>
         <LeadCardContent
           activities={activities}
+          timeline={timeline}
           assignees={teammates.map((member) => ({
             user_id: member.user_id,
             display_name: member.display_name?.trim() || member.email || "Sem nome"

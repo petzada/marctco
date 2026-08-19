@@ -265,3 +265,17 @@ export {
   type OperationalDashboardRefusal
 } from "./operational-dashboard.js";
 
+// ---------------------------------------------------------------------------
+// Ticket 05 — lead timeline on the card. Appended at the end so parallel
+// Fase 3 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  listLeadTimeline,
+  DEFAULT_TIMELINE_LIMIT,
+  MAX_TIMELINE_LIMIT,
+  type LeadTimelineFact,
+  type LeadTimelinePage,
+  type ListLeadTimelineOptions,
+  type OpportunityTimelineEventType
+} from "./lead-timeline.js";
+

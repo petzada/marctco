@@ -213,6 +213,8 @@ model WorkspaceMember {
   assigned_activities   Activity[] @relation("ActivityAssignee")
   created_activities    Activity[] @relation("ActivityAuthor")
   completed_activities  Activity[] @relation("ActivityCompletedBy")
+  timeline_assigned_events OpportunityTimelineEvent[] @relation("TimelineAssignedMember")
+  timeline_previous_assigned_events OpportunityTimelineEvent[] @relation("TimelinePreviousAssignedMember")
 
   @@id([workspace_id, user_id])
   @@index([user_id])
@@ -603,11 +605,19 @@ model OpportunityTimelineEvent {
   /// Present on the two ingestion variants; null on a movement fact.
   integration_event_id String?                      @db.Uuid
   occurred_at          DateTime                     @db.Timestamptz(6)
+  /// Frozen destination of ASSIGNED / REASSIGNED. Null on other types and
+  /// on facts that existed before the column.
+  assigned_user_id     String?                      @db.Uuid
+  /// Frozen previous owner of REASSIGNED / RETURNED_TO_QUEUE. Null on other
+  /// types and on facts that existed before the column.
+  previous_assigned_user_id String?                 @db.Uuid
   created_at           DateTime                     @default(now()) @db.Timestamptz(6)
   workspace            Workspace                    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   opportunity          Opportunity                  @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
   lead_submission      LeadSubmission?              @relation(fields: [workspace_id, lead_submission_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
   integration_event    IntegrationEvent?            @relation(fields: [workspace_id, integration_event_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
+  assigned_member      WorkspaceMember?             @relation("TimelineAssignedMember", fields: [workspace_id, assigned_user_id], references: [workspace_id, user_id], onDelete: Restrict)
+  previous_assigned_member WorkspaceMember?         @relation("TimelinePreviousAssignedMember", fields: [workspace_id, previous_assigned_user_id], references: [workspace_id, user_id], onDelete: Restrict)
 
   // Uniqueness `(workspace_id, type, integration_event_id)` is a partial
   // unique index on the two ingestion variants only, declared in the
@@ -618,6 +628,8 @@ model OpportunityTimelineEvent {
   @@index([workspace_id, opportunity_id, occurred_at(sort: Desc), id(sort: Desc)])
   @@index([workspace_id, lead_submission_id])
   @@index([workspace_id, integration_event_id])
+  @@index([workspace_id, assigned_user_id])
+  @@index([workspace_id, previous_assigned_user_id])
   @@map("opportunity_timeline_events")
 }
 

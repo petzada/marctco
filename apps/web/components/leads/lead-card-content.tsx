@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import type { FinancingType, IdentityConflictResolution, LeadActivity, LeadDetail, LeadReviewDetail } from "@marctco/db";
+import type { FinancingType, IdentityConflictResolution, LeadActivity, LeadDetail, LeadReviewDetail, LeadTimelinePage } from "@marctco/db";
 import {
   FINANCING_TYPES,
   firstContactSla,
@@ -19,6 +19,7 @@ import { StatusBadge, type StatusBadgeTone } from "../ui/status-badge";
 import { markerPresentation } from "../../lib/leads/markers";
 import { formatArrivedAt, formatInstallmentAmount, waitCaption } from "../../lib/leads/row-view-model";
 import { LeadCardActivities, type ActivityAssigneeOption } from "./lead-card-activities";
+import { LeadCardTimeline } from "./lead-card-timeline";
 
 const MARKER_TONE: Readonly<Record<Marker, StatusBadgeTone>> = {
   MISSING_PHONE: "warning",
@@ -49,6 +50,7 @@ export interface LeadCardContentProps {
   readonly slug: string;
   readonly currentUserId: string;
   readonly activities: readonly LeadActivity[];
+  readonly timeline: LeadTimelinePage;
   readonly assignees: readonly ActivityAssigneeOption[];
   readonly clockSettings: ResolvedWorkspaceSettings;
   readonly nowIso: string;
@@ -66,6 +68,7 @@ export function LeadCardContent({
   slug,
   currentUserId,
   activities,
+  timeline,
   assignees,
   clockSettings,
   nowIso
@@ -145,6 +148,8 @@ export function LeadCardContent({
           <IdentityConflictPanel key={review.id} review={review} slug={slug} />
         )
       )}
+
+      <LeadCardTimeline timeline={timeline} />
 
       <LeadCardActivities
         activities={activities}
