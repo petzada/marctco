@@ -5,6 +5,7 @@ import {
   createUserContextFromResolvedMembership,
   isJobContext,
   isUserContext,
+  jobIntegrationEventId,
   WorkspaceRole
 } from "./access-context.js";
 
@@ -63,18 +64,51 @@ describe("createUserContextFromResolvedMembership", () => {
 });
 
 describe("createJobContext", () => {
-  it("builds a JobContext with no user and no role", () => {
+  it("builds a JobContext with an integration-event origin, no user and no role", () => {
     const workspace_id = randomUUID();
     const integration_event_id = randomUUID();
     const context = createJobContext({ workspace_id, integration_event_id });
     expect(context.kind).toBe("job");
     expect(context.workspace_id).toBe(workspace_id);
-    expect(context.integration_event_id).toBe(integration_event_id);
+    expect(context.origin).toEqual({ type: "integration_event", integration_event_id });
+    expect(jobIntegrationEventId(context)).toBe(integration_event_id);
     expect("role" in context).toBe(false);
     expect("user_id" in context).toBe(false);
+    expect("integration_event_id" in context).toBe(false);
     expect("feature_flags" in context).toBe(false);
     expect(isJobContext(context)).toBe(true);
     expect(isUserContext(context)).toBe(false);
+  });
+
+  it("builds a JobContext for the opportunity-clock scheduled sweep without fabricating an event", () => {
+    const workspace_id = randomUUID();
+    const context = createJobContext({
+      workspace_id,
+      origin: { type: "scheduled_sweep", sweep: "OPPORTUNITY_CLOCK" }
+    });
+    expect(context.kind).toBe("job");
+    expect(context.workspace_id).toBe(workspace_id);
+    expect(context.origin).toEqual({ type: "scheduled_sweep", sweep: "OPPORTUNITY_CLOCK" });
+    expect("integration_event_id" in context).toBe(false);
+    expect("role" in context).toBe(false);
+    expect(() => jobIntegrationEventId(context)).toThrow(/not an integration event/i);
+  });
+
+  it("accepts PAYLOAD_EXPIRY as a named sweep so the origin list stays closed", () => {
+    const context = createJobContext({
+      workspace_id: randomUUID(),
+      origin: { type: "scheduled_sweep", sweep: "PAYLOAD_EXPIRY" }
+    });
+    expect(context.origin).toEqual({ type: "scheduled_sweep", sweep: "PAYLOAD_EXPIRY" });
+  });
+
+  it("refuses an unknown scheduled-sweep name", () => {
+    expect(() =>
+      createJobContext({
+        workspace_id: randomUUID(),
+        origin: { type: "scheduled_sweep", sweep: "MAINTENANCE" as "OPPORTUNITY_CLOCK" }
+      })
+    ).toThrow(/unknown scheduled sweep/i);
   });
 
   it("refuses a non-UUID workspace_id", () => {

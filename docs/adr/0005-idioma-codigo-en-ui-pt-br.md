@@ -135,6 +135,13 @@ Todo identificador de código — models Prisma, colunas, tipos, funções, enum
 | Origem do job | `JobOrigin` | União discriminada `{ type: "integration_event", integration_event_id } \| { type: "scheduled_sweep", sweep: ScheduledSweepName }`. O `type` evita colidir com o `kind` do `AccessContext` (`"user" \| "job"`). Evento de integração é linha real do tenant; passada agendada é nome fechado — nunca âncora fabricada ([ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md)) |
 | Passada agendada | `ScheduledSweepName` | `PAYLOAD_EXPIRY \| OPPORTUNITY_CLOCK`. `PAYLOAD_EXPIRY` é a retenção de payload ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)); `OPPORTUNITY_CLOCK` é a varredura dos relógios de SLA e estagnação. Lista fechada: nome novo entra aqui antes do código |
 | Descoberta de workspaces com relógio vencido | `private.claim_overdue_opportunity_workspaces` | Sexta função da lista fechada ([ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)). Devolve somente `workspace_id`. Não é `provision_workspace` |
+| Notificação | `Notification` | Aviso persistido na Oportunidade. Sem destinatário; quem enxerga é o escopo de perfil. Nome genérico de propósito: a Fase 6 acrescenta o aviso de atendimento concluído no mesmo model — nunca `SlaAlert` |
+| Tipo da notificação | `NotificationType` | `FIRST_CONTACT_SLA_BREACHED \| STAGNANT` nesta fase |
+| Detectada em | `Notification.detected_at` | Primeira passada que viu a causa. Não se move nas passadas seguintes |
+| Última detecção | `Notification.last_detected_at` | Atualizado por `ON CONFLICT` a cada passada em que a causa ainda vale |
+| Lida em | `Notification.read_at` | Do aviso, não de cada leitor. Nulo até alguém marcar. Marcar como lida **não** resolve |
+| Quem marcou como lida | `Notification.read_by_user_id` | Usuário do `UserContext` que marcou; nulo enquanto não lida. Completo junto de `read_at` |
+| Resolvida em | `Notification.resolved_at` | Escrito quando a causa acaba. Resolver **não** exige leitura. Nulo enquanto a causa permanece |
 
 ## Regras
 

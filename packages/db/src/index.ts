@@ -3,10 +3,14 @@ export {
   createJobContext,
   isJobContext,
   isUserContext,
+  jobIntegrationEventId,
+  SCHEDULED_SWEEP_NAMES,
   WorkspaceRole,
   type AccessContext,
   type CreateJobContextInput,
   type JobContext,
+  type JobOrigin,
+  type ScheduledSweepName,
   type UserContext
 } from "./access-context.js";
 export {
@@ -264,4 +268,24 @@ export {
   type OperationalDashboardEmptyState,
   type OperationalDashboardRefusal
 } from "./operational-dashboard.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 09 — Notification model, clock detection and scheduled sweep.
+// Appended at the end so parallel Fase 3 tickets stay additive. Ticket 10
+// owns the Dashboard reading surface; mark-as-read is required here to
+// prove read does not resolve.
+// ---------------------------------------------------------------------------
+export {
+  claimWorkspacesWithOverdueOpportunities,
+  sweepWorkspaceOpportunityClock,
+  type OpportunityClockSweepResult,
+  type OverdueOpportunityWorkspace
+} from "./opportunity-clock.js";
+export {
+  markNotificationRead,
+  NotificationError,
+  type MarkNotificationReadInput,
+  type MarkedNotificationRead,
+  type NotificationRefusal
+} from "./notifications.js";
 

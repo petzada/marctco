@@ -32,6 +32,12 @@ const jobContext = createJobContext({
   integration_event_id: "33333333-3333-3333-3333-333333333333"
 });
 
+const sweepContext = createJobContext({
+  workspace_id: "11111111-1111-1111-1111-111111111111",
+  origin: { type: "scheduled_sweep", sweep: "OPPORTUNITY_CLOCK" }
+});
+void sweepContext;
+
 // A UserContext is exactly what the operation asks for: this must compile.
 representativeUserOnlyOperation(userContext);
 
