@@ -436,17 +436,23 @@ describe("channel outbound transitions", () => {
       completeActivity(attendant, activity.id, app)
     ]);
     expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(2);
-    const stored = await seeder.opportunity.findUniqueOrThrow({ where: { id: opportunity_id } });
-    expect(stored.first_contact_at).not.toBeNull();
+
     const sent = await getChannelOutboundAttempt(job, app);
     expect(sent?.delivery_status).toBe("SENT");
-    expect(activity.id).toBe(activity.id);
+    expect(sent?.sent_at).not.toBeNull();
+
     const done = await seeder.activity.findUniqueOrThrow({ where: { id: activity.id } });
     expect(done.status).toBe("DONE");
-    const candidates = [sent?.sent_at?.getTime(), done.completed_at?.getTime()].filter(
-      (value): value is number => value !== undefined
+    expect(done.completed_at).not.toBeNull();
+
+    const stored = await seeder.opportunity.findUniqueOrThrow({ where: { id: opportunity_id } });
+    expect(stored.first_contact_at).not.toBeNull();
+    expect([sent!.sent_at!.getTime(), done.completed_at!.getTime()]).toContain(
+      stored.first_contact_at!.getTime()
     );
-    expect(candidates).toContain(stored.first_contact_at?.getTime());
+
+    const timeline = await listLeadTimeline(manager, opportunity_id, {}, app);
+    expect(timeline.facts.filter((fact) => fact.type === "WHATSAPP_OUTBOUND_SENT")).toHaveLength(1);
   });
 });
 
