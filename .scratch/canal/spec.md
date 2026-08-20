@@ -1,6 +1,6 @@
 # Spec — Canal
 
-Status: ready-for-agent
+Status: done
 
 > Fase 4 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md): **WhatsMiau + template de 1º contato + timeline de mensagem no card.**
 > Vocabulário: [CONTEXT.md](../../CONTEXT.md). Nomes de código: [ADR-0005](../../docs/adr/0005-idioma-codigo-en-ui-pt-br.md).

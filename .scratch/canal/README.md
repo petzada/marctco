@@ -50,12 +50,17 @@ Contrato externo: [Whatsmiau Cloud API v2](https://whatsmiau.dev/docs/getting-st
 - **`first_contact_at`** preenchido no envio bem-sucedido ou na primeira resposta inbound — nunca na atribuição nem no agendamento.
 - **Seam 4** como costura principal: atribuição real → fila → WhatsMiau mockado → timeline + `first_contact_at`.
 
-## Antes do código
+## Contratos materializados
 
-O ticket 00 materializa, sem escolha remanescente:
+O ticket 00 materializou, sem escolha remanescente:
 
 - ADR-0016: `JobOrigin.channel_outbound` carrega `attempt_id`; `channel_inbound` carrega `integration_connection_id`;
 - ADR-0019: `private.claim_pending_channel_attempts` é a sétima função, retorno `(attempt_id, workspace_id)`;
 - ADR-0005 e `CONTEXT.md`: nomes de opt-in, conexão, tentativa, estados e fatos;
 - ADR-0031: N conexões em geral, mas no máximo uma conexão WhatsMiau não desligada por workspace;
 - plano A5: fechado assumindo gateway não oficial.
+
+## Fechamento
+
+- Evidências, commits, gates e riscos: [registro.md](./registro.md).
+- Retomada oficial para a próxima fase: [PROMPT-HANDOFF.md](./PROMPT-HANDOFF.md).
