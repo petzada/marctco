@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLead, getWorkspaceSettings, listLeadActivities, listLeadTimeline, listTeam } from "@marctco/db";
+import { getLead, getLeadWhatsAppConnectionIndicator, getWorkspaceSettings, listLeadActivities, listLeadTimeline, listTeam } from "@marctco/db";
 import { LeadCardContent } from "../../../../../components/leads/lead-card-content";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
@@ -23,12 +23,13 @@ export default async function LeadCardPage({
 
   const context = access.workspace.context;
   try {
-    const [lead, activities, timeline, teammates, clockSettings] = await Promise.all([
+    const [lead, activities, timeline, teammates, clockSettings, whatsapp] = await Promise.all([
       getLead(context, opportunityId),
       listLeadActivities(context, opportunityId),
       listLeadTimeline(context, opportunityId),
       context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context),
-      getWorkspaceSettings(context)
+      getWorkspaceSettings(context),
+      getLeadWhatsAppConnectionIndicator(context, opportunityId)
     ]);
     return (
       <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">
@@ -49,6 +50,7 @@ export default async function LeadCardPage({
               lead={lead}
               nowIso={new Date().toISOString()}
               slug={slug}
+              whatsappConnected={whatsapp.connected}
             />
           </div>
         </div>

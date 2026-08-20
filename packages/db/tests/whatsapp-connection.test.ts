@@ -10,6 +10,7 @@ import {
   WhatsAppConnectionError,
   commitWhatsAppWebhookSecret,
   createWhatsAppConnection,
+  getLeadWhatsAppConnectionIndicator,
   getWhatsAppConnection,
   setWhatsAppPairingState
 } from "../src/whatsapp-connection.js";
@@ -198,5 +199,132 @@ describe("commitWhatsAppWebhookSecret", () => {
     await expect(getWhatsAppConnection(owner_context, app)).resolves.not.toHaveProperty(
       "token_last4"
     );
+  });
+});
+
+describe("getLeadWhatsAppConnectionIndicator", () => {
+  const other_attendant_user = randomUUID();
+  const other_attendant_context: UserContext = createUserContextFromResolvedMembership({
+    workspace_id: workspace,
+    user_id: other_attendant_user,
+    role: "ATTENDANT"
+  });
+
+  let mine: string;
+  let colleagues: string;
+
+  beforeAll(async () => {
+    await seeder.workspaceMember.createMany({
+      data: [
+        { workspace_id: workspace, user_id: attendant_user, role: "ATTENDANT", display_name: "Ana Atendente" },
+        {
+          workspace_id: workspace,
+          user_id: other_attendant_user,
+          role: "ATTENDANT",
+          display_name: "Bruno Colega"
+        },
+        {
+          workspace_id: workspace,
+          user_id: supervisor_user,
+          role: "SUPERVISOR",
+          display_name: "Sofia Supervisora"
+        }
+      ]
+    });
+    const tag = await seeder.tag.create({ data: { workspace_id: workspace, name: "ACR" } });
+    await seeder.memberTag.createMany({
+      data: [
+        { workspace_id: workspace, user_id: supervisor_user, tag_id: tag.id },
+        { workspace_id: workspace, user_id: attendant_user, tag_id: tag.id }
+      ]
+    });
+    const pipeline = await seeder.pipeline.findFirstOrThrow({ where: { workspace_id: workspace } });
+    const entry = await seeder.stage.findFirstOrThrow({
+      where: { pipeline_id: pipeline.id, role: "ENTRY" }
+    });
+    const minePerson = await seeder.person.create({
+      data: { workspace_id: workspace, name: "Lead do atendente" }
+    });
+    const colleaguePerson = await seeder.person.create({
+      data: { workspace_id: workspace, name: "Lead do colega" }
+    });
+    mine = (
+      await seeder.opportunity.create({
+        data: {
+          workspace_id: workspace,
+          person_id: minePerson.id,
+          pipeline_id: pipeline.id,
+          stage_id: entry.id,
+          area: "COMMERCIAL",
+          status: "OPEN",
+          arrived_at: new Date("2026-08-20T09:00:00.000Z"),
+          assigned_user_id: attendant_user
+        }
+      })
+    ).id;
+    colleagues = (
+      await seeder.opportunity.create({
+        data: {
+          workspace_id: workspace,
+          person_id: colleaguePerson.id,
+          pipeline_id: pipeline.id,
+          stage_id: entry.id,
+          area: "COMMERCIAL",
+          status: "OPEN",
+          arrived_at: new Date("2026-08-20T09:01:00.000Z"),
+          assigned_user_id: other_attendant_user
+        }
+      })
+    ).id;
+  });
+
+  it("is a boolean on the card for every profile in lead scope, without loosening the admin read", async () => {
+    await setWhatsAppPairingState(owner_context, "CONNECTED", app);
+
+    const indicator = await getLeadWhatsAppConnectionIndicator(attendant_context, mine, app);
+    expect(indicator).toEqual({ connected: true });
+    expect(Object.keys(indicator)).toEqual(["connected"]);
+    expect(JSON.stringify(indicator)).not.toMatch(/token|last4|apikey|instance_name|mtco_/i);
+
+    await expect(getLeadWhatsAppConnectionIndicator(attendant_context, colleagues, app)).rejects.toThrow(
+      /Lead not found/
+    );
+    await expect(
+      getLeadWhatsAppConnectionIndicator(other_attendant_context, mine, app)
+    ).rejects.toThrow(/Lead not found/);
+
+    await expect(getLeadWhatsAppConnectionIndicator(supervisor_context, mine, app)).resolves.toEqual({
+      connected: true
+    });
+    await expect(
+      getLeadWhatsAppConnectionIndicator(supervisor_context, colleagues, app)
+    ).rejects.toThrow(/Lead not found/);
+
+    await expect(getLeadWhatsAppConnectionIndicator(manager_context, colleagues, app)).resolves.toEqual({
+      connected: true
+    });
+    await expect(getLeadWhatsAppConnectionIndicator(owner_context, mine, app)).resolves.toEqual({
+      connected: true
+    });
+
+    await expect(getWhatsAppConnection(attendant_context, app)).rejects.toMatchObject({
+      code: "FORBIDDEN"
+    });
+    await expect(getWhatsAppConnection(supervisor_context, app)).rejects.toMatchObject({
+      code: "FORBIDDEN"
+    });
+    const admin = await getWhatsAppConnection(manager_context, app);
+    expect(admin).toMatchObject({ pairing_state: "CONNECTED" });
+    expect(admin).toHaveProperty("instance_name");
+  });
+
+  it("reports disconnected when pairing is not open, still without secrets", async () => {
+    await setWhatsAppPairingState(manager_context, "DISCONNECTED", app);
+    await expect(getLeadWhatsAppConnectionIndicator(attendant_context, mine, app)).resolves.toEqual({
+      connected: false
+    });
+    await expect(getLeadWhatsAppConnectionIndicator(owner_context, colleagues, app)).resolves.toEqual({
+      connected: false
+    });
   });
 });

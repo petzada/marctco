@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   isWhatsAppPairingState,
   whatsAppInstanceNameFor,
@@ -10,7 +10,9 @@ import {
   generateIntegrationToken,
   type IntegrationConnectionStatus
 } from "./integration-connection.js";
+import { opportunityScopeSql } from "./internal/opportunity-scope.js";
 import { withAccessContext } from "./internal/scoped-transaction.js";
+import { assertUuid } from "./internal/uuid.js";
 
 const sharedPrisma = createPrismaClient();
 
@@ -221,5 +223,53 @@ export async function commitWhatsAppWebhookSecret(
     if (updated === 0) {
       throw new WhatsAppConnectionError("NOT_FOUND");
     }
+  });
+}
+
+export interface LeadWhatsAppConnectionIndicator {
+  readonly connected: boolean;
+}
+
+/**
+ * Card indicator for Atendente, Supervisor, Gestão and Direção who can see
+ * the lead. Returns only a boolean — never pairing details, instance name,
+ * token or last four. The Gestão/Direção administrative read stays on
+ * `getWhatsAppConnection`.
+ */
+export async function getLeadWhatsAppConnectionIndicator(
+  context: UserContext,
+  opportunity_id: string,
+  prisma: PrismaClient = sharedPrisma
+): Promise<LeadWhatsAppConnectionIndicator> {
+  assertUuid(opportunity_id, "opportunity_id");
+
+  return withAccessContext(prisma, context, async (transaction) => {
+    const rows = await transaction.$queryRaw<Array<{ connected: boolean }>>(Prisma.sql`
+      SELECT
+        COALESCE(
+          connection.pairing_state = 'CONNECTED'::whatsapp_pairing_state
+          AND connection.status = 'ACTIVE'::integration_connection_status,
+          false
+        ) AS connected
+      FROM opportunities AS opportunity
+      LEFT JOIN LATERAL (
+        SELECT pairing_state, status
+        FROM integration_connections
+        WHERE workspace_id = opportunity.workspace_id
+          AND provider = 'WHATSMIAU'::integration_provider
+          AND status = 'ACTIVE'::integration_connection_status
+        ORDER BY updated_at DESC
+        LIMIT 1
+      ) AS connection ON true
+      WHERE opportunity.id = ${opportunity_id}::uuid
+        AND opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.merged_into_opportunity_id IS NULL
+        ${opportunityScopeSql(context, "opportunity")}
+    `);
+    const row = rows[0];
+    if (!row) {
+      throw new Error("Lead not found in this workspace");
+    }
+    return { connected: row.connected === true };
   });
 }

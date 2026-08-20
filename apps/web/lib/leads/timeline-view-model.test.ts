@@ -16,6 +16,7 @@ function fact(overrides: Partial<LeadTimelineFact>): LeadTimelineFact {
     activity_type: null,
     activity_actor_name: null,
     ingestion_source: null,
+    message_preview: null,
     ...overrides
   };
 }
@@ -125,5 +126,54 @@ describe("buildLeadTimelineItemView", () => {
     expect(buildLeadTimelineItemView(fact({ type: "WHATSAPP_INBOUND_RECEIVED" })).caption).toBe(
       "Resposta recebida no WhatsApp"
     );
+    const outbound = JSON.stringify(buildLeadTimelineItemView(fact({ type: "WHATSAPP_OUTBOUND_SENT" })));
+    expect(outbound).not.toMatch(/entregue|lida/i);
+  });
+
+  it("exposes a truncated inbound preview instead of the full thread", () => {
+    const long = "a".repeat(200);
+    const view = buildLeadTimelineItemView(
+      fact({ type: "WHATSAPP_INBOUND_RECEIVED", message_preview: long })
+    );
+    expect(view.caption).toBe("Resposta recebida no WhatsApp");
+    expect(view.preview).toBe("a".repeat(140));
+    expect(view.preview).toHaveLength(140);
+  });
+
+  it("uses generic PT-BR copy for media and reaction, with optional caption and never a provider URL", () => {
+    const image = buildLeadTimelineItemView(
+      fact({
+        type: "WHATSAPP_INBOUND_RECEIVED",
+        message_preview: "imageMessage: comprovante"
+      })
+    );
+    expect(image.caption).toBe("Imagem recebida no WhatsApp");
+    expect(image.preview).toBe("comprovante");
+
+    const audio = buildLeadTimelineItemView(
+      fact({ type: "WHATSAPP_INBOUND_RECEIVED", message_preview: "audioMessage" })
+    );
+    expect(audio.caption).toBe("Áudio recebido no WhatsApp");
+    expect(audio.preview).toBeNull();
+
+    const reaction = buildLeadTimelineItemView(
+      fact({
+        type: "WHATSAPP_INBOUND_RECEIVED",
+        message_preview: "reactionMessage: 👍"
+      })
+    );
+    expect(reaction.caption).toBe("Reação recebida no WhatsApp");
+    expect(reaction.preview).toBe("👍");
+
+    const leakedUrl = buildLeadTimelineItemView(
+      fact({
+        type: "WHATSAPP_INBOUND_RECEIVED",
+        message_preview: "imageMessage: https://media.example.invalid/secret.jpg"
+      })
+    );
+    expect(leakedUrl.caption).toBe("Imagem recebida no WhatsApp");
+    expect(leakedUrl.preview).toBeNull();
+    expect(JSON.stringify(leakedUrl)).not.toContain("https://");
+    expect(JSON.stringify(leakedUrl)).not.toContain("imageMessage");
   });
 });

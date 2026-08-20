@@ -46,6 +46,11 @@ const manager_context = createUserContextFromResolvedMembership({
   user_id: manager_user,
   role: "MANAGER"
 });
+const owner_context = createUserContextFromResolvedMembership({
+  workspace_id: workspace,
+  user_id: manager_user,
+  role: "OWNER"
+});
 const attendant_context = createUserContextFromResolvedMembership({
   workspace_id: workspace,
   user_id: attendant_user,
@@ -560,5 +565,104 @@ describe("listLeadTimeline", () => {
       "2026-08-19T11:01:00.000Z",
       "2026-08-19T11:02:00.000Z"
     ]);
+  });
+
+  it("orders WhatsApp facts with the others and exposes a truncated preview, never a thread or secret", async () => {
+    const opportunity_id = await seedOpportunity();
+    await seeder.opportunityTimelineEvent.createMany({
+      data: [
+        {
+          workspace_id: workspace,
+          opportunity_id,
+          type: "STAGE_CHANGED",
+          occurred_at: new Date("2026-08-19T10:00:00.000Z")
+        },
+        {
+          workspace_id: workspace,
+          opportunity_id,
+          type: "WHATSAPP_OUTBOUND_SENT",
+          occurred_at: new Date("2026-08-19T10:01:00.000Z")
+        },
+        {
+          workspace_id: workspace,
+          opportunity_id,
+          type: "WHATSAPP_INBOUND_RECEIVED",
+          integration_connection_id: connection_id,
+          external_message_id: "3EB0CARD",
+          message_preview: "Resposta curta do cliente",
+          occurred_at: new Date("2026-08-19T10:02:00.000Z")
+        },
+        {
+          workspace_id: workspace,
+          opportunity_id,
+          type: "WHATSAPP_OUTBOUND_FAILED",
+          occurred_at: new Date("2026-08-19T10:03:00.000Z")
+        }
+      ]
+    });
+
+    const page = await listLeadTimeline(manager_context, opportunity_id, {}, app);
+    expect(page.facts.map((fact) => fact.type)).toEqual([
+      "STAGE_CHANGED",
+      "WHATSAPP_OUTBOUND_SENT",
+      "WHATSAPP_INBOUND_RECEIVED",
+      "WHATSAPP_OUTBOUND_FAILED"
+    ]);
+    expect(page.facts.map((fact) => fact.message_preview)).toEqual([
+      null,
+      null,
+      "Resposta curta do cliente",
+      null
+    ]);
+    expect(JSON.stringify(page.facts)).not.toMatch(/token|last4|apikey|mtco_/i);
+  });
+
+  it("lets Atendente read message facts on own leads, Supervisor on the team, Gestão and Direção on all", async () => {
+    const mine = await seedOpportunity({ assigned_user_id: attendant_user });
+    const colleagues = await seedOpportunity({ assigned_user_id: other_attendant_user });
+    await seeder.opportunityTimelineEvent.createMany({
+      data: [
+        {
+          workspace_id: workspace,
+          opportunity_id: mine,
+          type: "WHATSAPP_OUTBOUND_SENT",
+          occurred_at: new Date("2026-08-19T12:00:00.000Z")
+        },
+        {
+          workspace_id: workspace,
+          opportunity_id: mine,
+          type: "WHATSAPP_INBOUND_RECEIVED",
+          integration_connection_id: connection_id,
+          external_message_id: "3EB0MINE",
+          message_preview: "Oi, sou o cliente",
+          occurred_at: new Date("2026-08-19T12:01:00.000Z")
+        },
+        {
+          workspace_id: workspace,
+          opportunity_id: colleagues,
+          type: "WHATSAPP_OUTBOUND_FAILED",
+          occurred_at: new Date("2026-08-19T12:02:00.000Z")
+        }
+      ]
+    });
+
+    const own = await listLeadTimeline(attendant_context, mine, {}, app);
+    expect(own.facts.map((fact) => fact.type)).toEqual([
+      "WHATSAPP_OUTBOUND_SENT",
+      "WHATSAPP_INBOUND_RECEIVED"
+    ]);
+    expect(own.facts[1]?.message_preview).toBe("Oi, sou o cliente");
+    expect(await listLeadTimeline(attendant_context, colleagues, {}, app)).toEqual({
+      facts: [],
+      has_more: false
+    });
+
+    expect((await listLeadTimeline(supervisor_context, mine, {}, app)).facts).toHaveLength(2);
+    expect(await listLeadTimeline(untagged_supervisor_context, mine, {}, app)).toEqual({
+      facts: [],
+      has_more: false
+    });
+    expect((await listLeadTimeline(manager_context, colleagues, {}, app)).facts).toHaveLength(1);
+    expect((await listLeadTimeline(owner_context, colleagues, {}, app)).facts).toHaveLength(1);
   });
 });

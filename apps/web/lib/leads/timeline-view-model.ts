@@ -1,7 +1,9 @@
 import type { LeadTimelineFact, OpportunityTimelineEventType } from "@marctco/db";
+import { INBOUND_MESSAGE_PREVIEW_MAX_CHARS } from "@marctco/domain";
 import { formatArrivedAt } from "./row-view-model";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PROVIDER_URL = /^https?:\/\//i;
 
 const SOURCE_LABELS: Readonly<Record<string, string>> = {
   META_LEAD_ADS: "Meta",
@@ -16,10 +18,19 @@ const ACTIVITY_TYPE_LABELS: Readonly<Record<NonNullable<LeadTimelineFact["activi
   TASK: "Tarefa"
 };
 
+const INBOUND_MEDIA_COPY: Readonly<Record<string, string>> = {
+  imageMessage: "Imagem recebida no WhatsApp",
+  videoMessage: "Vídeo recebido no WhatsApp",
+  audioMessage: "Áudio recebido no WhatsApp",
+  documentMessage: "Documento recebido no WhatsApp",
+  reactionMessage: "Reação recebida no WhatsApp"
+};
+
 export interface LeadTimelineItemView {
   readonly id: string;
   readonly occurredAtLabel: string;
   readonly caption: string;
+  readonly preview: string | null;
 }
 
 /**
@@ -27,10 +38,12 @@ export interface LeadTimelineItemView {
  * never reach the caption (ADR-0005: UI in PT-BR, no screen text in domain).
  */
 export function buildLeadTimelineItemView(fact: LeadTimelineFact): LeadTimelineItemView {
+  const inbound = fact.type === "WHATSAPP_INBOUND_RECEIVED" ? inboundCopy(fact.message_preview) : null;
   return {
     id: fact.id,
     occurredAtLabel: formatArrivedAt(fact.occurred_at),
-    caption: captionFor(fact)
+    caption: inbound?.caption ?? captionFor(fact),
+    preview: inbound?.preview ?? null
   };
 }
 
@@ -43,6 +56,35 @@ function visibleName(value: string | null): string | null {
     return null;
   }
   return trimmed;
+}
+
+function inboundCopy(stored: string | null): { readonly caption: string; readonly preview: string | null } {
+  const raw = stored?.trim() || "";
+  if (raw === "") {
+    return { caption: "Resposta recebida no WhatsApp", preview: null };
+  }
+
+  for (const [messageType, caption] of Object.entries(INBOUND_MEDIA_COPY)) {
+    if (raw === messageType) {
+      return { caption, preview: null };
+    }
+    const prefix = `${messageType}: `;
+    if (raw.startsWith(prefix)) {
+      return { caption, preview: visiblePreview(raw.slice(prefix.length)) };
+    }
+  }
+
+  return { caption: "Resposta recebida no WhatsApp", preview: visiblePreview(raw) };
+}
+
+function visiblePreview(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === "" || PROVIDER_URL.test(trimmed)) {
+    return null;
+  }
+  return trimmed.length <= INBOUND_MESSAGE_PREVIEW_MAX_CHARS
+    ? trimmed
+    : trimmed.slice(0, INBOUND_MESSAGE_PREVIEW_MAX_CHARS);
 }
 
 function captionFor(fact: LeadTimelineFact): string {

@@ -18,6 +18,7 @@ import { FieldError, FieldLabel, TextInput } from "../ui/field";
 import { StatusBadge, type StatusBadgeTone } from "../ui/status-badge";
 import { markerPresentation } from "../../lib/leads/markers";
 import { formatArrivedAt, formatInstallmentAmount, waitCaption } from "../../lib/leads/row-view-model";
+import { buildWhatsAppConnectionIndicatorView } from "../../lib/leads/whatsapp-connection-indicator";
 import { LeadCardActivities, type ActivityAssigneeOption } from "./lead-card-activities";
 import { LeadCardTimeline } from "./lead-card-timeline";
 
@@ -51,6 +52,7 @@ export interface LeadCardContentProps {
   readonly currentUserId: string;
   readonly activities: readonly LeadActivity[];
   readonly timeline: LeadTimelinePage;
+  readonly whatsappConnected: boolean;
   readonly assignees: readonly ActivityAssigneeOption[];
   readonly clockSettings: ResolvedWorkspaceSettings;
   readonly nowIso: string;
@@ -69,6 +71,7 @@ export function LeadCardContent({
   currentUserId,
   activities,
   timeline,
+  whatsappConnected,
   assignees,
   clockSettings,
   nowIso
@@ -95,6 +98,7 @@ export function LeadCardContent({
     now: new Date(nowIso)
   });
   const markers = markersFor({ missing_phone: lead.missing_phone }, lead.reviews, sla, idle);
+  const whatsapp = buildWhatsAppConnectionIndicatorView(whatsappConnected);
 
   return (
     <div className="grid gap-lg">
@@ -102,6 +106,9 @@ export function LeadCardContent({
         <div className="flex flex-wrap items-center gap-sm">
           <h3 className="text-title text-ink">{lead.name?.trim() || "Sem nome"}</h3>
           {lead.source ? <StatusBadge tone="info">{SOURCE_LABELS[lead.source] ?? lead.source}</StatusBadge> : null}
+          <StatusBadge dot tone={whatsapp.connected ? "success" : "neutral"}>
+            {whatsapp.label}
+          </StatusBadge>
           {markers.map((marker) => (
             <StatusBadge key={marker} tone={MARKER_TONE[marker]}>
               {markerPresentation(marker).label}
