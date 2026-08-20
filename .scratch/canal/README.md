@@ -1,6 +1,6 @@
 # Fase 4 — Canal
 
-Status da fatia: **especificada; tickets 00, 01, 02, 03a, 03b, 03c, 04 e 05 fechados.** Spec em [spec.md](./spec.md), tickets em [issues/](./issues/). Próximo: [06](./issues/06-mensagem-na-linha-do-tempo-do-card.md); [07](./issues/07-seam4-atribuicao-ate-evidencia.md) (Seam 4) ficou desbloqueado pelo 03c.
+Status da fatia: **especificada e fechada; tickets 00, 01, 02, 03a, 03b, 03c, 04, 05, 06 e 07 fechados.** Spec em [spec.md](./spec.md), tickets em [issues/](./issues/). O Seam 4 ([07](./issues/07-seam4-atribuicao-ate-evidencia.md)) costurou atribuição → outbox → fila → worker com WhatsMiau fake até o fato e `first_contact_at`.
 
 Fase 4 de [docs/plano-de-construcao.md](../../docs/plano-de-construcao.md). Estado de partida: Fases 0–3 entregues — [PROMPT-HANDOFF da Fase 3](../tempo/PROMPT-HANDOFF.md).
 
