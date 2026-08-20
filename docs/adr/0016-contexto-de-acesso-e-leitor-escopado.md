@@ -13,6 +13,8 @@
 > o client transacional.
 
 > **Emendado em 2026-08-19.** A origem do `JobContext` deixa de ser sempre um `integration_event_id` e vira união discriminada: evento de integração **real** ou passada agendada **nomeada**. Continua havendo só duas variantes de `AccessContext`. A varredura de payload do ticket 15 usou um evento âncora para caber na forma antiga; a varredura de SLA da Fase 3 não tem âncora possível e não fabrica uma. Isolamento por workspace e `SET LOCAL` não mudam.
+>
+> **Emendado em 2026-08-19 (Fase 4, ticket 00).** `JobOrigin` ganha duas variantes reais de canal: `channel_outbound` com `attempt_id` e `channel_inbound` com `integration_connection_id`. Continua havendo só `UserContext | JobContext`. O dispatcher de canal não fabrica `integration_event_id` nem usa `scheduled_sweep`. O webhook inbound autentica pelo hash já existente e constrói o contexto depois, apontando para a conexão — não nasce função privada só para autenticar.
 
 ## O problema
 
@@ -29,7 +31,7 @@ O mesmo buraco engole tudo que o [ADR-0013](./0013-fluxo-de-dados-no-app.md) dec
 | Variante | Construída em | Carrega | Quem a produz |
 |---|---|---|---|
 | `UserContext` | `apps/web` | `workspace_id`, `user_id`, `role` | `resolveWorkspaceAccess` chama `resolveUserContextForSlug`: sessão Supabase + validação do `slug` contra `WorkspaceMember` ([ADR-0012](./0012-contexto-de-tenant-na-url.md), [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md)) |
-| `JobContext` | `apps/worker` (ingestão) e `apps/web` (passada agendada) | `workspace_id` e `origin: JobOrigin` | ingestão: o `workspace_id` que o handler autenticado escreveu no job, com origem `integration_event` e o `integration_event_id` real ([ADR-0007](./0007-ingestao-idempotencia.md)); manutenção: o `workspace_id` que a função privada de descoberta devolveu, com origem `scheduled_sweep` e o nome da passada |
+| `JobContext` | `apps/worker` (ingestão e canal outbound) e `apps/web` (passada agendada e webhook inbound) | `workspace_id` e `origin: JobOrigin` | ingestão: o `workspace_id` que o handler autenticado escreveu no job, com origem `integration_event` e o `integration_event_id` real ([ADR-0007](./0007-ingestao-idempotencia.md)); manutenção: o `workspace_id` que a função privada de descoberta devolveu, com origem `scheduled_sweep` e o nome da passada; canal outbound: o `workspace_id` que `claim_pending_channel_attempts` devolveu, com origem `channel_outbound` e o `attempt_id`; canal inbound: o `workspace_id` que o hash do webhook já resolveu, com origem `channel_inbound` e o `integration_connection_id` |
 
 **A origem do `JobContext` é união discriminada, não um campo opcional.**
 
@@ -37,13 +39,17 @@ O mesmo buraco engole tudo que o [ADR-0013](./0013-fluxo-de-dados-no-app.md) dec
 JobOrigin =
   | { type: "integration_event"; integration_event_id }
   | { type: "scheduled_sweep"; sweep: ScheduledSweepName }
+  | { type: "channel_outbound"; attempt_id }
+  | { type: "channel_inbound"; integration_connection_id }
 
 ScheduledSweepName = PAYLOAD_EXPIRY | OPPORTUNITY_CLOCK
 ```
 
-`PAYLOAD_EXPIRY` é a retenção de 90 dias ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)). `OPPORTUNITY_CLOCK` é a varredura dos relógios de SLA e estagnação (Fase 3). A lista de nomes é fechada: passada nova entra aqui antes de nascer no código.
+`PAYLOAD_EXPIRY` é a retenção de 90 dias ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)). `OPPORTUNITY_CLOCK` é a varredura dos relógios de SLA e estagnação (Fase 3). A lista de nomes de passada continua fechada: passada nova entra aqui antes de nascer no código. Canal **não** é passada agendada.
 
-O ticket 09 da Fase 3 materializa o tipo `JobOrigin` e a varredura `OPPORTUNITY_CLOCK` com origem `scheduled_sweep`. A varredura de payload já implementada pode continuar abrindo transação com evento âncora até migrar para `PAYLOAD_EXPIRY` — fora do escopo do ticket 09; os dois mecanismos coexistem enquanto o código da retenção não acompanha o tipo ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)).
+`channel_outbound` aponta para a Tentativa outbound — ela mesma é o outbox. `channel_inbound` aponta para a `IntegrationConnection` autenticada pelo hash; a exceção pré-contexto de token já existe ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9) e não se duplica. Nenhum dos dois fabrica `integration_event_id`.
+
+O ticket 09 da Fase 3 materializa o tipo `JobOrigin` e a varredura `OPPORTUNITY_CLOCK` com origem `scheduled_sweep`. A varredura de payload já implementada pode continuar abrindo transação com evento âncora até migrar para `PAYLOAD_EXPIRY` — fora do escopo do ticket 09; os dois mecanismos coexistem enquanto o código da retenção não acompanha o tipo ([ADR-0014](./0014-copia-unica-e-retencao-do-payload.md)). O ticket 00 da Fase 4 registra as variantes de canal **antes** da primeira migration do outbox; o runtime nasce nos tickets 03a–05.
 
 A forma original desta tabela carregava `workspace_id` + `integration_event_id` e dizia que o contexto nascia só em `apps/worker`. Isso era verdade para a ingestão e ficou incompleto quando o ticket 15 colocou a varredura de payload no processo web, preenchendo o campo com um evento âncora. A âncora era um contorno para não criar um terceiro tipo de `AccessContext`. **Esse contorno não se estende:** um lead liberado da quarentena, e amanhã um lead criado à mão, não têm evento de integração para apontar. Fabricar um grava no banco uma causalidade que não existe.
 
@@ -73,9 +79,9 @@ Cada uma abre a transação, faz o `SET LOCAL`, aplica o escopo do papel quando 
 
 > **Emendado pelo ticket 09.** Esta tabela dizia **duas**, escrita antes de o ADR-0017 quebrar a ingestão em três fases puras. Cada fase precisa de uma leitura executada sob o tenant, e o caminho compartilhado é literalmente o mesmo para os dois chamadores — então toda operação dele aceita as duas variantes, ou o "mesmo caminho" que a issue 14 exige não existe. O número não é o que a regra protege: o que ela protege é **por que** uma operação aceita `JobContext`, e a resposta continua sendo uma só. Nada fora do caminho de ingestão ganhou a segunda variante, e `listLeads(jobCtx)` continua não compilando.
 
-**3. As consultas sem tenant são a exceção, e ela já é fechada.** `resolve_workspace_by_token_hash`, `claim_pending_events`, `provision_workspace` e `resolve_user_workspaces` acontecem **antes** de existir workspace para pôr num contexto — são justamente as que produzem ou validam o `workspace_id` com que o contexto é construído ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9). Elas não recebem `AccessContext` e não podem receber. A lista é fechada, o Seam 3 reprova qualquer `SECURITY DEFINER` fora dela, e nenhuma devolve payload. Sem esta cláusula escrita, a regra 2 pareceria ter um furo.
+**3. As consultas sem tenant são a exceção, e ela já é fechada.** As funções enumeradas no [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) acontecem **antes** de existir workspace para pôr num contexto — são justamente as que produzem ou validam o `workspace_id` com que o contexto é construído ([ADR-0006](./0006-rls-duas-camadas-guc-worker.md) regra 9). Elas não recebem `AccessContext` e não podem receber. A lista é fechada (sete desde a Fase 4), o Seam 3 reprova qualquer `SECURITY DEFINER` fora dela, e nenhuma devolve payload. Sem esta cláusula escrita, a regra 2 pareceria ter um furo.
 
-> **Emenda de 2026-08-19.** A redação original fechava em **quatro**; o [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) passou a cinco no ticket 15 (`claim_expired_payload_workspaces`) e a seis na Fase 3 (`claim_overdue_opportunity_workspaces`). O owner técnico e os retornos mínimos continuam naquele ADR. Esta regra não enumerava a lista para congelá-la aqui — enumerava para impedir que uma função extra entrasse pelo furo. O número vive no ADR-0019.
+> **Emenda de 2026-08-19.** A redação original fechava em **quatro**; o [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) passou a cinco no ticket 15 (`claim_expired_payload_workspaces`), a seis na Fase 3 (`claim_overdue_opportunity_workspaces`) e a sete na Fase 4 (`claim_pending_channel_attempts`). O owner técnico e os retornos mínimos continuam naquele ADR. Esta regra não enumerava a lista para congelá-la aqui — enumerava para impedir que uma função extra entrasse pelo furo. O número vive no ADR-0019.
 
 **4. O client cru continua existindo, e continua interno.** Um módulo só dentro de `packages/db` o alcança. `no-restricted-imports` barra o resto e o CI reprova o import de fora — na mesma família das varreduras do Seam 3, que existem porque nenhuma rota exercita a combinação.
 
@@ -98,6 +104,7 @@ Vale também para o [ADR-0006 regra 11](./0006-rls-duas-camadas-guc-worker.md): 
 - **Resolver por policy de RLS por papel, keiando num segundo GUC.** Duas fontes de verdade para escopo, e o ADR-0006 recusa isso pelo mesmo motivo que recusou policies em `auth.jwt()`. Além disso o escopo do `SUPERVISOR` depende de tags — à época a Fase 2 ainda ia definir tags; hoje o escopo vive na operação nomeada, não em policy. Migrar policy é caro, mudar uma função não.
 - **Terceiro tipo de `AccessContext` para manutenção (2026-08-19).** `SweepContext` ou `MaintenanceContext` espalharia a união que toda operação nomeada já discrimina, e o job de manutenção isolaria por outro caminho que o Seam 3 não prova. O trabalho agendado é `JobContext`; o que muda é a origem, não a variante.
 - **Evento âncora fabricado para a varredura de SLA (2026-08-19).** Apontar para um `IntegrationEvent` qualquer do workspace grava causalidade que não existe e envenena auditoria. A varredura de payload pôde apontar para um evento real da retenção; a de SLA, não. A origem nomeada é o que torna o âncora desnecessário sem abrir um terceiro tipo.
+- **Evento âncora fabricado para o canal (2026-08-19, Fase 4).** A tentativa outbound e o webhook inbound não são Evento de integração. Apontar para um evento qualquer, ou reusar `scheduled_sweep` no dispatcher de canal, mistura cadências e grava causalidade falsa. As duas variantes de `JobOrigin` existem para nomear o trabalho real.
 
 ## Consequences
 

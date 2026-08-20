@@ -54,8 +54,23 @@ enum StageRole {
 enum IntegrationProvider {
   PLUGA
   LANDING_PAGE
+  WHATSMIAU
 
   @@map("integration_provider")
+}
+
+/// Local normalization of Whatsmiau Cloud API v2 pairing. Distinct from
+/// IntegrationConnectionStatus (ACTIVE / DISABLED). ERROR is ours, never a
+/// provider value (ADR-0005).
+enum WhatsAppPairingState {
+  DISCONNECTED
+  CONNECTING
+  QR_PENDING
+  CONNECTED
+  SUSPENDED
+  ERROR
+
+  @@map("whatsapp_pairing_state")
 }
 
 enum IntegrationConnectionStatus {
@@ -157,6 +172,9 @@ enum OpportunityTimelineEventType {
   RETURNED_TO_QUEUE
   ACTIVITY_CREATED
   ACTIVITY_COMPLETED
+  WHATSAPP_OUTBOUND_SENT
+  WHATSAPP_OUTBOUND_FAILED
+  WHATSAPP_INBOUND_RECEIVED
 
   @@map("opportunity_timeline_event_type")
 }
@@ -182,6 +200,7 @@ model Workspace {
   activities                  Activity[]
   notifications               Notification[]
   settings                    WorkspaceSettings?
+  channel_outbound_attempts   ChannelOutboundAttempt[]
 
   @@map("workspaces")
 }
@@ -282,17 +301,29 @@ model IntegrationConnection {
   token_last4        String                      @db.Char(4)
   status             IntegrationConnectionStatus @default(ACTIVE)
   target_pipeline_id String?                     @db.Uuid
+  /// Public WhatsMiau instanceName. Null on Pluga and landing page.
+  instance_name      String?                     @unique
+  /// Pairing with the provider. Null on Pluga and landing page.
+  pairing_state      WhatsAppPairingState?
   created_at         DateTime                    @default(now()) @db.Timestamptz(6)
   updated_at         DateTime                    @updatedAt @db.Timestamptz(6)
   workspace          Workspace                   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   target_pipeline    Pipeline?                   @relation("IntegrationConnectionTargetPipeline", fields: [workspace_id, target_pipeline_id], references: [workspace_id, id], onDelete: Restrict)
   events             IntegrationEvent[]
+  timeline_events    OpportunityTimelineEvent[]
 
   @@unique([workspace_id, provider])
   @@unique([workspace_id, id])
   @@index([workspace_id])
   @@map("integration_connections")
 }
+
+// Ticket 02 of Canal: at most one live WhatsMiau connection per workspace is a
+// migration-only partial unique index
+// (`provider = WHATSMIAU AND status <> DISABLED`). Prisma's @@index cannot
+// express WHERE, and restoring UNIQUE(workspace_id, provider) as the only
+// rule would contradict ADR-0031. The global unique above still exists until
+// ticket 19 drops it; the partial is the WhatsMiau exception that survives.
 
 model IntegrationEvent {
   id                          String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -451,6 +482,9 @@ model LeadSubmission {
   /// Null while the submission produced no card — quarantine, or a plan that
   /// has not been applied yet.
   opportunity_id            String?                    @db.Uuid
+  /// Evidence from the `v1` contract. The connector translates; it never
+  /// infers consent from a phone, campaign or provider (ADR-0008).
+  whatsapp_opt_in           Boolean?
   created_at                DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at                DateTime                   @updatedAt @db.Timestamptz(6)
   workspace                 Workspace                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
@@ -488,6 +522,9 @@ model Opportunity {
   /// Means one thing only: no WhatsApp and no phone call. Not a generic
   /// "something is missing" label (ADR-0007 §Quarentena).
   missing_phone              Boolean                    @default(false)
+  /// Snapshot of the submission that created or released this card.
+  /// Automatic WhatsApp dispatch requires true; absent or false fails closed.
+  whatsapp_opt_in            Boolean?
   /// Classification of the credit contract that motivated the contact. Never
   /// selects a pipeline, never identifies a Pessoa.
   financing_type             FinancingType?
@@ -509,9 +546,9 @@ model Opportunity {
   merged_into_opportunity_id String?                    @db.Uuid
   created_at                 DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime                   @updatedAt @db.Timestamptz(6)
-  /// Instant of the first evidence of attendance. Written once, on the first
-  /// completed Activity of this lead (Fase 4 will also fill this column from
-  /// a WhatsApp message). Assignment and stage moves never write it.
+  /// Instant of the first evidence of attendance. Written once: first
+  /// completed Activity, HTTP 2xx of automatic WhatsApp sendText, or inbound
+  /// reply. Assignment, enqueue and a failed send never write it.
   first_contact_at           DateTime?                  @db.Timestamptz(6)
   /// Instant the Opportunity became WON or LOST. Null while OPEN; required
   /// when closed (DB CHECK). Ends the first-contact SLA when there was no
@@ -533,6 +570,7 @@ model Opportunity {
   timeline_events            OpportunityTimelineEvent[]
   activities                 Activity[]
   notifications              Notification[]
+  channel_outbound_attempts  ChannelOutboundAttempt[]
 
   // Two partial indexes back the Leads screen (ticket 12), declared only in
   // the migration: `opportunities_workspace_id_arrived_at_id_active_idx`
@@ -614,6 +652,13 @@ model OpportunityTimelineEvent {
   /// Frozen previous owner of REASSIGNED / RETURNED_TO_QUEUE. Null on other
   /// types and on facts that existed before the column.
   previous_assigned_user_id String?                 @db.Uuid
+  /// Present on WHATSAPP_INBOUND_RECEIVED; the connection that authenticated
+  /// the webhook. Null on every other fact type.
+  integration_connection_id String?                 @db.Uuid
+  /// Provider `data.key.id`. Null except on inbound message facts.
+  external_message_id  String?
+  /// Truncated preview, never a full thread. Null except on inbound facts.
+  message_preview      String?
   created_at           DateTime                     @default(now()) @db.Timestamptz(6)
   workspace            Workspace                    @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   opportunity          Opportunity                  @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
@@ -621,19 +666,87 @@ model OpportunityTimelineEvent {
   integration_event    IntegrationEvent?            @relation(fields: [workspace_id, integration_event_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
   assigned_member      WorkspaceMember?             @relation("TimelineAssignedMember", fields: [workspace_id, assigned_user_id], references: [workspace_id, user_id], onDelete: Restrict)
   previous_assigned_member WorkspaceMember?         @relation("TimelinePreviousAssignedMember", fields: [workspace_id, previous_assigned_user_id], references: [workspace_id, user_id], onDelete: Restrict)
+  integration_connection IntegrationConnection?     @relation(fields: [workspace_id, integration_connection_id], references: [workspace_id, id], onDelete: Restrict)
 
   // Uniqueness `(workspace_id, type, integration_event_id)` is a partial
   // unique index on the two ingestion variants only, declared in the
   // ticket 04 migration. Prisma's @@unique cannot express a WHERE predicate;
   // writing one here would claim a full unique index that would reject two
-  // identical movement facts.
+  // identical movement facts. Inbound dedupe `(workspace_id,
+  // integration_connection_id, external_message_id) WHERE type =
+  // WHATSAPP_INBOUND_RECEIVED` is likewise migration-only.
   @@index([workspace_id])
   @@index([workspace_id, opportunity_id, occurred_at(sort: Desc), id(sort: Desc)])
   @@index([workspace_id, lead_submission_id])
   @@index([workspace_id, integration_event_id])
   @@index([workspace_id, assigned_user_id])
   @@index([workspace_id, previous_assigned_user_id])
+  @@index([workspace_id, integration_connection_id])
   @@map("opportunity_timeline_events")
+}
+
+enum ChannelOutboundAttemptKind {
+  AUTO_FIRST_CONTACT
+
+  @@map("channel_outbound_attempt_kind")
+}
+
+enum ChannelOutboundDispatchStatus {
+  PENDING
+  DISPATCHED
+
+  @@map("channel_outbound_dispatch_status")
+}
+
+enum ChannelOutboundDeliveryStatus {
+  QUEUED
+  PROCESSING
+  SENT
+  FAILED
+
+  @@map("channel_outbound_delivery_status")
+}
+
+enum ChannelOutboundFailureReason {
+  INSTANCE_NOT_CONNECTED
+  ATTENDANT_PHONE_MISSING
+  KNOWN_REFUSAL
+  UNCERTAIN_EXTERNAL
+
+  @@map("channel_outbound_failure_reason")
+}
+
+/// One automatic first-contact WhatsApp attempt per Opportunity. This row is
+/// the Postgres outbox: publication (`dispatch_status`) is recoverable
+/// before HTTP; delivery after PROCESSING never returns to the queue.
+model ChannelOutboundAttempt {
+  id                      String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id            String                         @db.Uuid
+  opportunity_id          String                         @db.Uuid
+  kind                    ChannelOutboundAttemptKind     @default(AUTO_FIRST_CONTACT)
+  dispatch_status         ChannelOutboundDispatchStatus  @default(PENDING)
+  delivery_status         ChannelOutboundDeliveryStatus  @default(QUEUED)
+  failure_reason          ChannelOutboundFailureReason?
+  /// Optional provider identifier. Null unless the adapter supplied one;
+  /// sendText does not document a response id, so SENT may stay null.
+  provider_message_id     String?
+  dispatch_lease_until    DateTime?                      @db.Timestamptz(6)
+  processing_lease_until  DateTime?                      @db.Timestamptz(6)
+  dispatched_at           DateTime?                      @db.Timestamptz(6)
+  sent_at                 DateTime?                      @db.Timestamptz(6)
+  failed_at               DateTime?                      @db.Timestamptz(6)
+  created_at              DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                       @updatedAt @db.Timestamptz(6)
+  workspace               Workspace                      @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  opportunity             Opportunity                    @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: Cascade)
+
+  @@unique([workspace_id, id])
+  @@unique([workspace_id, opportunity_id, kind])
+  @@index([workspace_id])
+  // Pending-dispatch and processing-lease partial indexes live only in the
+  // migration: Prisma's @@index cannot express WHERE, and the claim function
+  // is the only reader of those predicates.
+  @@map("channel_outbound_attempts")
 }
 
 /// Work the attendant records on a Lead. There is no orphan event: every
@@ -687,16 +800,28 @@ model Activity {
   @@map("activities")
 }
 
+/// When the automatic first WhatsApp fires. Absence of a stored value is
+/// ON_ASSIGNMENT, never DISABLED (ADR-0003, ADR-0004).
+enum FirstContactTrigger {
+  ON_ASSIGNMENT
+  ON_ARRIVAL
+  DISABLED
+
+  @@map("first_contact_trigger")
+}
+
 /// Optional operational clocks for one workspace. No row means the domain
 /// defaults, never "SLA off". The row is born on the first write from
 /// Configurações — provision_workspace does not create it.
 model WorkspaceSettings {
-  workspace_id                String    @id @db.Uuid
-  first_contact_sla_minutes   Int?
-  stagnation_days             Int?
-  created_at                  DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at                  DateTime  @updatedAt @db.Timestamptz(6)
-  workspace                   Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  workspace_id                  String               @id @db.Uuid
+  first_contact_sla_minutes     Int?
+  stagnation_days               Int?
+  first_contact_trigger         FirstContactTrigger?
+  first_contact_template_body   String?              @db.Text
+  created_at                    DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                    DateTime             @updatedAt @db.Timestamptz(6)
+  workspace                     Workspace            @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
   @@map("workspace_settings")
 }

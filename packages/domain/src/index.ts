@@ -17,6 +17,24 @@ export {
   type IntegrationEventJobData
 } from "./ingestion-jobs.js";
 export {
+  CHANNEL_OUTBOUND_INITIAL_DELAY_MS,
+  CHANNEL_OUTBOUND_JOB,
+  CHANNEL_OUTBOUND_QUEUE,
+  CHANNEL_OUTBOUND_RATE_LIMIT_MAX,
+  CHANNEL_OUTBOUND_RATE_LIMIT_WINDOW_MS,
+  channelOutboundJobId,
+  type ChannelOutboundJobData
+} from "./channel-jobs.js";
+export {
+  WHATSMIAU_API_BASE_URL,
+  buildWhatsMiauSendTextRequest,
+  classifySendTextFailure,
+  whatsMiauDigitsFromE164,
+  type MessagingProvider,
+  type SendTextResult,
+  type WhatsMiauSendTextRequest
+} from "./messaging-provider.js";
+export {
   CONTRACT_VERSION,
   LEAD_SOURCES,
   MAX_EXTERNAL_LEAD_ID_LENGTH,
@@ -186,6 +204,65 @@ export {
   type WorkspaceSettingsWrite,
   type WorkspaceSettingsWriteParse
 } from "./workspace-settings.js";
+export {
+  DEFAULT_FIRST_CONTACT_TEMPLATE_BODY,
+  DEFAULT_FIRST_CONTACT_TRIGGER,
+  FIRST_CONTACT_TRIGGERS,
+  isFirstContactTrigger,
+  parseFirstContactTemplate,
+  planFirstContactDispatch,
+  renderFirstContactTemplate,
+  templateVariablesFor,
+  type FirstContactDispatchPlan,
+  type FirstContactDispatchRefusal,
+  type FirstContactRender,
+  type FirstContactTemplateParse,
+  type FirstContactTrigger
+} from "./first-contact.js";
+export {
+  CHANNEL_OUTBOUND_DELIVERY_STATUSES,
+  CHANNEL_OUTBOUND_DISPATCH_LEASE_MS,
+  CHANNEL_OUTBOUND_DISPATCH_STATUSES,
+  CHANNEL_OUTBOUND_FAILURE_REASONS,
+  CHANNEL_OUTBOUND_KIND,
+  CHANNEL_OUTBOUND_PROCESSING_LEASE_MS,
+  decideChannelOutboundTransition,
+  planFirstContactAttempt,
+  prepareChannelOutboundSend,
+  type ChannelOutboundDeliveryStatus,
+  type ChannelOutboundDispatchStatus,
+  type ChannelOutboundFailureReason,
+  type ChannelOutboundKind,
+  type ChannelOutboundSendPayload,
+  type ChannelOutboundTransitionAction,
+  type ChannelOutboundTransitionDecision,
+  type ChannelOutboundTransitionRefusal,
+  type FirstContactAttemptPlan,
+  type FirstContactAttemptRefusal,
+  type PreparedChannelOutboundSend
+} from "./channel-outbound.js";
+export {
+  INBOUND_MESSAGE_PREVIEW_MAX_CHARS,
+  parseWhatsMiauWebhookEnvelope,
+  type WhatsMiauInboundIgnoreReason,
+  type WhatsMiauWebhookParse
+} from "./channel-inbound.js";
+export {
+  WHATSAPP_PAIRING_STATES,
+  WHATSMIAU_CREATE_INSTANCE_DEFAULTS,
+  WHATSMIAU_WEBHOOK_EVENTS,
+  buildWhatsMiauCreateInstanceBody,
+  buildWhatsMiauWebhookSetBody,
+  isPublicHttpsWebhookUrl,
+  isWhatsAppPairingState,
+  parseWhatsAppConnectPayload,
+  parseWhatsAppFetchInstancesPayload,
+  parseWhatsAppPairingState,
+  whatsAppInstanceNameFor,
+  type WhatsAppConnectReading,
+  type WhatsAppFetchedInstance,
+  type WhatsAppPairingState
+} from "./whatsapp-pairing.js";
 export {
   CATEGORICAL_CHART_COLOR_COUNT,
   OPERATIONAL_DASHBOARD_RECENT_DAYS,

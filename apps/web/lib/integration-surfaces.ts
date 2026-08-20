@@ -8,7 +8,7 @@ import { PLUGA_LEADS_ENDPOINT_PATH } from "./pluga-templates";
  * (`app/workspace/[slug]/integrations/<segment>/`), and nothing at runtime
  * checks that it does — a typo would compile.
  */
-export type IntegrationSegment = "pluga" | "landing-page";
+export type IntegrationSegment = "pluga" | "landing-page" | "whatsapp";
 
 /**
  * Binds an integration screen to the provider it administers.
@@ -90,4 +90,15 @@ export const LANDING_PAGE_SURFACE: IntegrationSurface = {
     disableWarning:
       "Nenhum lead novo da landing page é aceito enquanto a conexão estiver desativada. A configuração e o segredo continuam guardados: você pode reativar a qualquer momento sem gerar um novo segredo."
   }
+};
+
+/**
+ * WhatsApp administers WHATSMIAU. It is not a secret-panel surface: the
+ * account apikey never belongs to the tenant, and the webhook token is never
+ * shown in the browser.
+ */
+export const WHATSMIAU_SURFACE = {
+  segment: "whatsapp" as const satisfies IntegrationSegment,
+  provider: "WHATSMIAU" as const,
+  webhookPath: "/api/webhooks/whatsmiau"
 };

@@ -4,7 +4,7 @@ O isolamento entre workspaces tem **duas camadas**: escopo explícito na aplica�
 
 **Status:** accepted · 2026-08-04
 
-> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a regra 9 fecha em **seis** funções desde a emenda de 2026-08-19 (era três neste ADR, quatro no 0019, cinco no ticket 15, seis na Fase 3 — a sexta é a descoberta da varredura de SLA e estagnação). `FORCE RLS` exige um executor técnico `NOLOGIN` com policies/grants mínimos para que as funções privadas funcionem sem dar bypass ao app ou ao worker. A enumeração canônica vive no ADR-0019.
+> **Emendado pelo [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md):** a regra 9 fecha em **sete** funções desde a emenda de 2026-08-19 da Fase 4 (era três neste ADR, quatro no 0019, cinco no ticket 15, seis na Fase 3, sete no ticket 00 do Canal — a sétima é `claim_pending_channel_attempts`). `FORCE RLS` exige um executor técnico `NOLOGIN` com policies/grants mínimos para que as funções privadas funcionem sem dar bypass ao app ou ao worker. A enumeração canônica vive no ADR-0019.
 
 ## O problema que o stack doc não registra
 
@@ -53,11 +53,11 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
 9. **`SECURITY DEFINER` só em schema privado, e a lista é fechada.** Existem consultas que precisam acontecer **antes** de haver tenant, e por isso não podem passar por policy keiada no GUC. Elas não justificam bypass para o app inteiro: cada uma vira uma função `SECURITY DEFINER` em schema `private`, com superfície mínima, `EXECUTE` revogado de todo papel que não seja o do app, `search_path` fixado e owner técnico `NOLOGIN` definido no ADR-0019. Policies para esse owner são por tabela/comando necessário; as policies de app/worker continuam no GUC.
 
-   A redação original desta regra enumerava **quatro**, e nenhuma a mais. O [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) é quem fecha a lista: cinco desde o ticket 15, **seis** desde 2026-08-19 (`claim_overdue_opportunity_workspaces`, só `workspace_id`, sem payload nem PII). A tabela abaixo é o recorte original; a enumeração vigente e o Seam 3 vivem naquele ADR.
+   A redação original desta regra enumerava **quatro**, e nenhuma a mais. O [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) é quem fecha a lista: cinco desde o ticket 15, seis desde a Fase 3, **sete** desde 2026-08-19 da Fase 4 (`claim_pending_channel_attempts`, só `(attempt_id, workspace_id)`, sem PII). A tabela abaixo é o recorte original; a enumeração vigente e o Seam 3 vivem naquele ADR.
 
    | Função | Por que não tem tenant | O que devolve |
    |---|---|---|
-   | `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `workspace_id` |
+   | `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `(workspace_id, integration_connection_id)` — emenda 2026-08-20, [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) |
    | `claim_pending_events` | O dispatcher procura pendência de todos os workspaces, sem sessão e sem job prévio | Só `(id, workspace_id)` — nunca `raw`, que carrega CPF e telefone |
    | `provision_workspace` | Cria o Workspace, o vínculo do primeiro membro e o funil padrão; o tenant ainda não existe | `workspace_id` |
    | `resolve_user_workspaces` | A sessão valida o slug contra `WorkspaceMember` antes de conhecer o `workspace_id` | Somente escolhas/associação do próprio usuário: `workspace_id`, `slug`, `name`, `role` |

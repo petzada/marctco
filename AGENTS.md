@@ -20,9 +20,9 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 ## Implementação
 
-Fases 0–3 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1), [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2) e [.scratch/tempo/](./.scratch/tempo/) (3). Fechamento 0–2: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md). Fechamento da Fase 3: [.scratch/tempo/PROMPT-HANDOFF.md](./.scratch/tempo/PROMPT-HANDOFF.md) (`039af31` na branch `docs/fase-3-spec-e-tickets`). As emendas de ADR-0019 e ADR-0016 da Fase 3 estão na árvore; o ticket 09 as materializou.
+Fases 0–4 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1), [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2), [.scratch/tempo/](./.scratch/tempo/) (3) e [.scratch/canal/](./.scratch/canal/) (4). Fechamento 0–2: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md). Handoffs: [Fase 3](./.scratch/tempo/PROMPT-HANDOFF.md) e [Fase 4](./.scratch/canal/PROMPT-HANDOFF.md).
 
-**Próxima: Fase 4 (Canal)** conforme [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — WhatsMiau + template de 1º contato + timeline no card. Sem spec nesta árvore ainda.
+**Próxima: Fase 5 (Papel)** conforme [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — documentos/proposta no card, upload R2, assinatura e vistas globais de Contratos/Documentos. A Fase 4 está fechada; não reabrir tickets de [.scratch/canal/](./.scratch/canal/).
 
 [PROMPT-INICIAL.md](./PROMPT-INICIAL.md) e [.scratch/tempo/PROMPT-ORQUESTRACAO.md](./.scratch/tempo/PROMPT-ORQUESTRACAO.md) são históricos das fatias que já fecharam.
 
@@ -52,7 +52,7 @@ Fases 0–3 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/funda
 | [0016](./docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md) | **Contexto de acesso e leitor escopado** — `packages/db` não devolve o client do Prisma |
 | [0017](./docs/adr/0017-ingestao-como-decisao-e-plano.md) | **Ingestão é decisão pura; o plano de escrita é dado** — `IntakePlan`, dois chamadores |
 | [0018](./docs/adr/0018-marcador-como-modulo.md) | Marcador é módulo de domínio: `markersFor` responde "o que este lead tem" |
-| [0019](./docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) | Resolução pré-contexto: lista fechada de funções privadas (seis desde a Fase 3; era quatro, depois cinco no ticket 15), executor `NOLOGIN` sob `FORCE RLS`, `UserContext` único |
+| [0019](./docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) | Resolução pré-contexto: lista fechada de funções privadas (sete desde o ticket 00 da Fase 4; era quatro, depois cinco no ticket 15, seis na Fase 3), executor `NOLOGIN` sob `FORCE RLS`, `UserContext` único |
 | [0020](./docs/adr/0020-tag-no-membro-define-o-time.md) | **Tag no membro define o time;** tag na oportunidade não se herda |
 | [0021](./docs/adr/0021-dois-caminhos-de-nascimento-login-fechado.md) | **Dois caminhos de nascimento;** login fechado — marctco provisiona, Direção cadastra colaborador |
 | [0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) | **Workspace é fronteira de captação;** emendado: a fronteira é o dono ([ADR-0030](./docs/adr/0030-workspace-e-fronteira-do-dono.md)); tag no membro é o time |

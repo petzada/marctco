@@ -6,6 +6,7 @@ const listLeadActivities = vi.fn();
 const listLeadTimeline = vi.fn();
 const listTeam = vi.fn();
 const getWorkspaceSettings = vi.fn();
+const getOpportunityWhatsAppConnectionIndicator = vi.fn();
 const resolveWorkspaceAccess = vi.fn();
 
 vi.mock("@marctco/db", () => ({
@@ -13,7 +14,8 @@ vi.mock("@marctco/db", () => ({
   listLeadActivities,
   listLeadTimeline,
   listTeam,
-  getWorkspaceSettings
+  getWorkspaceSettings,
+  getOpportunityWhatsAppConnectionIndicator
 }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
 vi.mock("next/link", () => ({ default: (props: { href: string; children: unknown }) => props.children }));
@@ -44,9 +46,13 @@ describe("Lead card page", () => {
     listLeadActivities.mockReset().mockResolvedValue([]);
     listLeadTimeline.mockReset().mockResolvedValue({ facts: [], has_more: false });
     listTeam.mockReset().mockResolvedValue([]);
+    getOpportunityWhatsAppConnectionIndicator.mockReset().mockResolvedValue({ connected: false });
     getWorkspaceSettings.mockReset().mockResolvedValue({
       first_contact_sla_minutes: 120,
-      stagnation_days: 7
+      stagnation_days: 7,
+      first_contact_trigger: "ON_ASSIGNMENT",
+      first_contact_template_body:
+        "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
     });
     resolveWorkspaceAccess.mockReset();
   });
@@ -60,6 +66,7 @@ describe("Lead card page", () => {
     expect(getLead).toHaveBeenCalledOnce();
     expect(listLeadActivities).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
     expect(listLeadTimeline).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
+    expect(getOpportunityWhatsAppConnectionIndicator).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
     expect(listTeam).not.toHaveBeenCalled();
   });
 

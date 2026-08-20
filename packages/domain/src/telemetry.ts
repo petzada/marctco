@@ -19,6 +19,8 @@ const allowedKeys = new Set([
   "job_id",
   "workspace_id",
   "integration_event_id",
+  "attempt_id",
+  "integration_connection_id",
   "source",
   "external_lead_id",
   "event",

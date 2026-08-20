@@ -3,8 +3,11 @@ export {
   createJobContext,
   isJobContext,
   isUserContext,
+  jobChannelAttemptId,
+  jobChannelInboundConnectionId,
   jobIntegrationEventId,
   SCHEDULED_SWEEP_NAMES,
+  withResolvedFeatureFlags,
   WorkspaceRole,
   type AccessContext,
   type CreateJobContextInput,
@@ -82,11 +85,13 @@ export {
 export {
   generateIntegrationToken,
   hashIntegrationToken,
+  integrationTokenHashesEqual,
   resolveWorkspaceByIntegrationToken,
   type GeneratedIntegrationToken,
   type IntegrationConnectionStatus,
   type IntegrationProvider,
-  type ResolvedIntegrationWorkspace
+  type ResolvedIntegrationWorkspace,
+  type WhatsAppPairingState
 } from "./integration-connection.js";
 
 // --- Ticket 12: the Leads screen's named operations -----------------------
@@ -304,4 +309,53 @@ export {
   type UnresolvedNotification,
   type UnresolvedNotificationList
 } from "./notifications.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 02 — Canal: WhatsMiau connection. Appended at the end so parallel
+// Fase 4 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  WhatsAppConnectionError,
+  commitWhatsAppWebhookSecret,
+  createWhatsAppConnection,
+  getOpportunityWhatsAppConnectionIndicator,
+  getWhatsAppConnection,
+  setWhatsAppPairingState,
+  type CreatedWhatsAppConnection,
+  type OpportunityWhatsAppConnectionIndicator,
+  type WhatsAppConnectionView,
+  type WhatsAppWebhookSecretCommit
+} from "./whatsapp-connection.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 03a — Canal: outbound attempt / Postgres outbox. Appended at the
+// end so parallel Fase 4 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  ChannelOutboundError,
+  acceptChannelOutboundAttempt,
+  beginChannelOutboundAttempt,
+  claimPendingChannelAttempts,
+  dispatchChannelOutboundAttempt,
+  failChannelOutboundAttempt,
+  getChannelOutboundAttempt,
+  loadChannelOutboundSend,
+  planAndRecordChannelOutboundAttempt,
+  type ChannelOutboundAttemptView,
+  type ChannelOutboundRefusal,
+  type PendingChannelAttempt,
+  type PlanChannelOutboundAttemptInput,
+  type PlannedChannelOutboundAttempt
+} from "./channel-outbound.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 05 — Canal: inbound WhatsMiau webhook. Appended at the end so
+// parallel Fase 4 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  recordWhatsAppInbound,
+  type RecordWhatsAppInboundInput,
+  type WhatsAppInboundIgnoreReason,
+  type WhatsAppInboundResult
+} from "./channel-inbound.js";
 

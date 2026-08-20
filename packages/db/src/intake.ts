@@ -15,7 +15,9 @@ import {
   planPersonLookup,
   reusedPersonId
 } from "@marctco/domain";
+import type { OpportunityPostCreationEffect } from "@marctco/domain/feature-flags";
 import type { AccessContext } from "./access-context.js";
+import { planArrivalChannelOutboundInTransaction } from "./channel-outbound.js";
 import { createPrismaClient } from "./client.js";
 import { ingestionTimelineConflictTarget } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
@@ -56,6 +58,12 @@ export interface DecideAndApplyIntakeInput {
 export interface DecidedAndAppliedIntake {
   readonly intake_plan_kind: IntakePlan["kind"];
   readonly applied: AppliedIntakePlan;
+  readonly post_creation_effects: readonly OpportunityPostCreationEffect[];
+}
+
+interface AppliedIntakeResult {
+  readonly applied: AppliedIntakePlan;
+  readonly post_creation_effects: readonly OpportunityPostCreationEffect[];
 }
 
 interface IdRow {
@@ -85,6 +93,11 @@ export interface RecordLeadSubmissionInput {
   readonly integration_event_id: string;
   /** Truth about the origin. Not the Opportunity's `arrived_at`. */
   readonly received_at: Date;
+  /**
+   * Evidence from the `v1` contract. Written on INSERT and never overwritten
+   * on a duplicate transmission (ADR-0007, ADR-0008).
+   */
+  readonly whatsapp_opt_in: boolean | null;
 }
 
 /**
@@ -168,7 +181,7 @@ export async function recordLeadSubmission(
     const inserted = await transaction.$queryRaw<IdRow[]>`
       INSERT INTO lead_submissions (
         workspace_id, source, external_lead_id, received_at,
-        last_integration_event_id, updated_at
+        last_integration_event_id, whatsapp_opt_in, updated_at
       )
       VALUES (
         ${context.workspace_id}::uuid,
@@ -176,6 +189,7 @@ export async function recordLeadSubmission(
         ${key.external_lead_id},
         ${input.received_at}::timestamptz,
         ${input.integration_event_id}::uuid,
+        ${input.whatsapp_opt_in},
         CURRENT_TIMESTAMP
       )
       ON CONFLICT (workspace_id, source, external_lead_id) DO NOTHING
@@ -265,8 +279,11 @@ async function findOpenOpportunitiesOfPersonInTransaction(
  *
  * The domain still owns every decision: `planPersonLookup` describes the
  * search, `decidePersonIdentity` and `decideIntake` produce inert data, and the
- * executor below only applies that plan. The coordinator merely keeps those
- * reads and the write under the same arbitration boundary (ADR-0007, ADR-0017).
+ * executor below only applies that plan. Arrival first-contact is consumed
+ * inside the same transaction by `planArrivalChannelOutboundInTransaction`,
+ * so the worker and the quarantine release handler never remount flags
+ * (ADR-0003, ADR-0017). The coordinator merely keeps those reads and the write
+ * under the same arbitration boundary (ADR-0007, ADR-0017).
  */
 export async function decideAndApplyIntake(
   context: AccessContext,
@@ -318,9 +335,13 @@ export async function decideAndApplyIntake(
       integration_event_id: input.integration_event_id,
       now: input.now
     });
-    const applied = await applyIntakePlanInTransaction(transaction, context, plan);
+    const { applied, post_creation_effects } = await applyIntakePlanInTransaction(
+      transaction,
+      context,
+      plan
+    );
 
-    return { intake_plan_kind: plan.kind, applied };
+    return { intake_plan_kind: plan.kind, applied, post_creation_effects };
   });
 }
 
@@ -375,16 +396,17 @@ export async function applyIntakePlan(
   plan: IntakePlan,
   prisma: PrismaClient = sharedPrisma
 ): Promise<AppliedIntakePlan> {
-  return withAccessContext(prisma, context, (transaction) =>
-    applyIntakePlanInTransaction(transaction, context, plan)
-  );
+  return withAccessContext(prisma, context, async (transaction) => {
+    const { applied } = await applyIntakePlanInTransaction(transaction, context, plan);
+    return applied;
+  });
 }
 
 async function applyIntakePlanInTransaction(
   transaction: ScopedTransactionClient,
   context: AccessContext,
   plan: IntakePlan
-): Promise<AppliedIntakePlan> {
+): Promise<AppliedIntakeResult> {
     switch (plan.kind) {
       case "QUARANTINE": {
         // Still points the submission at the transmission being processed: a
@@ -403,7 +425,7 @@ async function applyIntakePlanInTransaction(
           plan.integration_event_id,
           "QUARANTINED"
         );
-        return { kind: "QUARANTINE" } as const;
+        return { applied: { kind: "QUARANTINE" }, post_creation_effects: [] };
       }
       case "RETRANSMISSION": {
         // Points at the new transmission, counts it, and stops. There is no
@@ -447,7 +469,10 @@ async function applyIntakePlanInTransaction(
           plan.integration_event_id,
           "PROCESSED"
         );
-        return { kind: "RETRANSMISSION", opportunity_id: plan.opportunity_id } as const;
+        return {
+          applied: { kind: "RETRANSMISSION", opportunity_id: plan.opportunity_id },
+          post_creation_effects: []
+        };
       }
       case "NEW_OPPORTUNITY": {
         const person_id = await writePerson(transaction, context.workspace_id, plan);
@@ -490,7 +515,16 @@ async function applyIntakePlanInTransaction(
           plan.integration_event_id,
           "PROCESSED"
         );
-        return { kind: "NEW_OPPORTUNITY", opportunity_id, person_id } as const;
+        const arrival = await planArrivalChannelOutboundInTransaction(
+          transaction,
+          context,
+          opportunity_id
+        );
+        return {
+          applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id },
+          post_creation_effects:
+            arrival.recorded.kind === "NONE" ? [] : arrival.post_creation_effects
+        };
       }
       default: {
         // The compiler proves the switch is total; this catches a variant added
@@ -595,7 +629,7 @@ async function writeOpportunity(
   const created = await transaction.$queryRaw<IdRow[]>`
     INSERT INTO opportunities (
       workspace_id, person_id, pipeline_id, stage_id, area, status,
-      arrived_at, last_movement_at, missing_phone, financing_type, financial_institution,
+      arrived_at, last_movement_at, missing_phone, whatsapp_opt_in, financing_type, financial_institution,
       installment_amount, campaign_id, campaign_name, form_id, form_name, updated_at
     )
     VALUES (
@@ -608,6 +642,7 @@ async function writeOpportunity(
       ${plan.arrived_at}::timestamptz,
       ${plan.arrived_at}::timestamptz,
       ${plan.missing_phone},
+      ${plan.whatsapp_opt_in},
       ${plan.financing_type}::financing_type,
       ${plan.financial_institution},
       ${plan.installment_amount}::numeric,

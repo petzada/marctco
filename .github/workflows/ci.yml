@@ -104,6 +104,9 @@ jobs:
       # Seam 2 runs against this job's real Postgres and real Redis, with BullMQ
       # publishing and consuming for actual — never a processor called inline.
       - run: pnpm test:seam2
+      # Seam 4 is the same infra for the channel outbox: real assignment, real
+      # queue, real worker, WhatsMiau HTTP replaced by a fake port.
+      - run: pnpm test:seam4
       - run: pnpm test:a7
       - run: pnpm test:managed-migration
 

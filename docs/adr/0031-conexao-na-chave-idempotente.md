@@ -4,6 +4,8 @@ A chave idempotente do envio passa a ser `UNIQUE(workspace_id, integration_conne
 
 **Status:** accepted · 2026-08-14
 
+> **Composição com o [ADR-0003](./0003-whatsapp-instancia-unica-gatilho-atribuicao.md) (Fase 4, ticket 00).** N conexões por provedor continua canônico: Pluga e landing page admitem várias no mesmo workspace, e a chave idempotente do envio continua incluindo `integration_connection_id`. WhatsMiau é a exceção pontual daquele ADR: **no máximo uma conexão WhatsMiau não desligada por workspace**, garantida por constraint parcial específica (`provider = WHATSMIAU` e status não desligado). Isso **não** restaura `UNIQUE(workspace_id, provider)` global nem reabre a chave do envio.
+
 **Emenda o [ADR-0007](./0007-ingestao-idempotencia.md)** na chave de identidade do envio e o [ADR-0008](./0008-fronteira-conector-dominio.md) na superfície da conexão. Sustenta o [ADR-0030](./0030-workspace-e-fronteira-do-dono.md): é o que permite campanha exclusiva sem tenant novo.
 
 ## O problema: perda silenciosa de lead

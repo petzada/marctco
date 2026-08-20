@@ -104,8 +104,23 @@ describe("decideIntake: the unambiguous lead", () => {
       pipeline_id: destination.pipeline_id,
       stage_id: destination.entry_stage_id,
       missing_phone: false,
+      whatsapp_opt_in: null,
       reviews: []
     });
+  });
+
+  it("snapshots the submission's WhatsApp opt-in onto the new Opportunity plan", () => {
+    const consented = expectPlan(
+      decide({ normalized: normalized({ phone: "11987654321", whatsapp_opt_in: true }) }),
+      "NEW_OPPORTUNITY"
+    );
+    expect(consented.whatsapp_opt_in).toBe(true);
+
+    const refused = expectPlan(
+      decide({ normalized: normalized({ phone: "11987654321", whatsapp_opt_in: false }) }),
+      "NEW_OPPORTUNITY"
+    );
+    expect(refused.whatsapp_opt_in).toBe(false);
   });
 
   it("reuses the Pessoa the identity rule recognised, without a review", () => {

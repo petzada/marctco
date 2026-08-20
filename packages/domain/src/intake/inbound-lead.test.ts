@@ -136,6 +136,15 @@ describe("readLeadPayload", () => {
   it("defaults the contract version when the payload omits it", () => {
     expect(readLeadPayload({}).fields.schema_version).toBe("v1");
   });
+
+  it("reads WhatsApp opt-in as true, false or null, never inferred from a phone", () => {
+    expect(readLeadPayload({ whatsapp_opt_in: true }).fields.whatsapp_opt_in).toBe(true);
+    expect(readLeadPayload({ whatsapp_opt_in: "sim" }).fields.whatsapp_opt_in).toBe(true);
+    expect(readLeadPayload({ whatsapp_opt_in: false }).fields.whatsapp_opt_in).toBe(false);
+    expect(readLeadPayload({ whatsapp_opt_in: "nao" }).fields.whatsapp_opt_in).toBe(false);
+    expect(readLeadPayload({ phone: "11987654321" }).fields.whatsapp_opt_in).toBeNull();
+    expect(readLeadPayload({ whatsapp_opt_in: "talvez" }).fields.whatsapp_opt_in).toBeNull();
+  });
 });
 
 describe("buildInboundLead", () => {
@@ -145,6 +154,7 @@ describe("buildInboundLead", () => {
     expect(inbound.source).toBe("META_LEAD_ADS");
     expect(inbound.external_lead_id).toBe("lead-1");
     expect(inbound.name).toBe("Maria");
+    expect(inbound.whatsapp_opt_in).toBeNull();
   });
 
   it("refuses an empty external_lead_id, which would deduplicate nothing", () => {

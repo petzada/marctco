@@ -152,6 +152,14 @@ describe("normalize", () => {
     expect(normalized.diagnostics).toEqual([]);
   });
 
+  it("copies WhatsApp opt-in without inferring it from a phone", () => {
+    expect(normalize(inbound({ whatsapp_opt_in: true, phone: "11987654321" })).whatsapp_opt_in).toBe(
+      true
+    );
+    expect(normalize(inbound({ whatsapp_opt_in: false })).whatsapp_opt_in).toBe(false);
+    expect(normalize(inbound({ phone: "11987654321" })).whatsapp_opt_in).toBeNull();
+  });
+
   it("is idempotent: normalizing normalized values changes nothing", () => {
     const once = normalize(
       inbound({ phones: ["(11) 98765-4321"], emails: ["Maria@Exemplo.com"], cpf: "529.982.247-25" })

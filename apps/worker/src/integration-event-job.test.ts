@@ -5,7 +5,6 @@ const readIntegrationEventForProcessing = vi.fn();
 const resolveIntakeDestination = vi.fn();
 const recordLeadSubmission = vi.fn();
 const decideAndApplyIntake = vi.fn();
-const readWorkspaceFeatureFlags = vi.fn();
 const createJobContext = vi.fn((input: unknown) => input);
 
 vi.mock("@marctco/db", () => ({
@@ -13,7 +12,6 @@ vi.mock("@marctco/db", () => ({
   resolveIntakeDestination,
   recordLeadSubmission,
   decideAndApplyIntake,
-  readWorkspaceFeatureFlags,
   createJobContext
 }));
 
@@ -54,13 +52,9 @@ describe("processIntegrationEventJob", () => {
       .mockReset()
       .mockResolvedValue({
         intake_plan_kind: "NEW_OPPORTUNITY",
-        applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() }
+        applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() },
+        post_creation_effects: []
       });
-    readWorkspaceFeatureFlags.mockReset().mockResolvedValue({
-      auto_primeiro_contato: false,
-      score_cabimento_llm: false,
-      resumo_handoff_llm: false
-    });
     createJobContext.mockClear();
   });
 
@@ -117,7 +111,11 @@ describe("processIntegrationEventJob", () => {
 
     const [, input] = recordLeadSubmission.mock.calls[0] as [
       unknown,
-      { key: { source: string; external_lead_id: string }; received_at: Date }
+      {
+        key: { source: string; external_lead_id: string };
+        received_at: Date;
+        whatsapp_opt_in: boolean | null;
+      }
     ];
     // Pluga carries no id of its own in this slice, so the connector uses the
     // event id: identical on every reprocessing, which is what stops a
@@ -127,6 +125,7 @@ describe("processIntegrationEventJob", () => {
       external_lead_id: integration_event_id
     });
     expect(input.received_at).toEqual(RECEIVED_AT);
+    expect(input.whatsapp_opt_in).toBeNull();
   });
 
   it("coordinates the decision in the ENTRY stage, with now equal to the received instant", async () => {
@@ -140,20 +139,11 @@ describe("processIntegrationEventJob", () => {
     });
   });
 
-  it("keeps the post-creation hook inert while auto first contact is disabled", async () => {
-    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
-
-    expect(readWorkspaceFeatureFlags).toHaveBeenCalledWith(
-      expect.objectContaining({ workspace_id })
-    );
-    expect(processed.post_creation_effects).toEqual([]);
-  });
-
-  it("emits one server-side effect only after a new Opportunity was actually created", async () => {
-    readWorkspaceFeatureFlags.mockResolvedValue({
-      auto_primeiro_contato: true,
-      score_cabimento_llm: false,
-      resumo_handoff_llm: false
+  it("forwards arrival-channel effects recorded in the coordinator and does not remount flags", async () => {
+    decideAndApplyIntake.mockResolvedValue({
+      intake_plan_kind: "NEW_OPPORTUNITY",
+      applied: { kind: "NEW_OPPORTUNITY", opportunity_id, person_id: randomUUID() },
+      post_creation_effects: [{ kind: "AUTO_FIRST_CONTACT", opportunity_id }]
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
@@ -163,21 +153,21 @@ describe("processIntegrationEventJob", () => {
     ]);
   });
 
+  it("keeps the arrival hook empty when the coordinator recorded nothing", async () => {
+    const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
+    expect(processed.post_creation_effects).toEqual([]);
+  });
+
   it("does not emit an effect when a concurrent worker reused the existing Opportunity", async () => {
-    readWorkspaceFeatureFlags.mockResolvedValue({
-      auto_primeiro_contato: true,
-      score_cabimento_llm: false,
-      resumo_handoff_llm: false
-    });
     decideAndApplyIntake.mockResolvedValue({
       intake_plan_kind: "RETRANSMISSION",
-      applied: { kind: "RETRANSMISSION", opportunity_id }
+      applied: { kind: "RETRANSMISSION", opportunity_id },
+      post_creation_effects: []
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
 
     expect(processed.post_creation_effects).toEqual([]);
-    expect(readWorkspaceFeatureFlags).not.toHaveBeenCalled();
   });
 
   it("routes by the connection's target pipeline when it declares one", async () => {
@@ -209,7 +199,8 @@ describe("processIntegrationEventJob", () => {
     });
     decideAndApplyIntake.mockResolvedValue({
       intake_plan_kind: "QUARANTINE",
-      applied: { kind: "QUARANTINE" }
+      applied: { kind: "QUARANTINE" },
+      post_creation_effects: []
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });
@@ -229,7 +220,8 @@ describe("processIntegrationEventJob", () => {
     });
     decideAndApplyIntake.mockResolvedValue({
       intake_plan_kind: "RETRANSMISSION",
-      applied: { kind: "RETRANSMISSION", opportunity_id }
+      applied: { kind: "RETRANSMISSION", opportunity_id },
+      post_creation_effects: []
     });
 
     const processed = await processIntegrationEventJob({ integration_event_id, workspace_id });

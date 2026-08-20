@@ -154,6 +154,7 @@ const leadPayloadSchema = z
     ad_name: optionalText,
     platform: optionalText,
     is_organic: optionalFlag,
+    whatsapp_opt_in: optionalFlag,
 
     answers: optionalAnswers
   })
@@ -203,7 +204,12 @@ export const inboundLeadSchema = z.object({
   installment_amount: z.string().nullable(),
 
   attribution: attributionSchema,
-  answers: z.record(z.string(), z.string()).readonly()
+  answers: z.record(z.string(), z.string()).readonly(),
+  /**
+   * Consent evidence from the origin. Absent or unreadable is `null`, never
+   * inferred from a phone, campaign or provider (ADR-0008).
+   */
+  whatsapp_opt_in: z.boolean().nullable()
 });
 
 export type InboundLead = z.infer<typeof inboundLeadSchema>;
@@ -260,7 +266,8 @@ export function readLeadPayload(raw: unknown): LeadPayloadReading {
         platform: payload.platform ?? null,
         is_organic: payload.is_organic ?? null
       },
-      answers: payload.answers ?? {}
+      answers: payload.answers ?? {},
+      whatsapp_opt_in: payload.whatsapp_opt_in ?? null
     }
   };
 }

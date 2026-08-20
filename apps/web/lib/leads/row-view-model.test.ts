@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LeadListRow } from "@marctco/db";
 import {
   DEFAULT_FIRST_CONTACT_SLA_MINUTES,
+  DEFAULT_FIRST_CONTACT_TEMPLATE_BODY,
   DEFAULT_STAGNATION_DAYS,
   type ResolvedWorkspaceSettings
 } from "@marctco/domain";
@@ -15,7 +16,9 @@ import {
 
 const settings: ResolvedWorkspaceSettings = {
   first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-  stagnation_days: DEFAULT_STAGNATION_DAYS
+  stagnation_days: DEFAULT_STAGNATION_DAYS,
+  first_contact_trigger: "ON_ASSIGNMENT",
+  first_contact_template_body: DEFAULT_FIRST_CONTACT_TEMPLATE_BODY
 };
 const arrived_at = new Date("2026-08-11T12:00:00.000Z");
 const nowInside = new Date(arrived_at.getTime() + 30 * 60_000);

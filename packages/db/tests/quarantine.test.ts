@@ -95,7 +95,8 @@ async function seedQuarantinedLead(raw: Record<string, string>): Promise<Quarant
     {
       key: { source: "META_LEAD_ADS", external_lead_id },
       integration_event_id: event_id,
-      received_at: RECEIVED_AT
+      received_at: RECEIVED_AT,
+      whatsapp_opt_in: null
     },
     app
   );
@@ -131,7 +132,8 @@ async function releaseQuarantinedLead(
     {
       key: { source: quarantined.source, external_lead_id: quarantined.external_lead_id },
       integration_event_id: quarantined.integration_event_id,
-      received_at: quarantined.received_at
+      received_at: quarantined.received_at,
+      whatsapp_opt_in: inbound.whatsapp_opt_in
     },
     app
   );

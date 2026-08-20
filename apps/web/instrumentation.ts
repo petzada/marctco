@@ -10,6 +10,8 @@ export async function register(): Promise<void> {
   if (process.env.REDIS_URL) {
     const { startIngestionDispatcher } = await import("./lib/ingestion-queue");
     startIngestionDispatcher();
+    const { startChannelOutboundDispatcher } = await import("./lib/channel-queue");
+    startChannelOutboundDispatcher();
   }
 
   // Retention is not queue work: it touches only PostgreSQL, so it starts even

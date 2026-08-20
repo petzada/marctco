@@ -31,6 +31,7 @@ export interface LeadTimelineFact {
   readonly activity_type: ActivityType | null;
   readonly activity_actor_name: string | null;
   readonly ingestion_source: PrismaLeadSource | null;
+  readonly message_preview: string | null;
 }
 
 export interface LeadTimelinePage {
@@ -48,6 +49,7 @@ interface TimelineRow {
   readonly activity_type: string | null;
   readonly activity_actor_name: string | null;
   readonly ingestion_source: string | null;
+  readonly message_preview: string | null;
 }
 
 const MEMBER_NAME = Prisma.sql`
@@ -81,7 +83,8 @@ function asFact(row: TimelineRow): LeadTimelineFact {
     activity_title: row.activity_title,
     activity_type: row.activity_type !== null && isActivityType(row.activity_type) ? row.activity_type : null,
     activity_actor_name: row.activity_actor_name,
-    ingestion_source: row.ingestion_source as PrismaLeadSource | null
+    ingestion_source: row.ingestion_source as PrismaLeadSource | null,
+    message_preview: row.message_preview
   };
 }
 
@@ -140,7 +143,12 @@ export async function listLeadTimeline(
           )
           THEN submission.source::text
           ELSE NULL
-        END AS ingestion_source
+        END AS ingestion_source,
+        CASE
+          WHEN event.type = 'WHATSAPP_INBOUND_RECEIVED'::opportunity_timeline_event_type
+          THEN event.message_preview
+          ELSE NULL
+        END AS message_preview
       FROM opportunity_timeline_events AS event
       JOIN opportunities AS opportunity
         ON opportunity.workspace_id = event.workspace_id

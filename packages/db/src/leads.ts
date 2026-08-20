@@ -16,6 +16,7 @@ import {
   type TableMarker
 } from "@marctco/domain";
 import type { UserContext } from "./access-context.js";
+import { planAssignmentChannelOutboundInTransaction } from "./channel-outbound.js";
 import { createPrismaClient } from "./client.js";
 import { stampOpportunityMovement } from "./internal/opportunity-movement.js";
 import { assertUuid } from "./internal/uuid.js";
@@ -887,6 +888,23 @@ async function loadAssignmentMembers(
   return new Map(rows.map((row) => [row.user_id, row]));
 }
 
+/**
+ * Thin assignment hook: only an Attendant destination on the assignment
+ * trigger may plan. Snapshot data is read in this same tenant transaction
+ * and handed to the 03a recorder — no Redis, no HTTP (ADR-0003, ADR-0013).
+ */
+async function planAssignmentChannelOutbound(
+  transaction: ScopedTransactionClient,
+  context: UserContext,
+  input: {
+    readonly destination_role: AssignmentRole;
+    readonly destination_user_id: string;
+    readonly opportunity_ids: readonly string[];
+  }
+): Promise<void> {
+  await planAssignmentChannelOutboundInTransaction(transaction, context, input);
+}
+
 function assignmentDenial(decision: { readonly allowed: boolean; readonly reason?: string }): never {
   throw new Error(decision.reason ?? "Lead assignment is not allowed");
 }
@@ -962,6 +980,11 @@ export async function assignLeads(
       workspace_id: context.workspace_id,
       opportunity_ids: claimed.map((row) => row.opportunity_id),
       type: "ASSIGNED"
+    });
+    await planAssignmentChannelOutbound(transaction, context, {
+      destination_role: destination.role,
+      destination_user_id: input.user_id,
+      opportunity_ids: claimed.map((row) => row.opportunity_id)
     });
     const refusedIds = opportunity_ids.filter((id) => !claimedIds.has(id));
     const current = refusedIds.length === 0 ? [] : await transaction.$queryRaw<Array<{
@@ -1098,6 +1121,11 @@ export async function reassignLeads(
       workspace_id: context.workspace_id,
       opportunity_ids: claimed.map((row) => row.opportunity_id),
       type: "REASSIGNED"
+    });
+    await planAssignmentChannelOutbound(transaction, context, {
+      destination_role: destination.role,
+      destination_user_id: input.user_id,
+      opportunity_ids: claimed.map((row) => row.opportunity_id)
     });
     const conflicted = eligible.filter((item) => !claimedIds.has(item.opportunity_id));
     const current = conflicted.length === 0 ? [] : await transaction.$queryRaw<Array<{

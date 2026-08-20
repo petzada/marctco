@@ -18,7 +18,9 @@ const KNOWN_SWEEPS: ReadonlySet<string> = new Set(SCHEDULED_SWEEP_NAMES);
 
 export type JobOrigin =
   | { readonly type: "integration_event"; readonly integration_event_id: string }
-  | { readonly type: "scheduled_sweep"; readonly sweep: ScheduledSweepName };
+  | { readonly type: "scheduled_sweep"; readonly sweep: ScheduledSweepName }
+  | { readonly type: "channel_outbound"; readonly attempt_id: string }
+  | { readonly type: "channel_inbound"; readonly integration_connection_id: string };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -123,14 +125,32 @@ export function createJobContext(input: CreateJobContextInput): JobContext {
   };
   if (origin.type === "integration_event") {
     assertUuid(origin.integration_event_id, "integration_event_id");
-  } else if (!KNOWN_SWEEPS.has(origin.sweep)) {
-    throw new Error(`Unknown scheduled sweep, refusing to build a JobContext: ${JSON.stringify(origin.sweep)}`);
+  } else if (origin.type === "scheduled_sweep") {
+    if (!KNOWN_SWEEPS.has(origin.sweep)) {
+      throw new Error(
+        `Unknown scheduled sweep, refusing to build a JobContext: ${JSON.stringify(origin.sweep)}`
+      );
+    }
+  } else if (origin.type === "channel_outbound") {
+    assertUuid(origin.attempt_id, "attempt_id");
+  } else if (origin.type === "channel_inbound") {
+    assertUuid(origin.integration_connection_id, "integration_connection_id");
+  } else {
+    const unknown: never = origin;
+    throw new Error(`Unknown job origin, refusing to build a JobContext: ${JSON.stringify(unknown)}`);
   }
   return {
     kind: "job",
     workspace_id: input.workspace_id,
     origin
   } as JobContext;
+}
+
+export function withResolvedFeatureFlags<Context extends AccessContext>(
+  context: Context,
+  feature_flags: ResolvedFeatureFlags
+): Context {
+  return { ...context, feature_flags };
 }
 
 export function isUserContext(context: AccessContext): context is UserContext {
@@ -141,10 +161,26 @@ export function isJobContext(context: AccessContext): context is JobContext {
   return context.kind === "job";
 }
 
-/** The event id a processing job carries. Scheduled sweeps have none. */
+/** The event id a processing job carries. Scheduled sweeps and channel jobs have none. */
 export function jobIntegrationEventId(context: JobContext): string {
   if (context.origin.type !== "integration_event") {
     throw new Error("JobContext origin is not an integration event");
   }
   return context.origin.integration_event_id;
+}
+
+/** The outbound attempt a channel job carries. Other origins have none. */
+export function jobChannelAttemptId(context: JobContext): string {
+  if (context.origin.type !== "channel_outbound") {
+    throw new Error("JobContext origin is not a channel outbound attempt");
+  }
+  return context.origin.attempt_id;
+}
+
+/** The WhatsMiau connection an inbound webhook job carries. Other origins have none. */
+export function jobChannelInboundConnectionId(context: JobContext): string {
+  if (context.origin.type !== "channel_inbound") {
+    throw new Error("JobContext origin is not a channel inbound connection");
+  }
+  return context.origin.integration_connection_id;
 }

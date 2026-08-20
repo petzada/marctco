@@ -5,7 +5,10 @@ import {
   createUserContextFromResolvedMembership,
   isJobContext,
   isUserContext,
+  jobChannelAttemptId,
+  jobChannelInboundConnectionId,
   jobIntegrationEventId,
+  withResolvedFeatureFlags,
   WorkspaceRole
 } from "./access-context.js";
 
@@ -120,6 +123,61 @@ describe("createJobContext", () => {
   it("refuses a non-UUID integration_event_id", () => {
     expect(() =>
       createJobContext({ workspace_id: randomUUID(), integration_event_id: "not-a-uuid" })
+    ).toThrow(/must be a UUID/i);
+  });
+
+  it("builds a JobContext for channel outbound from the attempt id, without fabricating an event", () => {
+    const workspace_id = randomUUID();
+    const attempt_id = randomUUID();
+    const context = createJobContext({
+      workspace_id,
+      origin: { type: "channel_outbound", attempt_id }
+    });
+    expect(context.kind).toBe("job");
+    expect(context.workspace_id).toBe(workspace_id);
+    expect(context.origin).toEqual({ type: "channel_outbound", attempt_id });
+    expect("role" in context).toBe(false);
+    expect("integration_event_id" in context).toBe(false);
+    expect(jobChannelAttemptId(context)).toBe(attempt_id);
+    expect(() => jobIntegrationEventId(context)).toThrow(/not an integration event/i);
+  });
+
+  it("attaches resolved feature flags without inventing a role", () => {
+    const workspace_id = randomUUID();
+    const attempt_id = randomUUID();
+    const context = createJobContext({
+      workspace_id,
+      origin: { type: "channel_outbound", attempt_id }
+    });
+    const flagged = withResolvedFeatureFlags(context, {
+      auto_primeiro_contato: true,
+      score_cabimento_llm: false,
+      resumo_handoff_llm: false
+    });
+    expect(flagged.feature_flags?.auto_primeiro_contato).toBe(true);
+    expect(flagged.origin).toEqual({ type: "channel_outbound", attempt_id });
+    expect("role" in flagged).toBe(false);
+  });
+
+  it("builds a JobContext for channel inbound from the authenticated connection", () => {
+    const workspace_id = randomUUID();
+    const integration_connection_id = randomUUID();
+    const context = createJobContext({
+      workspace_id,
+      origin: { type: "channel_inbound", integration_connection_id }
+    });
+    expect(context.origin).toEqual({ type: "channel_inbound", integration_connection_id });
+    expect(jobChannelInboundConnectionId(context)).toBe(integration_connection_id);
+    expect(() => jobIntegrationEventId(context)).toThrow(/not an integration event/i);
+    expect(() => jobChannelAttemptId(context)).toThrow(/not a channel outbound attempt/i);
+  });
+
+  it("refuses a non-UUID channel outbound attempt_id", () => {
+    expect(() =>
+      createJobContext({
+        workspace_id: randomUUID(),
+        origin: { type: "channel_outbound", attempt_id: "not-a-uuid" }
+      })
     ).toThrow(/must be a UUID/i);
   });
 });

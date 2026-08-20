@@ -103,6 +103,7 @@ async function submit(
     source?: LeadSource;
     received_at?: Date;
     workspace_id?: ReturnType<typeof randomUUID>;
+    whatsapp_opt_in?: boolean | null;
   } = {}
 ): Promise<Submitted> {
   const workspace_id = options.workspace_id ?? workspace;
@@ -113,7 +114,8 @@ async function submit(
     {
       key: { source: options.source ?? "META_LEAD_ADS", external_lead_id },
       integration_event_id: event_id,
-      received_at: options.received_at ?? RECEIVED_AT
+      received_at: options.received_at ?? RECEIVED_AT,
+      whatsapp_opt_in: options.whatsapp_opt_in ?? null
     },
     app
   );
@@ -143,6 +145,7 @@ function newOpportunityPlan(
     campaign_name: null,
     form_id: null,
     form_name: null,
+    whatsapp_opt_in: null,
     reviews: [],
     ...overrides
   };
@@ -370,7 +373,8 @@ describe("recordLeadSubmission: the constraint arbitrates, never a SELECT", () =
       {
         key: { source: "META_LEAD_ADS", external_lead_id: key },
         integration_event_id: retransmission_event_id,
-        received_at: RELEASED_AT
+        received_at: RELEASED_AT,
+        whatsapp_opt_in: null
       },
       seeder
     );
@@ -473,6 +477,38 @@ describe("transactional intake and applyIntakePlan: NEW_OPPORTUNITY", () => {
       form_id: null,
       form_name: null
     });
+  });
+
+  it("stores WhatsApp opt-in on the submission and snapshots it onto the Opportunity", async () => {
+    const submitted = await submit(`opt-in-${randomUUID()}`, { whatsapp_opt_in: true });
+    const stored = await seeder.leadSubmission.findUniqueOrThrow({
+      where: { id: submitted.lead_submission_id }
+    });
+    expect(stored.whatsapp_opt_in).toBe(true);
+
+    const applied = await applyNewOpportunity(submitted, { whatsapp_opt_in: true });
+    await expect(
+      seeder.opportunity.findUniqueOrThrow({ where: { id: applied.opportunity_id } })
+    ).resolves.toMatchObject({ whatsapp_opt_in: true });
+  });
+
+  it("does not overwrite WhatsApp opt-in on a duplicate transmission", async () => {
+    const key = `opt-in-keep-${randomUUID()}`;
+    const first = await submit(key, { whatsapp_opt_in: true });
+    const replay_event = await seedEvent();
+    await recordLeadSubmission(
+      createJobContext({ workspace_id: workspace, integration_event_id: replay_event }),
+      {
+        key: { source: "META_LEAD_ADS", external_lead_id: key },
+        integration_event_id: replay_event,
+        received_at: RELEASED_AT,
+        whatsapp_opt_in: false
+      },
+      app
+    );
+    await expect(
+      seeder.leadSubmission.findUniqueOrThrow({ where: { id: first.lead_submission_id } })
+    ).resolves.toMatchObject({ whatsapp_opt_in: true });
   });
 
   it("adds contacts to a reused Pessoa without overwriting or duplicating any", async () => {
@@ -1102,7 +1138,8 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
       {
         key: { source: "META_LEAD_ADS", external_lead_id },
         integration_event_id: submitted.event_id,
-        received_at: RECEIVED_AT
+        received_at: RECEIVED_AT,
+        whatsapp_opt_in: null
       },
       app
     );

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LANDING_PAGE_SURFACE,
   PLUGA_SURFACE,
+  WHATSMIAU_SURFACE,
   type IntegrationSurface
 } from "./integration-surfaces";
 
@@ -102,6 +103,9 @@ describe("integration surfaces", () => {
     expect(new Set(segments).size).toBe(SURFACES.length);
     expect(LANDING_PAGE_SURFACE.provider).toBe("LANDING_PAGE");
     expect(PLUGA_SURFACE.provider).toBe("PLUGA");
+    expect(WHATSMIAU_SURFACE.provider).toBe("WHATSMIAU");
+    expect(WHATSMIAU_SURFACE.segment).toBe("whatsapp");
+    expect(SURFACES.map((surface) => surface.segment)).not.toContain("whatsapp");
   });
 
   it("keeps Pluga JSON headers as a boolean flag, not a callback", () => {

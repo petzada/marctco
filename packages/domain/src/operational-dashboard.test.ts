@@ -111,7 +111,10 @@ describe("buildOperationalDashboardSeries", () => {
   const now = new Date("2026-08-19T15:00:00.000Z");
   const settings = {
     first_contact_sla_minutes: DEFAULT_FIRST_CONTACT_SLA_MINUTES,
-    stagnation_days: 7
+    stagnation_days: 7,
+    first_contact_trigger: "ON_ASSIGNMENT" as const,
+    first_contact_template_body:
+      "Olá {{lead_name}}, sou {{attendant_name}} da {{workspace_name}}. Meu WhatsApp é {{attendant_phone}}."
   };
   const stages = [
     { stage_id: "entry", label: "Novo lead", position: 1 },
