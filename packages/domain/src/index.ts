@@ -242,6 +242,12 @@ export {
   type PreparedChannelOutboundSend
 } from "./channel-outbound.js";
 export {
+  INBOUND_MESSAGE_PREVIEW_MAX_CHARS,
+  parseWhatsMiauWebhookEnvelope,
+  type WhatsMiauInboundIgnoreReason,
+  type WhatsMiauWebhookParse
+} from "./channel-inbound.js";
+export {
   WHATSAPP_PAIRING_STATES,
   WHATSMIAU_CREATE_INSTANCE_DEFAULTS,
   WHATSMIAU_WEBHOOK_EVENTS,

@@ -4,6 +4,7 @@ export {
   isJobContext,
   isUserContext,
   jobChannelAttemptId,
+  jobChannelInboundConnectionId,
   jobIntegrationEventId,
   SCHEDULED_SWEEP_NAMES,
   withResolvedFeatureFlags,
@@ -84,6 +85,7 @@ export {
 export {
   generateIntegrationToken,
   hashIntegrationToken,
+  integrationTokenHashesEqual,
   resolveWorkspaceByIntegrationToken,
   type GeneratedIntegrationToken,
   type IntegrationConnectionStatus,
@@ -343,4 +345,15 @@ export {
   type PlanChannelOutboundAttemptInput,
   type PlannedChannelOutboundAttempt
 } from "./channel-outbound.js";
+
+// ---------------------------------------------------------------------------
+// Ticket 05 — Canal: inbound WhatsMiau webhook. Appended at the end so
+// parallel Fase 4 tickets that also touch this barrel stay additive.
+// ---------------------------------------------------------------------------
+export {
+  recordWhatsAppInbound,
+  type RecordWhatsAppInboundInput,
+  type WhatsAppInboundIgnoreReason,
+  type WhatsAppInboundResult
+} from "./channel-inbound.js";
 

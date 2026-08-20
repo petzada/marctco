@@ -1087,19 +1087,39 @@ describe("Seam 3: RLS and schema invariants", () => {
     expect(memberships).toEqual([{ runtime_can_assume_definer: false }]);
   });
 
-  it("resolves only the workspace for an active integration token before a workspace GUC exists", async () => {
+  it("resolves only the technical ids of an active integration token before a workspace GUC exists", async () => {
     const resolved = await client.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
       return transaction.$queryRaw<
-        Array<{ workspace_id: string }>
+        Array<{ workspace_id: string; integration_connection_id: string }>
       >`
-        SELECT workspace_id
+        SELECT workspace_id, integration_connection_id
         FROM private.resolve_workspace_by_token_hash(${token_hash_a})
       `;
     });
     expect(resolved).toEqual([
-      { workspace_id: workspace_a }
+      { workspace_id: workspace_a, integration_connection_id: integration_connection_a }
     ]);
+
+    const foreign = await client.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
+      return transaction.$queryRaw<
+        Array<{ workspace_id: string; integration_connection_id: string }>
+      >`
+        SELECT workspace_id, integration_connection_id
+        FROM private.resolve_workspace_by_token_hash(${token_hash_a})
+      `;
+    });
+    expect(foreign).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workspace_id: workspace_b })
+      ])
+    );
+    expect(foreign).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ integration_connection_id: integration_connection_b })
+      ])
+    );
 
     await client.integrationConnection.update({
       where: { id: integration_connection_a },
@@ -1107,8 +1127,8 @@ describe("Seam 3: RLS and schema invariants", () => {
     });
     const disabled = await client.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe("SET LOCAL ROLE marctco_app");
-      return transaction.$queryRaw<Array<{ workspace_id: string }>>`
-        SELECT workspace_id
+      return transaction.$queryRaw<Array<{ workspace_id: string; integration_connection_id: string }>>`
+        SELECT workspace_id, integration_connection_id
         FROM private.resolve_workspace_by_token_hash(${token_hash_a})
       `;
     });
@@ -1175,6 +1195,17 @@ describe("Seam 3: RLS and schema invariants", () => {
         can_update_connections: false
       }
     ]);
+
+    const result_type = await client.$queryRaw<Array<{ result: string }>>`
+      SELECT pg_get_function_result(procedure.oid) AS result
+      FROM pg_proc AS procedure
+      JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'private' AND procedure.proname = 'resolve_workspace_by_token_hash'
+    `;
+    expect(result_type).toEqual([
+      { result: "TABLE(workspace_id uuid, integration_connection_id uuid)" }
+    ]);
+    expect(JSON.stringify(result_type)).not.toMatch(/token|payload|raw|phone|email|cpf|apikey/i);
   });
 
   it("enforces a unique indexed SHA-256 hash and a commercial target in the database", async () => {
@@ -2288,6 +2319,53 @@ describe("Seam 2 + Seam 3: first access provisions a usable workspace (ticket 17
       where: { opportunity_id: opportunity_a, type: "STAGE_CHANGED" }
     });
     expect(movement).toBe(2);
+  });
+
+  it("deduplicates inbound WhatsApp facts by connection and provider message id", async () => {
+    const indexes = await client.$queryRaw<
+      Array<{ index_name: string; is_unique: boolean; predicate: string | null }>
+    >`
+      SELECT
+        class.relname::text AS index_name,
+        index.indisunique AS is_unique,
+        pg_get_expr(index.indpred, index.indrelid) AS predicate
+      FROM pg_index AS index
+      JOIN pg_class AS class ON class.oid = index.indexrelid
+      WHERE class.relname = 'opportunity_timeline_events_inbound_message_dedupe_idx'
+    `;
+    expect(indexes).toEqual([
+      {
+        index_name: "opportunity_timeline_events_inbound_message_dedupe_idx",
+        is_unique: true,
+        predicate:
+          "(type = 'WHATSAPP_INBOUND_RECEIVED'::opportunity_timeline_event_type)"
+      }
+    ]);
+
+    await client.opportunityTimelineEvent.create({
+      data: {
+        workspace_id: workspace_a,
+        opportunity_id: opportunity_a,
+        type: "WHATSAPP_INBOUND_RECEIVED",
+        occurred_at: new Date(),
+        integration_connection_id: integration_connection_a,
+        external_message_id: "3EB0RLS",
+        message_preview: "oi"
+      }
+    });
+    await expect(
+      client.opportunityTimelineEvent.create({
+        data: {
+          workspace_id: workspace_a,
+          opportunity_id: opportunity_a,
+          type: "WHATSAPP_INBOUND_RECEIVED",
+          occurred_at: new Date(),
+          integration_connection_id: integration_connection_a,
+          external_message_id: "3EB0RLS",
+          message_preview: "outra"
+        }
+      })
+    ).rejects.toThrow(/unique/i);
   });
 
   it("keeps assignment snapshots on timeline facts nullable, indexed, and bound to this workspace's members", async () => {

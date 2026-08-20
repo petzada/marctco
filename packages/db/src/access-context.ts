@@ -176,3 +176,11 @@ export function jobChannelAttemptId(context: JobContext): string {
   }
   return context.origin.attempt_id;
 }
+
+/** The WhatsMiau connection an inbound webhook job carries. Other origins have none. */
+export function jobChannelInboundConnectionId(context: JobContext): string {
+  if (context.origin.type !== "channel_inbound") {
+    throw new Error("JobContext origin is not a channel inbound connection");
+  }
+  return context.origin.integration_connection_id;
+}

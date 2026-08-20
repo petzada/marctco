@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   IntegrationConnectionStatus as PrismaIntegrationConnectionStatus,
   IntegrationProvider as PrismaIntegrationProvider,
@@ -6,6 +6,7 @@ import type {
   PrismaClient
 } from "@prisma/client";
 import { createPrismaClient } from "./client.js";
+import { assertUuid } from "./internal/uuid.js";
 
 const TOKEN_PREFIX = "mtco_";
 const TOKEN_BYTES = 32;
@@ -27,6 +28,7 @@ export interface GeneratedIntegrationToken {
 
 export interface ResolvedIntegrationWorkspace {
   readonly workspace_id: string;
+  readonly integration_connection_id: string;
 }
 
 /**
@@ -55,6 +57,17 @@ export function hashIntegrationToken(token: string): string {
 }
 
 /**
+ * Constant-time compare of two SHA-256 hex digests. Length is fixed by the
+ * column check; a malformed value fails closed without throwing.
+ */
+export function integrationTokenHashesEqual(left: string, right: string): boolean {
+  if (!HASH_HEX_PATTERN.test(left) || !HASH_HEX_PATTERN.test(right)) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+}
+
+/**
  * The only pre-tenant lookup for incoming integration bearer tokens. It has
  * no cache: disabling a connection must take effect on the next request.
  */
@@ -64,7 +77,7 @@ export async function resolveWorkspaceByIntegrationToken(
 ): Promise<ResolvedIntegrationWorkspace | null> {
   const token_hash = hashIntegrationToken(token);
   const rows = await prisma.$queryRaw<ResolvedIntegrationWorkspace[]>`
-    SELECT workspace_id
+    SELECT workspace_id, integration_connection_id
     FROM private.resolve_workspace_by_token_hash(${token_hash})
   `;
   const row = rows[0];
@@ -74,5 +87,7 @@ export async function resolveWorkspaceByIntegrationToken(
   if (!HASH_HEX_PATTERN.test(token_hash)) {
     throw new Error("Integration token hash must be SHA-256 hexadecimal");
   }
+  assertUuid(row.workspace_id, "workspace_id");
+  assertUuid(row.integration_connection_id, "integration_connection_id");
   return row;
 }

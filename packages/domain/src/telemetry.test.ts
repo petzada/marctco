@@ -80,7 +80,8 @@ describe("sanitizeTelemetry", () => {
         claimed: 4,
         dispatched: 3,
         job_id: "integration-event-018f4d57",
-        attempt_id: "018f4d57-2db2-7c1b-bff0-f2fcb13a46f7"
+        attempt_id: "018f4d57-2db2-7c1b-bff0-f2fcb13a46f7",
+        integration_connection_id: "018f4d57-aaaa-7c1b-bff0-f2fcb13a46f7"
       })
     ).toEqual({
       event: "integration_event_dispatch",
@@ -88,7 +89,8 @@ describe("sanitizeTelemetry", () => {
       claimed: 4,
       dispatched: 3,
       job_id: "integration-event-018f4d57",
-      attempt_id: "018f4d57-2db2-7c1b-bff0-f2fcb13a46f7"
+      attempt_id: "018f4d57-2db2-7c1b-bff0-f2fcb13a46f7",
+      integration_connection_id: "018f4d57-aaaa-7c1b-bff0-f2fcb13a46f7"
     });
   });
 

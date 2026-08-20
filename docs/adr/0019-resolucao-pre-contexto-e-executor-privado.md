@@ -24,7 +24,7 @@ As únicas funções `SECURITY DEFINER` do banco continuam no schema `private`, 
 
 | Função | Chamador autorizado | Por que não tem `AccessContext` | Retorno permitido |
 |---|---|---|---|
-| `resolve_workspace_by_token_hash` | app | O hash do token é o que descobre o tenant da ingestão | `workspace_id` |
+| `resolve_workspace_by_token_hash` | app | O hash do token é o que descobre o tenant da ingestão e a conexão autenticada | `(workspace_id, integration_connection_id)` |
 | `claim_pending_events` | app | O dispatcher ainda não tem job nem tenant para setar | Somente `(id, workspace_id)` |
 | `provision_workspace` | app | O Workspace ainda não existe | `workspace_id` |
 | `resolve_user_workspaces` | app | A sessão precisa validar o slug contra `WorkspaceMember` antes de ter `workspace_id` | Para associações do próprio usuário: `workspace_id`, `slug`, `name` e `role`; ausência de associação não devolve detalhe do workspace |
@@ -47,6 +47,8 @@ O executor é técnico `NOLOGIN`, `NOSUPERUSER` e `NOBYPASSRLS`, com `search_pat
 Esticar `claim_pending_events` foi rejeitado: aquela função é nomeada e indexada para o outbox de ingestão (`IntegrationEvent`). A tentativa outbound é outra tabela, outro lease e outro job. Autenticar webhook inbound **não** é a oitava função: o hash do token já resolve conexão e workspace pela exceção pré-contexto existente.
 
 O executor segue a mesma regra das demais: técnico `NOLOGIN`, `NOSUPERUSER` e `NOBYPASSRLS`, `search_path` fixado; `EXECUTE` revogado de `PUBLIC` e de `marctco_worker`. Grants e policies são o mínimo para reivindicar a tentativa — nunca Pessoa, contatos ou corpo integral. Reusar `marctco_private_definer` só vale se o Seam 3 provar a mesma contenção **depois** desses grants; do contrário nasce executor dedicado com os mesmos atributos. Esta emenda **não altera** `private.provision_workspace` nem o papel `marctco_provisioner`.
+
+> **Emenda de 2026-08-20 — o retorno do resolvedor de token (Fase 4, ticket 05).** A redação original desta linha devolveu só `workspace_id` (migration `20260805000800`). Isso obrigava o webhook inbound a fabricar `JobOrigin.channel_inbound` com um UUID placeholder para abrir a transação que descobria a conexão — causalidade inventada, proibida por este ADR e pelo [ADR-0016](./0016-contexto-de-acesso-e-leitor-escopado.md). A função **continua uma das sete**, mesmo nome, mesma lista fechada, mesmo executor. O retorno passa a ser o mínimo que a pergunta pede: `(workspace_id, integration_connection_id)`, nunca `token_hash`, `provider`, `raw`, telefone ou payload. O Seam 3 continua reprovando o oitavo nome. O chamador constrói `JobContext.origin.channel_inbound` com o id real e revalida sob RLS.
 
 `resolve_user_workspaces(authenticated_user_id, requested_slug nullable)` tem dois modos, sob a mesma interface SQL estreita:
 

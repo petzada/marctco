@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   generateIntegrationToken,
   hashIntegrationToken,
+  integrationTokenHashesEqual,
   resolveWorkspaceByIntegrationToken
 } from "./integration-connection.js";
 
@@ -21,16 +22,29 @@ describe("integration connection token", () => {
     expect(generated.token_last4).toBe(generated.token.slice(-4));
   });
 
-  it("hashes the bearer token before calling the private resolver and returns only its workspace", async () => {
+  it("compares token hashes in constant time and fails closed on a malformed digest", () => {
+    const left = hashIntegrationToken("mtco_left");
+    const right = hashIntegrationToken("mtco_right");
+    expect(integrationTokenHashesEqual(left, left)).toBe(true);
+    expect(integrationTokenHashesEqual(left, right)).toBe(false);
+    expect(integrationTokenHashesEqual("not-a-hash", left)).toBe(false);
+  });
+
+  it("hashes the bearer token before calling the private resolver and returns only technical ids", async () => {
     const workspace_id = randomUUID();
+    const integration_connection_id = randomUUID();
     const queryRaw = vi.fn().mockResolvedValue([
       {
-        workspace_id
+        workspace_id,
+        integration_connection_id
       }
     ]);
     const prisma = { $queryRaw: queryRaw } as unknown as PrismaClient;
 
-    await expect(resolveWorkspaceByIntegrationToken("mtco_example", prisma)).resolves.toEqual({ workspace_id });
+    await expect(resolveWorkspaceByIntegrationToken("mtco_example", prisma)).resolves.toEqual({
+      workspace_id,
+      integration_connection_id
+    });
     expect(queryRaw).toHaveBeenCalledOnce();
     expect(hashIntegrationToken("mtco_example")).toMatch(/^[0-9a-f]{64}$/);
   });

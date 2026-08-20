@@ -57,7 +57,7 @@ Com Prisma, RLS só vale se **toda** query rodar dentro de uma transação que c
 
    | Função | Por que não tem tenant | O que devolve |
    |---|---|---|
-   | `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `workspace_id` |
+   | `resolve_workspace_by_token_hash` | Descobre o tenant a partir do token; existe para isso | `(workspace_id, integration_connection_id)` — emenda 2026-08-20, [ADR-0019](./0019-resolucao-pre-contexto-e-executor-privado.md) |
    | `claim_pending_events` | O dispatcher procura pendência de todos os workspaces, sem sessão e sem job prévio | Só `(id, workspace_id)` — nunca `raw`, que carrega CPF e telefone |
    | `provision_workspace` | Cria o Workspace, o vínculo do primeiro membro e o funil padrão; o tenant ainda não existe | `workspace_id` |
    | `resolve_user_workspaces` | A sessão valida o slug contra `WorkspaceMember` antes de conhecer o `workspace_id` | Somente escolhas/associação do próprio usuário: `workspace_id`, `slug`, `name`, `role` |

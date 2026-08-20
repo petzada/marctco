@@ -6,6 +6,7 @@ import {
   isJobContext,
   isUserContext,
   jobChannelAttemptId,
+  jobChannelInboundConnectionId,
   jobIntegrationEventId,
   withResolvedFeatureFlags,
   WorkspaceRole
@@ -166,7 +167,9 @@ describe("createJobContext", () => {
       origin: { type: "channel_inbound", integration_connection_id }
     });
     expect(context.origin).toEqual({ type: "channel_inbound", integration_connection_id });
+    expect(jobChannelInboundConnectionId(context)).toBe(integration_connection_id);
     expect(() => jobIntegrationEventId(context)).toThrow(/not an integration event/i);
+    expect(() => jobChannelAttemptId(context)).toThrow(/not a channel outbound attempt/i);
   });
 
   it("refuses a non-UUID channel outbound attempt_id", () => {
