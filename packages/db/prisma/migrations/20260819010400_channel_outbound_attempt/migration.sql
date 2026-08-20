@@ -52,10 +52,6 @@ $schema_grants$;
 
 SET ROLE marctco_migrator;
 
-ALTER TYPE opportunity_timeline_event_type ADD VALUE 'WHATSAPP_OUTBOUND_SENT';
-ALTER TYPE opportunity_timeline_event_type ADD VALUE 'WHATSAPP_OUTBOUND_FAILED';
-ALTER TYPE opportunity_timeline_event_type ADD VALUE 'WHATSAPP_INBOUND_RECEIVED';
-
 CREATE TYPE channel_outbound_attempt_kind AS ENUM ('AUTO_FIRST_CONTACT');
 CREATE TYPE channel_outbound_dispatch_status AS ENUM ('PENDING', 'DISPATCHED');
 CREATE TYPE channel_outbound_delivery_status AS ENUM ('QUEUED', 'PROCESSING', 'SENT', 'FAILED');
