@@ -24,7 +24,7 @@ O último commit de runtime/revisão é `42385ec`. O commit de fechamento docume
 ```text
 pnpm typecheck          passou
 pnpm lint               passou
-pnpm test:unit          103 arquivos, 681 testes
+pnpm test:unit          104 arquivos, 686 testes
 pnpm test:db            31 arquivos, 454 testes
 pnpm test:seam2         24 testes
 pnpm test:seam4         13 testes
