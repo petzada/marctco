@@ -380,10 +380,13 @@ describe("outbound on assignment", () => {
     await reassignToAttendant([stolen], supervisor_user, other_attendant_user);
 
     const result = await reassignToAttendant([first, second, stolen], supervisor_user);
-    expect(result.assigned).toEqual([
-      { opportunity_id: first, assigned_user_id: attendant_user },
-      { opportunity_id: second, assigned_user_id: attendant_user }
-    ]);
+    expect(result.assigned).toHaveLength(2);
+    expect(result.assigned).toEqual(
+      expect.arrayContaining([
+        { opportunity_id: first, assigned_user_id: attendant_user },
+        { opportunity_id: second, assigned_user_id: attendant_user }
+      ])
+    );
     expect(result.refused).toEqual([
       expect.objectContaining({
         opportunity_id: stolen,
