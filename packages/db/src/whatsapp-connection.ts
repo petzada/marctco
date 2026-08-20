@@ -226,7 +226,7 @@ export async function commitWhatsAppWebhookSecret(
   });
 }
 
-export interface LeadWhatsAppConnectionIndicator {
+export interface OpportunityWhatsAppConnectionIndicator {
   readonly connected: boolean;
 }
 
@@ -236,11 +236,11 @@ export interface LeadWhatsAppConnectionIndicator {
  * token or last four. The Gestão/Direção administrative read stays on
  * `getWhatsAppConnection`.
  */
-export async function getLeadWhatsAppConnectionIndicator(
+export async function getOpportunityWhatsAppConnectionIndicator(
   context: UserContext,
   opportunity_id: string,
   prisma: PrismaClient = sharedPrisma
-): Promise<LeadWhatsAppConnectionIndicator> {
+): Promise<OpportunityWhatsAppConnectionIndicator> {
   assertUuid(opportunity_id, "opportunity_id");
 
   return withAccessContext(prisma, context, async (transaction) => {
@@ -268,7 +268,7 @@ export async function getLeadWhatsAppConnectionIndicator(
     `);
     const row = rows[0];
     if (!row) {
-      throw new Error("Lead not found in this workspace");
+      throw new Error("Opportunity not found in this workspace");
     }
     return { connected: row.connected === true };
   });

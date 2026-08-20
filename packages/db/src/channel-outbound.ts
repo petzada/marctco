@@ -6,6 +6,7 @@ import {
   isWhatsAppPairingState,
   planFirstContactAttempt,
   resolveWorkspaceSettings,
+  type AssignmentRole,
   type ChannelOutboundDeliveryStatus,
   type ChannelOutboundDispatchStatus,
   type ChannelOutboundFailureReason,
@@ -24,7 +25,8 @@ import {
   isUserContext,
   jobChannelAttemptId,
   type AccessContext,
-  type JobContext
+  type JobContext,
+  type UserContext
 } from "./access-context.js";
 import { createPrismaClient } from "./client.js";
 import { opportunityScopeSql } from "./internal/opportunity-scope.js";
@@ -337,6 +339,103 @@ export async function planArrivalChannelOutboundInTransaction(
     attendant_phone_present: false
   });
   return { recorded, post_creation_effects };
+}
+
+interface AssignmentOutboundOpportunityRow {
+  readonly id: string;
+  readonly whatsapp_opt_in: boolean | null;
+  readonly missing_phone: boolean;
+  readonly status: "OPEN" | "WON" | "LOST";
+  readonly merged_into_opportunity_id: string | null;
+}
+
+/**
+ * Assignment hook for intake and quarantine release. Encapsulates flags,
+ * settings, pairing, attendant phone and the 03a recorder inside the
+ * caller's assignment transaction. Only an Attendant destination on the
+ * assignment trigger may plan.
+ */
+export async function planAssignmentChannelOutboundInTransaction(
+  transaction: ScopedTransactionClient,
+  context: UserContext,
+  input: {
+    readonly destination_role: AssignmentRole;
+    readonly destination_user_id: string;
+    readonly opportunity_ids: readonly string[];
+  }
+): Promise<void> {
+  if (input.destination_role !== "ATTENDANT" || input.opportunity_ids.length === 0) {
+    return;
+  }
+
+  const [flagRows, settingsRows, pairingRows, memberRows, opportunityRows] = await Promise.all([
+    transaction.$queryRaw<Array<{ key: string }>>(Prisma.sql`
+      SELECT key
+      FROM workspace_flags
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND key = 'auto_primeiro_contato'
+    `),
+    transaction.$queryRaw<Array<{ first_contact_trigger: FirstContactTrigger | null }>>(Prisma.sql`
+      SELECT first_contact_trigger
+      FROM workspace_settings
+      WHERE workspace_id = ${context.workspace_id}::uuid
+    `),
+    transaction.$queryRaw<Array<{ pairing_state: string | null }>>(Prisma.sql`
+      SELECT pairing_state::text AS pairing_state
+      FROM integration_connections
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND provider = 'WHATSMIAU'::integration_provider
+        AND status = 'ACTIVE'::integration_connection_status
+      LIMIT 1
+    `),
+    transaction.$queryRaw<Array<{ whatsapp_phone_e164: string | null }>>(Prisma.sql`
+      SELECT whatsapp_phone_e164
+      FROM workspace_members
+      WHERE workspace_id = ${context.workspace_id}::uuid
+        AND user_id = ${input.destination_user_id}::uuid
+    `),
+    transaction.$queryRaw<AssignmentOutboundOpportunityRow[]>(Prisma.sql`
+      SELECT
+        opportunity.id,
+        opportunity.whatsapp_opt_in,
+        opportunity.missing_phone,
+        opportunity.status,
+        opportunity.merged_into_opportunity_id
+      FROM opportunities AS opportunity
+      WHERE opportunity.workspace_id = ${context.workspace_id}::uuid
+        AND opportunity.id IN (${Prisma.join(
+          input.opportunity_ids.map((id) => Prisma.sql`${id}::uuid`)
+        )})
+    `)
+  ]);
+
+  const feature_flag_enabled = resolveFeatureFlags(flagRows.map((row) => row.key)).auto_primeiro_contato;
+  const trigger = resolveWorkspaceSettings({
+    first_contact_sla_minutes: null,
+    stagnation_days: null,
+    first_contact_trigger: settingsRows[0]?.first_contact_trigger ?? null,
+    first_contact_template_body: null
+  }).first_contact_trigger;
+  const raw_pairing = pairingRows[0]?.pairing_state;
+  const pairing_state = isWhatsAppPairingState(raw_pairing) ? raw_pairing : null;
+  const attendant_phone_present =
+    typeof memberRows[0]?.whatsapp_phone_e164 === "string" &&
+    memberRows[0].whatsapp_phone_e164.length > 0;
+
+  for (const opportunity of opportunityRows) {
+    await planAndRecordChannelOutboundAttemptInTransaction(transaction, context, {
+      opportunity_id: opportunity.id,
+      occurred_trigger: "ON_ASSIGNMENT",
+      feature_flag_enabled,
+      trigger,
+      whatsapp_opt_in: opportunity.whatsapp_opt_in,
+      missing_phone: opportunity.missing_phone,
+      status: opportunity.status,
+      merged: opportunity.merged_into_opportunity_id !== null,
+      pairing_state,
+      attendant_phone_present
+    });
+  }
 }
 
 export async function planAndRecordChannelOutboundAttempt(

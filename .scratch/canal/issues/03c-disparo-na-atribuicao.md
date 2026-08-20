@@ -21,7 +21,7 @@
 
 ## Evidence
 
-- Hook fino `planAssignmentChannelOutbound` em `packages/db/src/leads.ts`: early return se o destino não é `ATTENDANT`; snapshot (flag, gatilho, pairing, telefone do destino, opt-in/elegibilidade) lido na mesma `withAccessContext` de `assignLeads`/`reassignLeads`; só IDs claimed pelo `UPDATE … RETURNING` vão para `planAndRecordChannelOutboundAttemptInTransaction` com `occurred_trigger: "ON_ASSIGNMENT"`. Sem Redis e sem HTTP.
+- Hook fino `planAssignmentChannelOutbound` em `packages/db/src/leads.ts` delega para `planAssignmentChannelOutboundInTransaction` em `packages/db/src/channel-outbound.ts`: early return se o destino não é `ATTENDANT`; snapshot (flag, gatilho, pairing, telefone do destino, opt-in/elegibilidade) lido na mesma `withAccessContext` de `assignLeads`/`reassignLeads`; só IDs claimed pelo `UPDATE … RETURNING` vão para `planAndRecordChannelOutboundAttemptInTransaction` com `occurred_trigger: "ON_ASSIGNMENT"`. Sem Redis e sem HTTP.
 - Gestão → Supervisor não chama o recorder. Supervisor → Atendente cria `PENDING`/`QUEUED` sem `first_contact_at`. Guards do 03a (`planFirstContactAttempt`) recusam flag off, `DISABLED`/`ON_ARRIVAL`, opt-in ausente/falso, `missing_phone` e fechado. Mesclado não é claimed. Instância desconectada ou Atendente sem telefone nascem `FAILED` observável + fato, sem `first_contact_at`.
 - Lote parcial preserva recusas e uma tentativa por linha elegível. Corrida: a condição do `UPDATE` arbitra um vencedor e uma tentativa. Reatribuição entre Atendentes reusa a unique `(workspace_id, opportunity_id, kind)` em qualquer estado existente.
 - Testes em `packages/db/tests/channel-outbound-assignment.test.ts` (9), incluídos no project `db` de `vitest.config.ts`.

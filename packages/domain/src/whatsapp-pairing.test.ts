@@ -9,6 +9,7 @@ import {
   isPublicHttpsWebhookUrl,
   isWhatsAppPairingState,
   parseWhatsAppConnectPayload,
+  parseWhatsAppFetchInstancesPayload,
   parseWhatsAppPairingState,
   whatsAppInstanceNameFor
 } from "./whatsapp-pairing.js";
@@ -95,6 +96,24 @@ describe("official WhatsMiau request fixtures", () => {
     expect(isPublicHttpsWebhookUrl("https://127.0.0.1/api/webhooks/whatsmiau")).toBe(false);
     expect(isPublicHttpsWebhookUrl("https://10.0.0.2/api/webhooks/whatsmiau")).toBe(false);
     expect(isPublicHttpsWebhookUrl("/api/webhooks/whatsmiau")).toBe(false);
+  });
+});
+
+describe("official fetchInstances payload", () => {
+  it("reads only documented instanceName and state fields", () => {
+    expect(
+      parseWhatsAppFetchInstancesPayload([
+        { instanceName: "marctco_abc", state: "open" },
+        { instanceName: "marctco_def", state: "closed", suspended: true },
+        { instanceName: "", state: "open" },
+        { nope: true }
+      ])
+    ).toEqual([
+      { instance_name: "marctco_abc", pairing_state: "CONNECTED" },
+      { instance_name: "marctco_def", pairing_state: "SUSPENDED" }
+    ]);
+    expect(parseWhatsAppFetchInstancesPayload(null)).toEqual([]);
+    expect(parseWhatsAppFetchInstancesPayload({ instanceName: "solo" })).toEqual([]);
   });
 });
 

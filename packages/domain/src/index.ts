@@ -256,9 +256,11 @@ export {
   isPublicHttpsWebhookUrl,
   isWhatsAppPairingState,
   parseWhatsAppConnectPayload,
+  parseWhatsAppFetchInstancesPayload,
   parseWhatsAppPairingState,
   whatsAppInstanceNameFor,
   type WhatsAppConnectReading,
+  type WhatsAppFetchedInstance,
   type WhatsAppPairingState
 } from "./whatsapp-pairing.js";
 export {

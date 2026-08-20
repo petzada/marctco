@@ -149,6 +149,40 @@ export interface WhatsAppConnectReading {
   readonly pairing_code: string | null;
 }
 
+export interface WhatsAppFetchedInstance {
+  readonly instance_name: string;
+  readonly pairing_state: WhatsAppPairingState;
+}
+
+/**
+ * Documented fields of `GET /instance/fetchInstances`: each row exposes
+ * `instanceName` and a connection `state` using the same vocabulary as
+ * `connectionState/:name`. Unknown rows are skipped; nothing else is read.
+ */
+export function parseWhatsAppFetchInstancesPayload(
+  payload: unknown
+): readonly WhatsAppFetchedInstance[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  const instances: WhatsAppFetchedInstance[] = [];
+  for (const item of payload) {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    const instance_name = record.instanceName;
+    if (typeof instance_name !== "string" || instance_name === "") {
+      continue;
+    }
+    instances.push({
+      instance_name,
+      pairing_state: parseWhatsAppPairingState(record)
+    });
+  }
+  return instances;
+}
+
 /** Documented optional fields of `GET /instance/connect/:name`. No TTL. */
 export function parseWhatsAppConnectPayload(payload: unknown): WhatsAppConnectReading {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {

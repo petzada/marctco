@@ -6,7 +6,7 @@ const listLeadActivities = vi.fn();
 const listLeadTimeline = vi.fn();
 const listTeam = vi.fn();
 const getWorkspaceSettings = vi.fn();
-const getLeadWhatsAppConnectionIndicator = vi.fn();
+const getOpportunityWhatsAppConnectionIndicator = vi.fn();
 const resolveWorkspaceAccess = vi.fn();
 
 vi.mock("@marctco/db", () => ({
@@ -15,7 +15,7 @@ vi.mock("@marctco/db", () => ({
   listLeadTimeline,
   listTeam,
   getWorkspaceSettings,
-  getLeadWhatsAppConnectionIndicator
+  getOpportunityWhatsAppConnectionIndicator
 }));
 vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
 vi.mock("next/link", () => ({ default: (props: { href: string; children: unknown }) => props.children }));
@@ -46,7 +46,7 @@ describe("Lead card page", () => {
     listLeadActivities.mockReset().mockResolvedValue([]);
     listLeadTimeline.mockReset().mockResolvedValue({ facts: [], has_more: false });
     listTeam.mockReset().mockResolvedValue([]);
-    getLeadWhatsAppConnectionIndicator.mockReset().mockResolvedValue({ connected: false });
+    getOpportunityWhatsAppConnectionIndicator.mockReset().mockResolvedValue({ connected: false });
     getWorkspaceSettings.mockReset().mockResolvedValue({
       first_contact_sla_minutes: 120,
       stagnation_days: 7,
@@ -66,7 +66,7 @@ describe("Lead card page", () => {
     expect(getLead).toHaveBeenCalledOnce();
     expect(listLeadActivities).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
     expect(listLeadTimeline).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
-    expect(getLeadWhatsAppConnectionIndicator).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
+    expect(getOpportunityWhatsAppConnectionIndicator).toHaveBeenCalledWith(context("ATTENDANT"), opportunityId);
     expect(listTeam).not.toHaveBeenCalled();
   });
 

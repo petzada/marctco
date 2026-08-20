@@ -10,7 +10,7 @@ import {
   WhatsAppConnectionError,
   commitWhatsAppWebhookSecret,
   createWhatsAppConnection,
-  getLeadWhatsAppConnectionIndicator,
+  getOpportunityWhatsAppConnectionIndicator,
   getWhatsAppConnection,
   setWhatsAppPairingState
 } from "../src/whatsapp-connection.js";
@@ -202,7 +202,7 @@ describe("commitWhatsAppWebhookSecret", () => {
   });
 });
 
-describe("getLeadWhatsAppConnectionIndicator", () => {
+describe("getOpportunityWhatsAppConnectionIndicator", () => {
   const other_attendant_user = randomUUID();
   const other_attendant_context: UserContext = createUserContextFromResolvedMembership({
     workspace_id: workspace,
@@ -281,29 +281,29 @@ describe("getLeadWhatsAppConnectionIndicator", () => {
   it("is a boolean on the card for every profile in lead scope, without loosening the admin read", async () => {
     await setWhatsAppPairingState(owner_context, "CONNECTED", app);
 
-    const indicator = await getLeadWhatsAppConnectionIndicator(attendant_context, mine, app);
+    const indicator = await getOpportunityWhatsAppConnectionIndicator(attendant_context, mine, app);
     expect(indicator).toEqual({ connected: true });
     expect(Object.keys(indicator)).toEqual(["connected"]);
     expect(JSON.stringify(indicator)).not.toMatch(/token|last4|apikey|instance_name|mtco_/i);
 
-    await expect(getLeadWhatsAppConnectionIndicator(attendant_context, colleagues, app)).rejects.toThrow(
-      /Lead not found/
+    await expect(getOpportunityWhatsAppConnectionIndicator(attendant_context, colleagues, app)).rejects.toThrow(
+      /Opportunity not found/
     );
     await expect(
-      getLeadWhatsAppConnectionIndicator(other_attendant_context, mine, app)
-    ).rejects.toThrow(/Lead not found/);
+      getOpportunityWhatsAppConnectionIndicator(other_attendant_context, mine, app)
+    ).rejects.toThrow(/Opportunity not found/);
 
-    await expect(getLeadWhatsAppConnectionIndicator(supervisor_context, mine, app)).resolves.toEqual({
+    await expect(getOpportunityWhatsAppConnectionIndicator(supervisor_context, mine, app)).resolves.toEqual({
       connected: true
     });
     await expect(
-      getLeadWhatsAppConnectionIndicator(supervisor_context, colleagues, app)
-    ).rejects.toThrow(/Lead not found/);
+      getOpportunityWhatsAppConnectionIndicator(supervisor_context, colleagues, app)
+    ).rejects.toThrow(/Opportunity not found/);
 
-    await expect(getLeadWhatsAppConnectionIndicator(manager_context, colleagues, app)).resolves.toEqual({
+    await expect(getOpportunityWhatsAppConnectionIndicator(manager_context, colleagues, app)).resolves.toEqual({
       connected: true
     });
-    await expect(getLeadWhatsAppConnectionIndicator(owner_context, mine, app)).resolves.toEqual({
+    await expect(getOpportunityWhatsAppConnectionIndicator(owner_context, mine, app)).resolves.toEqual({
       connected: true
     });
 
@@ -320,10 +320,10 @@ describe("getLeadWhatsAppConnectionIndicator", () => {
 
   it("reports disconnected when pairing is not open, still without secrets", async () => {
     await setWhatsAppPairingState(manager_context, "DISCONNECTED", app);
-    await expect(getLeadWhatsAppConnectionIndicator(attendant_context, mine, app)).resolves.toEqual({
+    await expect(getOpportunityWhatsAppConnectionIndicator(attendant_context, mine, app)).resolves.toEqual({
       connected: false
     });
-    await expect(getLeadWhatsAppConnectionIndicator(owner_context, colleagues, app)).resolves.toEqual({
+    await expect(getOpportunityWhatsAppConnectionIndicator(owner_context, colleagues, app)).resolves.toEqual({
       connected: false
     });
   });

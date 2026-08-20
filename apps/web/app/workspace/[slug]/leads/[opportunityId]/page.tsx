@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLead, getLeadWhatsAppConnectionIndicator, getWorkspaceSettings, listLeadActivities, listLeadTimeline, listTeam } from "@marctco/db";
+import { getLead, getOpportunityWhatsAppConnectionIndicator, getWorkspaceSettings, listLeadActivities, listLeadTimeline, listTeam } from "@marctco/db";
 import { LeadCardContent } from "../../../../../components/leads/lead-card-content";
 import { resolveWorkspaceAccess } from "../../../../../lib/workspace-access";
 
@@ -29,7 +29,7 @@ export default async function LeadCardPage({
       listLeadTimeline(context, opportunityId),
       context.role === "ATTENDANT" ? Promise.resolve([]) : listTeam(context),
       getWorkspaceSettings(context),
-      getLeadWhatsAppConnectionIndicator(context, opportunityId)
+      getOpportunityWhatsAppConnectionIndicator(context, opportunityId)
     ]);
     return (
       <main className="min-h-[100dvh] bg-canvas px-md py-lg md:px-lg md:py-xl">

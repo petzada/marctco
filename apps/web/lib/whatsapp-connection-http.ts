@@ -13,6 +13,7 @@ import {
   type WhatsAppConnectionView
 } from "@marctco/db";
 import type { WhatsMiauClient, WhatsMiauPairingResult } from "./whatsmiau-client";
+import { reconcilePersistedWhatsAppInstance } from "./whatsapp-instance-reconciliation";
 
 export const WHATSMIAU_WEBHOOK_PATH = "/api/webhooks/whatsmiau";
 
@@ -45,6 +46,27 @@ function pairingStateFromConnect(qr: {
   readonly pairing_code: string | null;
 }): WhatsAppPairingState {
   return qr.base64 !== null || qr.pairing_code !== null ? "QR_PENDING" : "CONNECTING";
+}
+
+async function ensureWhatsAppInstanceOnProvider(input: {
+  readonly client: WhatsMiauClient;
+  readonly instance_name: string;
+  readonly allow_create_failure: boolean;
+}): Promise<void> {
+  const reconciliation = await reconcilePersistedWhatsAppInstance({
+    client: input.client,
+    persisted_instance_name: input.instance_name
+  });
+  if (reconciliation.present) {
+    return;
+  }
+  try {
+    await input.client.createInstance(input.instance_name);
+  } catch {
+    if (!input.allow_create_failure) {
+      throw new Error("WhatsMiau instance create failed");
+    }
+  }
 }
 
 /**
@@ -84,13 +106,11 @@ export async function pairWhatsAppWorkspace(input: {
   }
 
   try {
-    try {
-      await input.client.createInstance(connection.instance_name);
-    } catch {
-      if (is_first_insert) {
-        throw new Error("WhatsMiau instance create failed");
-      }
-    }
+    await ensureWhatsAppInstanceOnProvider({
+      client: input.client,
+      instance_name: connection.instance_name,
+      allow_create_failure: !is_first_insert
+    });
     await input.client.setWebhook({
       instance_name: connection.instance_name,
       url: input.webhook_url,
@@ -122,6 +142,14 @@ export async function connectWhatsAppWorkspace(input: {
   const connection = await getWhatsAppConnection(input.context);
   if (connection === null) {
     throw new WhatsAppConnectionError("NOT_FOUND");
+  }
+  const reconciliation = await reconcilePersistedWhatsAppInstance({
+    client: input.client,
+    persisted_instance_name: connection.instance_name
+  });
+  if (!reconciliation.present) {
+    await rememberPairing(input.context, "ERROR");
+    throw new WhatsAppProviderError("provider_unavailable");
   }
   try {
     const qr = await input.client.connect(connection.instance_name);

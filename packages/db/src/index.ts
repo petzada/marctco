@@ -318,11 +318,11 @@ export {
   WhatsAppConnectionError,
   commitWhatsAppWebhookSecret,
   createWhatsAppConnection,
-  getLeadWhatsAppConnectionIndicator,
+  getOpportunityWhatsAppConnectionIndicator,
   getWhatsAppConnection,
   setWhatsAppPairingState,
   type CreatedWhatsAppConnection,
-  type LeadWhatsAppConnectionIndicator,
+  type OpportunityWhatsAppConnectionIndicator,
   type WhatsAppConnectionView,
   type WhatsAppWebhookSecretCommit
 } from "./whatsapp-connection.js";

@@ -26,7 +26,7 @@ Novos tipos de fato (criados em 03a/05), notificação push de falha, Seam 4 E2E
 
 - View-model `buildLeadTimelineItemView`: outbound “Envio aceito pelo canal”, falha “Tentativa automática encerrada sem envio”, inbound “Resposta recebida no WhatsApp”; preview truncado em 140; mídia/reação com copy genérica + caption; URL `https?://` do provedor omitida. Sem composer/inbox.
 - `listLeadTimeline` seleciona `message_preview` só em `WHATSAPP_INBOUND_RECEIVED`; não devolve `external_message_id`, token ou last4. Fatos WhatsApp entram na ordem por instante com os demais. Escopo ADR-0015 via `opportunityScopeSql`.
-- Operação nomeada `getLeadWhatsAppConnectionIndicator` devolve só `{ connected }`. `connected` exige `pairing_state = CONNECTED` e `status = ACTIVE`. Fora do escopo do lead → “Lead not found”. `getWhatsAppConnection` permanece FORBIDDEN para Atendente/Supervisor.
+- Operação nomeada `getOpportunityWhatsAppConnectionIndicator` devolve só `{ connected }`. `connected` exige `pairing_state = CONNECTED` e `status = ACTIVE`. Fora do escopo do lead → “Lead not found”. `getWhatsAppConnection` permanece FORBIDDEN para Atendente/Supervisor.
 - Card: `StatusBadge` “WhatsApp conectado/desconectado” visível a todos no escopo; boolean serializado, sem token/last4/instance secret/apikey.
 - Testes: timeline DB (11), conexão+indicador (8), inbound (17), outbound (10), RLS (81), view-model (8), indicador UI (1), page (2). Typecheck, drift e migration-safety verdes. ESLint dos arquivos do 06 verde. `pnpm lint` do repo ainda falha em `tests/seam4-assignment.test.ts` (ticket 07; fora do ownership).
 - Revisão Composer 2.5 (`4cc36163-f4fe-4f58-bcef-83745e59215d`): approve, sem correções. Gates reexecutados verdes. Sem commit.

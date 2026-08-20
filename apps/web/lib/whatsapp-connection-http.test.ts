@@ -95,15 +95,17 @@ describe("WhatsApp HTTP orchestration", () => {
       webhook_token: "mtco_once"
     });
     const createInstance = vi.fn().mockResolvedValue(undefined);
+    const fetchInstances = vi.fn().mockResolvedValue([]);
     const setWebhook = vi.fn().mockResolvedValue(undefined);
     const connect = vi.fn().mockResolvedValue({
       base64: "data:image/png;base64,AAA",
       pairing_code: "ABCD1234"
     });
-    const client = clientStub({ createInstance, setWebhook, connect });
+    const client = clientStub({ createInstance, fetchInstances, setWebhook, connect });
 
     const paired = await pairWhatsAppWorkspace({ context, webhook_url, client });
 
+    expect(fetchInstances).toHaveBeenCalled();
     expect(createInstance).toHaveBeenCalledWith(instance_name);
     expect(setWebhook).toHaveBeenCalledWith({
       instance_name,
@@ -133,15 +135,18 @@ describe("WhatsApp HTTP orchestration", () => {
       token_last4: "etry"
     });
     const createInstance = vi.fn().mockRejectedValue(new Error("already exists"));
+    const fetchInstances = vi.fn().mockResolvedValue([{ instanceName: instance_name, state: "closed" }]);
     const setWebhook = vi.fn().mockResolvedValue(undefined);
     const connect = vi.fn().mockResolvedValue({
       base64: "data:image/png;base64,CCC",
       pairing_code: null
     });
-    const client = clientStub({ createInstance, setWebhook, connect });
+    const client = clientStub({ createInstance, fetchInstances, setWebhook, connect });
 
     const paired = await pairWhatsAppWorkspace({ context, webhook_url, client });
 
+    expect(fetchInstances).toHaveBeenCalled();
+    expect(createInstance).not.toHaveBeenCalled();
     expect(setWebhook).toHaveBeenCalledWith({
       instance_name,
       url: webhook_url,
@@ -161,6 +166,7 @@ describe("WhatsApp HTTP orchestration", () => {
       webhook_token: "mtco_secret_token"
     });
     const client = clientStub({
+      fetchInstances: vi.fn().mockResolvedValue([]),
       createInstance: vi.fn().mockRejectedValue(new Error("apikey leaked? mtco_secret_token"))
     });
 
@@ -172,13 +178,15 @@ describe("WhatsApp HTTP orchestration", () => {
 
   it("connects an existing instance once to obtain QR", async () => {
     mocks.getWhatsAppConnection.mockResolvedValue(connection);
+    const fetchInstances = vi.fn().mockResolvedValue([{ instanceName: instance_name, state: "closed" }]);
     const connect = vi.fn().mockResolvedValue({
       base64: "data:image/png;base64,BBB",
       pairing_code: null
     });
-    const client = clientStub({ connect });
+    const client = clientStub({ fetchInstances, connect });
 
     const result = await connectWhatsAppWorkspace({ context, client });
+    expect(fetchInstances).toHaveBeenCalled();
     expect(connect).toHaveBeenCalledWith(instance_name);
     expect(result.pairing_state).toBe("QR_PENDING");
     expect(mocks.setWhatsAppPairingState).toHaveBeenCalledWith(context, "QR_PENDING");
@@ -228,6 +236,19 @@ describe("WhatsApp HTTP orchestration", () => {
       token_hash: "d".repeat(64),
       token_last4: "abcd"
     });
+  });
+
+  it("marks pairing ERROR when connect is requested for an instance missing from the account list", async () => {
+    mocks.getWhatsAppConnection.mockResolvedValue(connection);
+    const fetchInstances = vi.fn().mockResolvedValue([]);
+    const connect = vi.fn();
+    const client = clientStub({ fetchInstances, connect });
+
+    await expect(connectWhatsAppWorkspace({ context, client })).rejects.toBeInstanceOf(
+      WhatsAppProviderError
+    );
+    expect(connect).not.toHaveBeenCalled();
+    expect(mocks.setWhatsAppPairingState).toHaveBeenCalledWith(context, "ERROR");
   });
 
   it("polls connectionState and caches the official reading", async () => {
