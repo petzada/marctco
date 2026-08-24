@@ -1,0 +1,92 @@
+name: Migration recovery
+
+# Marks a migration that failed against production as rolled back, so
+# `migrate deploy` will attempt it again.
+#
+# ADR-0010 already described this as the resumption path for any migration the
+# automatic `db:recover:foundation` does not cover — that one only knows the
+# foundation pair (001 and 002). Until now it was a command someone had to run
+# by hand against production, which meant the connection string had to leave
+# the GitHub environment to reach a laptop. This runs it where the secret
+# already lives.
+#
+# Deliberately only `--rolled-back`. `migrate resolve --applied` marks a
+# migration as done *without running it*, which is how a schema silently drifts
+# from its history; there is no input here that can reach it.
+#
+# When Prisma fails a migration, the file ran inside a transaction and the
+# transaction reverted, so the schema is untouched — what survives is the row
+# in `_prisma_migrations` that blocks every later deploy (P3009/P3018). This
+# clears that row and nothing else.
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: "Migration directory name, e.g. 20260824010100_connection_in_key_and_n_per_provider"
+        required: true
+        type: string
+      confirm:
+        description: 'Type "rolled-back" to confirm you mean production'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Mark a failed migration as rolled back
+    runs-on: ubuntu-latest
+    environment: production
+    # The same group the release job uses, so a recovery can never interleave
+    # with a deploy.
+    concurrency:
+      group: production-migrations
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Inputs reach the shell through the environment, never through `${{ }}`
+      # inside a `run:` — interpolation there would let the input become script.
+      - name: Refuse an unconfirmed run
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "rolled-back" ]; then
+            echo "Confirmation phrase missing; nothing was touched." >&2
+            exit 1
+          fi
+
+      - name: Refuse a migration that is not in this tree
+        env:
+          MIGRATION: ${{ inputs.migration }}
+        run: |
+          if [ ! -f "packages/db/prisma/migrations/$MIGRATION/migration.sql" ]; then
+            echo "No such migration in this checkout: $MIGRATION" >&2
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.32.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Show what production thinks before
+        run: pnpm --filter @marctco/db exec prisma migrate status
+        continue-on-error: true
+
+      - name: Mark it rolled back
+        env:
+          MIGRATION: ${{ inputs.migration }}
+        run: node scripts/prisma-safe.mjs migrate resolve --rolled-back "$MIGRATION"
+
+      - name: Show what production thinks after
+        run: pnpm --filter @marctco/db exec prisma migrate status
