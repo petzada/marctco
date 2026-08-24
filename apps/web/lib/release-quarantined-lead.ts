@@ -48,7 +48,7 @@ export async function releaseQuarantinedLead(
   const normalized = normalize(inbound);
 
   const submission = await recordLeadSubmission(context, {
-    key: planSubmission(inbound),
+    key: planSubmission(inbound, quarantined.integration_connection_id),
     integration_event_id: quarantined.integration_event_id,
     received_at: quarantined.received_at,
     whatsapp_opt_in: inbound.whatsapp_opt_in

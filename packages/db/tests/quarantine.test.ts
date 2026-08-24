@@ -93,7 +93,7 @@ async function seedQuarantinedLead(raw: Record<string, string>): Promise<Quarant
   const submission = await recordLeadSubmission(
     job,
     {
-      key: { source: "META_LEAD_ADS", external_lead_id },
+      key: { integration_connection_id: connection_id, source: "META_LEAD_ADS", external_lead_id },
       integration_event_id: event_id,
       received_at: RECEIVED_AT,
       whatsapp_opt_in: null
@@ -130,7 +130,11 @@ async function releaseQuarantinedLead(
   const submission = await recordLeadSubmission(
     manager_context,
     {
-      key: { source: quarantined.source, external_lead_id: quarantined.external_lead_id },
+      key: {
+        integration_connection_id: quarantined.integration_connection_id,
+        source: quarantined.source,
+        external_lead_id: quarantined.external_lead_id
+      },
       integration_event_id: quarantined.integration_event_id,
       received_at: quarantined.received_at,
       whatsapp_opt_in: inbound.whatsapp_opt_in
@@ -198,6 +202,7 @@ beforeAll(async () => {
         id: connection_id,
         workspace_id: workspace,
         provider: "PLUGA",
+        name: "Pluga",
         token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
         token_last4: "aaaa"
       }
@@ -220,6 +225,10 @@ describe("getQuarantinedEvent", () => {
       lead_submission_id: fixture.lead_submission_id,
       raw: { ad_id: "123", campaign_id: "456" },
       provider: "PLUGA",
+      // The connection the send authenticated against: half of the key the
+      // earlier recordLeadSubmission wrote, which the release reuses instead
+      // of recomputing (ADR-0031).
+      integration_connection_id: connection_id,
       source: "META_LEAD_ADS",
       external_lead_id: fixture.external_lead_id
     });

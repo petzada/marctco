@@ -136,6 +136,7 @@ beforeAll(async () => {
           id: connection_id,
           workspace_id: workspace,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
           token_last4: "aaaa"
         },
@@ -143,6 +144,7 @@ beforeAll(async () => {
           id: neighbour_connection_id,
           workspace_id: neighbour_workspace,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: randomUUID().replaceAll("-", "").padEnd(64, "1"),
           token_last4: "bbbb"
         }

@@ -1,6 +1,7 @@
 import {
   createIntegrationConnection,
-  getIntegrationConnectionSummary,
+  DUPLICATE_CONNECTION_NAME,
+  NO_SUCH_CONNECTION,
   rotateIntegrationConnectionSecret,
   setIntegrationConnectionStatus,
   type IntegrationConnectionStatus
@@ -23,6 +24,18 @@ export type IntegrationRouteHandler = (
   context: RouteContext
 ) => Promise<NextResponse>;
 
+function readString(body: unknown, field: string): string | null {
+  if (typeof body !== "object" || body === null || !(field in body)) {
+    return null;
+  }
+  const value = (body as Record<string, unknown>)[field];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function isMissingConnection(error: unknown): boolean {
+  return error instanceof Error && error.message === NO_SUCH_CONNECTION;
+}
+
 /**
  * The screen a `.../<segment>/status` route belongs to, read from the path the
  * request actually arrived on rather than from the surface.
@@ -43,7 +56,12 @@ export function screenPathForStatusRoute(request_url: string): `/${string}` {
 }
 
 /**
- * Generates or rotates the bearer secret of one origin's connection.
+ * Generates the secret of a new connection, or rotates the secret of one that
+ * exists. Since ADR-0031 a workspace holds N connections per provider, so both
+ * actions name what they mean: `generate` carries the name the client gives
+ * the origin, `rotate` carries the connection id. Neither is resolved from the
+ * surface's provider any more — that only worked while a provider identified
+ * exactly one row, and after the drop it would have rotated an arbitrary one.
  *
  * Route handlers and not Server Actions (ADR-0013): the tenant is structural,
  * from the `slug` segment, and the client panel calls this by `fetch` so the
@@ -85,54 +103,84 @@ export function createIntegrationSecretHandler(
     }
 
     if (action === "generate") {
-      const existing = await getIntegrationConnectionSummary(
-        access.workspace.context,
-        surface.provider
-      );
-      if (existing) {
-        // The screen's own state should have hidden "gerar" once a connection
-        // exists; refusing here is the server not trusting that it did.
-        return NextResponse.json({ status: "already_exists" }, { status: 409 });
+      const name = readString(body, "name");
+      if (name === null) {
+        return NextResponse.json({ status: "name_required" }, { status: 400 });
       }
-      const created = await createIntegrationConnection(access.workspace.context, {
-        provider: surface.provider
-      });
+      let created;
+      try {
+        created = await createIntegrationConnection(access.workspace.context, {
+          provider: surface.provider,
+          name
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === DUPLICATE_CONNECTION_NAME) {
+          // Two connections a human cannot tell apart on screen are worse than
+          // a refusal: the operator has to say which landing page this is.
+          return NextResponse.json({ status: "duplicate_name" }, { status: 409 });
+        }
+        throw error;
+      }
       logger.info({
         event: "integration_connection_secret",
         result: "generated",
         provider: surface.provider,
+        integration_connection_id: created.integration_connection_id,
         workspace_id: access.workspace.workspace_id
       });
-      return NextResponse.json({ token: created.token, token_last4: created.token_last4 });
+      return NextResponse.json({
+        integration_connection_id: created.integration_connection_id,
+        token: created.token,
+        token_last4: created.token_last4
+      });
     }
 
-    const rotated = await rotateIntegrationConnectionSecret(
-      access.workspace.context,
-      surface.provider
-    );
+    const integration_connection_id = readString(body, "integration_connection_id");
+    if (integration_connection_id === null) {
+      return NextResponse.json({ status: "connection_required" }, { status: 400 });
+    }
+    let rotated;
+    try {
+      rotated = await rotateIntegrationConnectionSecret(
+        access.workspace.context,
+        integration_connection_id
+      );
+    } catch (error) {
+      if (isMissingConnection(error)) {
+        // RLS already made another tenant's id read as absent; answering 404
+        // keeps it that way instead of confirming the id exists somewhere.
+        return NextResponse.json({ status: "not_found" }, { status: 404 });
+      }
+      throw error;
+    }
     logger.info({
       event: "integration_connection_secret",
       result: "rotated",
       provider: surface.provider,
+      integration_connection_id: rotated.integration_connection_id,
       workspace_id: access.workspace.workspace_id
     });
-    return NextResponse.json({ token: rotated.token, token_last4: rotated.token_last4 });
+    return NextResponse.json({
+      integration_connection_id: rotated.integration_connection_id,
+      token: rotated.token,
+      token_last4: rotated.token_last4
+    });
   };
 }
 
 /**
- * Enables or disables one origin's connection without deleting its
- * configuration. A plain form POST + redirect, like the rest of this app's
- * low-stakes writes (`Sair`, onboarding provisioning) — nothing here needs to
- * be shown once and held out of a redirect, unlike the secret itself.
+ * Enables or disables one connection without deleting its configuration. A
+ * plain form POST + redirect, like the rest of this app's low-stakes writes
+ * (`Sair`, onboarding provisioning) — nothing here needs to be shown once and
+ * held out of a redirect, unlike the secret itself.
  *
  * Every refusal returns to the screen instead of answering 403, because the
  * caller is a form and not `fetch`: a JSON body would replace the page with
  * raw text. A role that cannot open the screen at all lands on the same 404
  * the screen itself would have given it.
  *
- * Scoped to the surface's provider, so disabling the landing page cannot
- * silence Pluga.
+ * Scoped to one connection id, so disabling one landing page cannot silence
+ * the other — and, as before, cannot silence Pluga.
  *
  * Direção only (ADR-0015).
  */
@@ -152,19 +200,31 @@ export function createIntegrationStatusHandler(
 
     const form = await request.formData();
     const status = form.get("status");
+    const integration_connection_id = form.get("integration_connection_id");
     if (typeof status !== "string" || !KNOWN_STATUSES.has(status)) {
       return redirectTo(back);
     }
+    if (typeof integration_connection_id !== "string" || integration_connection_id === "") {
+      return redirectTo(back);
+    }
 
-    await setIntegrationConnectionStatus(
-      access.workspace.context,
-      surface.provider,
-      status as IntegrationConnectionStatus
-    );
+    try {
+      await setIntegrationConnectionStatus(
+        access.workspace.context,
+        integration_connection_id,
+        status as IntegrationConnectionStatus
+      );
+    } catch (error) {
+      if (isMissingConnection(error)) {
+        return redirectTo(back);
+      }
+      throw error;
+    }
     logger.info({
       event: "integration_connection_status",
       result: status === "ACTIVE" ? "enabled" : "disabled",
       provider: surface.provider,
+      integration_connection_id,
       workspace_id: access.workspace.workspace_id
     });
     return redirectTo(back);

@@ -217,6 +217,7 @@ beforeAll(async () => {
           id: connection_id,
           workspace_id: workspace,
           provider: "WHATSMIAU",
+          name: "WhatsApp",
           token_hash: generated.token_hash,
           token_last4: generated.token_last4,
           instance_name,
@@ -226,6 +227,7 @@ beforeAll(async () => {
           id: other_connection_id,
           workspace_id: other_workspace,
           provider: "WHATSMIAU",
+          name: "WhatsApp",
           token_hash: other_token.token_hash,
           token_last4: other_token.token_last4,
           instance_name: other_instance_name,
@@ -235,6 +237,7 @@ beforeAll(async () => {
           id: landing_connection_id,
           workspace_id: workspace,
           provider: "LANDING_PAGE",
+          name: "Landing page",
           token_hash: landing_token.token_hash,
           token_last4: landing_token.token_last4
         }

@@ -18,14 +18,35 @@ import type { PersonContacts, PersonDecision } from "./person-identity.js";
  * is I/O in disguise and would kill the pure test exactly as a query would.
  */
 
-/** `source` + `external_lead_id`: what `UNIQUE(workspace_id, source, external_lead_id)` arbitrates. */
+/**
+ * What `UNIQUE(workspace_id, integration_connection_id, source, external_lead_id)`
+ * arbitrates.
+ *
+ * The connection is part of the identity, not context around it (ADR-0031).
+ * Every landing page sends `source = LANDING_PAGE` and may declare its own
+ * `external_lead_id`; two of them numbering independently both send lead `1`,
+ * and a key that does not know which connection authenticated the send reads
+ * the second as a resend of the first — the lead disappears with no card and
+ * no error.
+ *
+ * Still a pure value: the caller supplies the connection because the caller
+ * is the one that already resolved the token. The domain never looks it up.
+ */
 export interface SubmissionKey {
+  readonly integration_connection_id: string;
   readonly source: LeadSource;
   readonly external_lead_id: string;
 }
 
-export function planSubmission(inbound: InboundLead): SubmissionKey {
-  return { source: inbound.source, external_lead_id: inbound.external_lead_id };
+export function planSubmission(
+  inbound: InboundLead,
+  integration_connection_id: string
+): SubmissionKey {
+  return {
+    integration_connection_id,
+    source: inbound.source,
+    external_lead_id: inbound.external_lead_id
+  };
 }
 
 /**

@@ -201,6 +201,7 @@ beforeAll(async () => {
         id: connection_id,
         workspace_id: workspace,
         provider: "PLUGA",
+        name: "Pluga",
         token_hash: `${randomUUID().replaceAll("-", "")}${randomUUID().replaceAll("-", "").slice(0, 32)}`,
         token_last4: "abcd"
       }
@@ -266,6 +267,7 @@ describe("listLeadTimeline", () => {
     const submission = await seeder.leadSubmission.create({
       data: {
         workspace_id: workspace,
+        integration_connection_id: connection_id,
         source: "META_LEAD_ADS",
         external_lead_id: `timeline-${randomUUID()}`,
         last_integration_event_id: (

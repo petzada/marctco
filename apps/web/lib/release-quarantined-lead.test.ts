@@ -51,6 +51,7 @@ describe("releaseQuarantinedLead", () => {
     vi.clearAllMocks();
     mocks.getQuarantinedEvent.mockResolvedValue({
       integration_event_id: "event-1",
+      integration_connection_id: "connection-1",
       lead_submission_id: "sub-1",
       received_at: RECEIVED_AT,
       raw: { ad_id: "123", campaign_id: "456" },
@@ -91,7 +92,11 @@ describe("releaseQuarantinedLead", () => {
     );
 
     expect(mocks.recordLeadSubmission).toHaveBeenCalledWith(context, {
-      key: { source: "META_LEAD_ADS", external_lead_id: "lead-1" },
+      key: {
+        integration_connection_id: "connection-1",
+        source: "META_LEAD_ADS",
+        external_lead_id: "lead-1"
+      },
       integration_event_id: "event-1",
       received_at: RECEIVED_AT,
       whatsapp_opt_in: null

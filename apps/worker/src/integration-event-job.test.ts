@@ -19,6 +19,7 @@ const { processIntegrationEventJob } = await import("./integration-event-job.js"
 
 const workspace_id = randomUUID();
 const integration_event_id = randomUUID();
+const integration_connection_id = randomUUID();
 const lead_submission_id = randomUUID();
 const pipeline_id = randomUUID();
 const entry_stage_id = randomUUID();
@@ -35,7 +36,7 @@ describe("processIntegrationEventJob", () => {
   beforeEach(() => {
     readIntegrationEventForProcessing.mockReset().mockResolvedValue({
       id: integration_event_id,
-      integration_connection_id: randomUUID(),
+      integration_connection_id,
       provider: "PLUGA",
       target_pipeline_id: null,
       status: "RECEIVED",
@@ -79,7 +80,7 @@ describe("processIntegrationEventJob", () => {
   it("stays inert for an event already processed, so republication costs nothing", async () => {
     readIntegrationEventForProcessing.mockResolvedValue({
       id: integration_event_id,
-      integration_connection_id: randomUUID(),
+      integration_connection_id,
       provider: "PLUGA",
       target_pipeline_id: null,
       status: "PROCESSED",
@@ -112,15 +113,19 @@ describe("processIntegrationEventJob", () => {
     const [, input] = recordLeadSubmission.mock.calls[0] as [
       unknown,
       {
-        key: { source: string; external_lead_id: string };
+        key: { integration_connection_id: string; source: string; external_lead_id: string };
         received_at: Date;
         whatsapp_opt_in: boolean | null;
       }
     ];
     // Pluga carries no id of its own in this slice, so the connector uses the
     // event id: identical on every reprocessing, which is what stops a
-    // republished event from becoming a second lead.
+    // republished event from becoming a second lead. The connection rides in
+    // the key so two origins numbering independently cannot swallow each
+    // other (ADR-0031); the job takes it from the event it already read, and
+    // never from the payload.
     expect(input.key).toEqual({
+      integration_connection_id,
       source: "META_LEAD_ADS",
       external_lead_id: integration_event_id
     });
@@ -174,7 +179,7 @@ describe("processIntegrationEventJob", () => {
     const targeted = randomUUID();
     readIntegrationEventForProcessing.mockResolvedValue({
       id: integration_event_id,
-      integration_connection_id: randomUUID(),
+      integration_connection_id,
       provider: "PLUGA",
       target_pipeline_id: targeted,
       status: "RECEIVED",
@@ -190,7 +195,7 @@ describe("processIntegrationEventJob", () => {
   it("quarantines a submission with no phone and no e-mail", async () => {
     readIntegrationEventForProcessing.mockResolvedValue({
       id: integration_event_id,
-      integration_connection_id: randomUUID(),
+      integration_connection_id,
       provider: "PLUGA",
       target_pipeline_id: null,
       status: "RECEIVED",

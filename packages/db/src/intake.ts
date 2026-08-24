@@ -176,15 +176,17 @@ export async function recordLeadSubmission(
 ): Promise<SubmissionInsert> {
   const { key } = input;
   assertUuid(input.integration_event_id, "integration_event_id");
+  assertUuid(key.integration_connection_id, "integration_connection_id");
 
   return withAccessContext(prisma, context, async (transaction) => {
     const inserted = await transaction.$queryRaw<IdRow[]>`
       INSERT INTO lead_submissions (
-        workspace_id, source, external_lead_id, received_at,
-        last_integration_event_id, whatsapp_opt_in, updated_at
+        workspace_id, integration_connection_id, source, external_lead_id,
+        received_at, last_integration_event_id, whatsapp_opt_in, updated_at
       )
       VALUES (
         ${context.workspace_id}::uuid,
+        ${key.integration_connection_id}::uuid,
         ${key.source}::lead_source,
         ${key.external_lead_id},
         ${input.received_at}::timestamptz,
@@ -192,7 +194,7 @@ export async function recordLeadSubmission(
         ${input.whatsapp_opt_in},
         CURRENT_TIMESTAMP
       )
-      ON CONFLICT (workspace_id, source, external_lead_id) DO NOTHING
+      ON CONFLICT (workspace_id, integration_connection_id, source, external_lead_id) DO NOTHING
       RETURNING id
     `;
 
@@ -207,6 +209,7 @@ export async function recordLeadSubmission(
       SELECT id, opportunity_id
       FROM lead_submissions
       WHERE workspace_id = ${context.workspace_id}::uuid
+        AND integration_connection_id = ${key.integration_connection_id}::uuid
         AND source = ${key.source}::lead_source
         AND external_lead_id = ${key.external_lead_id}
     `;

@@ -15,7 +15,7 @@ compromisso que o repositório já assumiu e ainda não pagou.
 
 | Ticket | ADR | O que falta, verificado no código |
 |---|---|---|
-| [19 — N conexões por provedor](./19-conexoes-multiplas-por-provedor.md) | [0031](../../docs/adr/0031-conexao-na-chave-idempotente.md) | `@@unique([workspace_id, provider])` continua no `schema.prisma`, e a chave idempotente do envio não inclui a conexão |
+| ~~[19 — N conexões por provedor](./19-conexoes-multiplas-por-provedor.md)~~ | [0031](../../docs/adr/0031-conexao-na-chave-idempotente.md) | **Entregue em 2026-08-24.** A conexão entrou na chave e `UNIQUE(workspace_id, provider)` caiu. Aguarda arquivamento |
 | [08 — Empresa agrupa equipes](./08-empresa-agrupa-equipes.md) | [0029](../../docs/adr/0029-empresa-e-agrupamento-de-equipe.md) | não existe model `Company` nem coluna `Tag.company_id` |
 | [09 — Supervisor não alcança Supervisor](./09-supervisor-nao-alcanca-supervisor.md) | [0028](../../docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md) | o conjunto do time em `packages/db/src/team.ts` ainda é simétrico entre supervisores |
 
