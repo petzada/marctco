@@ -83,10 +83,13 @@ jobs:
         run: pnpm --filter @marctco/db exec prisma migrate status
         continue-on-error: true
 
+      # Through pnpm, not `node scripts/...` directly: `prisma-safe.mjs` finds
+      # the Prisma CLI through `npm_execpath`, which only exists when a package
+      # manager is the one running the script.
       - name: Mark it rolled back
         env:
           MIGRATION: ${{ inputs.migration }}
-        run: node scripts/prisma-safe.mjs migrate resolve --rolled-back "$MIGRATION"
+        run: pnpm db:resolve:rolled-back "$MIGRATION"
 
       - name: Show what production thinks after
         run: pnpm --filter @marctco/db exec prisma migrate status

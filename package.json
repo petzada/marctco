@@ -35,6 +35,7 @@
     "db:migrate:deploy": "node scripts/prisma-safe.mjs migrate deploy",
     "db:recover:foundation": "tsx packages/db/src/recover-foundation-cli.ts",
     "db:drift": "node scripts/check-prisma-drift.mjs",
+    "db:resolve:rolled-back": "node scripts/prisma-safe.mjs migrate resolve --rolled-back",
     "db:roles:local": "node scripts/set-local-role-passwords.mjs",
     "check:migrations": "node scripts/check-migration-safety.mjs",
     "ship": "node scripts/ship.mjs"
