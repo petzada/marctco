@@ -1,29 +1,36 @@
--- Ticket 19a — ADR-0031: the connection enters the submission's idempotent key.
+-- Ticket 19 — ADR-0031: the connection enters the submission's idempotent key,
+-- and a workspace holds N connections per provider.
 --
 -- Every landing page sends source = LANDING_PAGE, and a landing page may
 -- declare its own external_lead_id. Two of them numbering independently both
 -- send lead "1", and UNIQUE(workspace_id, source, external_lead_id) reads the
 -- second as a resend of the first: the lead is swallowed with no card, no
--- error, no quarantine and no row in the queue. The constraint cannot tell
--- them apart because it does not know which connection authenticated the send
--- (ADR-0007 Mecanismo 1, emended by ADR-0031).
+-- error, no quarantine and no row in the queue (ADR-0007 Mecanismo 1, emended
+-- by ADR-0031).
 --
--- Expand/contract (ADR-0010): the column is born nullable, is backfilled from
--- the event each submission already points at, and only then enters the
--- constraint. Every lead_submission reaches its connection through
--- last_integration_event_id -> integration_events.integration_connection_id,
--- so no submission is orphaned — the guard below proves that instead of
--- assuming it, and aborts the release rather than dropping rows out of a key.
+-- The key fix and N connections per provider cannot be separated: with
+-- UNIQUE(workspace_id, provider) in place a workspace holds one landing-page
+-- connection at most, so two landing pages necessarily share one token — and a
+-- key that includes the connection would still read them as one origin.
 --
--- The key fix and N connections per provider land together, and cannot be
--- separated: with UNIQUE(workspace_id, provider) in place a workspace holds
--- one landing-page connection at most, so two landing pages necessarily share
--- one token — and a key that includes the connection would still read them as
--- the same origin. Each landing page needs its own connection for the wider
--- key to arbitrate anything.
+-- RLS AND BACKFILL. Every business table carries FORCE ROW LEVEL SECURITY, and
+-- the policies name marctco_app and marctco_worker only. This migration runs as
+-- marctco_migrator, which no policy covers, so a plain UPDATE here matches zero
+-- rows and reports success — while ALTER TABLE, which RLS does not govern, then
+-- sees the rows that were never touched. The first attempt at this migration
+-- failed in production exactly there: SET NOT NULL found nulls that the guard
+-- below had just counted as zero. CI cannot reproduce it, because CI migrates
+-- an empty database.
+--
+-- The fix is to drop FORCE for the length of the backfill: without it the table
+-- owner (marctco_migrator, which created these tables) bypasses RLS. FORCE is
+-- restored before the migration ends, and the whole file is one transaction, so
+-- no other session ever observes the table without it.
 SET ROLE marctco_migrator;
 
 ALTER TABLE lead_submissions ADD COLUMN integration_connection_id UUID;
+
+ALTER TABLE lead_submissions NO FORCE ROW LEVEL SECURITY;
 
 UPDATE lead_submissions AS submission
 SET integration_connection_id = event.integration_connection_id
@@ -32,6 +39,10 @@ WHERE event.workspace_id = submission.workspace_id
   AND event.id = submission.last_integration_event_id
   AND submission.integration_connection_id IS NULL;
 
+-- Every lead_submission reaches its connection through last_integration_event_id,
+-- so no submission is orphaned. This proves it rather than assuming it, and
+-- aborts the release instead of letting a row fall out of the key. It runs
+-- while FORCE is off, which is what makes the count real.
 DO $backfill$
 DECLARE
   unreachable BIGINT;
@@ -47,6 +58,8 @@ BEGIN
   END IF;
 END
 $backfill$;
+
+ALTER TABLE lead_submissions FORCE ROW LEVEL SECURITY;
 
 ALTER TABLE lead_submissions
   ALTER COLUMN integration_connection_id SET NOT NULL;
@@ -75,10 +88,12 @@ ALTER TABLE integration_connections
   DROP CONSTRAINT integration_connections_workspace_id_provider_key;
 
 -- The client names the connection ("LP institucional", "Pluga ACR"), because
--- with several per provider the provider stops identifying anything on
--- screen. Born nullable, backfilled from the provider that was until now the
--- identity, then made required.
+-- with several per provider the provider stops identifying anything on screen.
+-- Born nullable, backfilled from the provider that was until now the identity,
+-- then made required — same RLS caveat as above.
 ALTER TABLE integration_connections ADD COLUMN name TEXT;
+
+ALTER TABLE integration_connections NO FORCE ROW LEVEL SECURITY;
 
 UPDATE integration_connections
 SET name = CASE provider
@@ -87,6 +102,24 @@ SET name = CASE provider
   WHEN 'WHATSMIAU' THEN 'WhatsApp'
 END
 WHERE name IS NULL;
+
+DO $names$
+DECLARE
+  unnamed BIGINT;
+BEGIN
+  SELECT count(*) INTO unnamed
+  FROM integration_connections
+  WHERE name IS NULL;
+
+  IF unnamed > 0 THEN
+    RAISE EXCEPTION
+      'ADR-0031 backfill: % integration_connections have a provider the name backfill does not cover.',
+      unnamed;
+  END IF;
+END
+$names$;
+
+ALTER TABLE integration_connections FORCE ROW LEVEL SECURITY;
 
 ALTER TABLE integration_connections
   ALTER COLUMN name SET NOT NULL,

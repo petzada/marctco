@@ -18,6 +18,7 @@ compromisso que o repositório já assumiu e ainda não pagou.
 | ~~[19 — N conexões por provedor](./19-conexoes-multiplas-por-provedor.md)~~ | [0031](../../docs/adr/0031-conexao-na-chave-idempotente.md) | **Entregue em 2026-08-24.** A conexão entrou na chave e `UNIQUE(workspace_id, provider)` caiu. Aguarda arquivamento |
 | [08 — Empresa agrupa equipes](./08-empresa-agrupa-equipes.md) | [0029](../../docs/adr/0029-empresa-e-agrupamento-de-equipe.md) | não existe model `Company` nem coluna `Tag.company_id` |
 | [09 — Supervisor não alcança Supervisor](./09-supervisor-nao-alcanca-supervisor.md) | [0028](../../docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md) | o conjunto do time em `packages/db/src/team.ts` ainda é simétrico entre supervisores |
+| [20 — Os backfills que não backfillaram](./20-backfills-vazios-sob-force-rls.md) | — | dois backfills de 2026-08-17 rodaram sob `FORCE RLS` e tocaram zero linhas; `last_movement_at` segue `NULL` para oportunidades antigas em produção |
 
 **O 19 tem precedência sobre a Fase 5.** É o único aberto que corrompe dado em
 produção sem avisar: duas landing pages com numeração própria colidem na chave
