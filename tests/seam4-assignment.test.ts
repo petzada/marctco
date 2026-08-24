@@ -111,6 +111,7 @@ interface SeededChannelWorkspace {
   readonly attendant: UserContext;
   readonly other_attendant: UserContext;
   readonly pluga_token: string;
+  readonly pluga_connection_id: string;
 }
 
 async function resolveContext(user_id: string, slug: string): Promise<UserContext> {
@@ -169,7 +170,7 @@ async function seedReadyWorkspace(
   if (options.connect_whatsapp !== false) {
     await setWhatsAppPairingState(owner, "CONNECTED");
   }
-  const pluga = await createIntegrationConnection(owner, { provider: "PLUGA" });
+  const pluga = await createIntegrationConnection(owner, { provider: "PLUGA", name: "Pluga" });
   if (options.enable_flag !== false) {
     await seedWorkspaceFeatureFlag(provisioned.workspace_id, "auto_primeiro_contato");
   }
@@ -183,7 +184,8 @@ async function seedReadyWorkspace(
     supervisor: await resolveContext(supervisor_user_id, provisioned.slug),
     attendant: await resolveContext(attendant_user_id, provisioned.slug),
     other_attendant: await resolveContext(other_attendant_user_id, provisioned.slug),
-    pluga_token: pluga.token
+    pluga_token: pluga.token,
+    pluga_connection_id: pluga.integration_connection_id
   };
 }
 
@@ -218,7 +220,11 @@ async function ingestLead(
   );
   const normalized = normalize(inbound);
   const submission = await recordLeadSubmission(job, {
-    key: { source: "META_LEAD_ADS", external_lead_id: `seam4-${recorded.integration_event_id}` },
+    key: {
+      integration_connection_id: tenant.pluga_connection_id,
+      source: "META_LEAD_ADS",
+      external_lead_id: `seam4-${recorded.integration_event_id}`
+    },
     integration_event_id: recorded.integration_event_id,
     received_at,
     whatsapp_opt_in: inbound.whatsapp_opt_in

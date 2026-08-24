@@ -19,7 +19,6 @@ const BELOW_DIRECAO = ["ATTENDANT", "SUPERVISOR", "MANAGER"] as const;
 const mocks = vi.hoisted(() => ({
   resolveWorkspaceAccess: vi.fn(),
   createIntegrationConnection: vi.fn(),
-  getIntegrationConnectionSummary: vi.fn(),
   rotateIntegrationConnectionSecret: vi.fn(),
   setIntegrationConnectionStatus: vi.fn(),
   loggerInfo: vi.fn()
@@ -30,9 +29,11 @@ vi.mock("./workspace-access", () => ({
 }));
 vi.mock("@marctco/db", () => ({
   createIntegrationConnection: mocks.createIntegrationConnection,
-  getIntegrationConnectionSummary: mocks.getIntegrationConnectionSummary,
   rotateIntegrationConnectionSecret: mocks.rotateIntegrationConnectionSecret,
-  setIntegrationConnectionStatus: mocks.setIntegrationConnectionStatus
+  setIntegrationConnectionStatus: mocks.setIntegrationConnectionStatus,
+  // Literals, not the constants below: this factory is hoisted above them.
+  DUPLICATE_CONNECTION_NAME: "A connection with this name already exists",
+  NO_SUCH_CONNECTION: "There is no such integration connection in this workspace"
 }));
 vi.mock("./logger", () => ({
   logger: { info: mocks.loggerInfo, error: vi.fn(), warn: vi.fn() }
@@ -41,7 +42,15 @@ vi.mock("./logger", () => ({
 const { createIntegrationSecretHandler, createIntegrationStatusHandler, screenPathForStatusRoute } =
   await import("./integration-connection-routes");
 
+/**
+ * Spelled out rather than imported from `@marctco/db`, which this file mocks
+ * wholesale — importing the real module here would defeat the mock.
+ */
+const DUPLICATE_CONNECTION_NAME = "A connection with this name already exists";
+const NO_SUCH_CONNECTION = "There is no such integration connection in this workspace";
+
 const SLUG = "9c096b1a-6bcc-44cc-bb00-22a72139b26d";
+const CONNECTION_ID = "0f4b6d2a-1c3e-4f58-9a70-8d2e5b1c7a94";
 const params = Promise.resolve({ slug: SLUG });
 
 function accessAs(role: string) {
@@ -69,10 +78,17 @@ function secretRequest(segment: string, body: unknown, raw?: string): Request {
 }
 
 /** Addressed at the segment the route is really mounted at, because `back` is read from it. */
-function statusRequest(segment: string, status: string | null): Request {
+function statusRequest(
+  segment: string,
+  status: string | null,
+  integration_connection_id: string | null = CONNECTION_ID
+): Request {
   const form = new FormData();
   if (status !== null) {
     form.set("status", status);
+  }
+  if (integration_connection_id !== null) {
+    form.set("integration_connection_id", integration_connection_id);
   }
   return new Request(`https://app.marctco.test/workspace/${SLUG}/integrations/${segment}/status`, {
     method: "POST",
@@ -155,13 +171,14 @@ describe.each(SURFACES)("POST .../integrations/$segment/secret", (surface: Integ
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getIntegrationConnectionSummary.mockResolvedValue(null);
   });
 
   it("answers 401 when the session is not authenticated", async () => {
     mocks.resolveWorkspaceAccess.mockResolvedValue({ status: "unauthenticated" });
 
-    const response = await POST(request({ action: "generate" }), { params });
+    const response = await POST(request({ action: "generate", name: "LP institucional" }), {
+      params
+    });
 
     expect(response.status).toBe(401);
     expect(mocks.createIntegrationConnection).not.toHaveBeenCalled();
@@ -171,7 +188,9 @@ describe.each(SURFACES)("POST .../integrations/$segment/secret", (surface: Integ
     for (const role of BELOW_DIRECAO) {
       mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs(role));
 
-      const response = await POST(request({ action: "generate" }), { params });
+      const response = await POST(request({ action: "generate", name: "LP institucional" }), {
+      params
+    });
 
       expect(response.status).toBe(403);
     }
@@ -181,7 +200,9 @@ describe.each(SURFACES)("POST .../integrations/$segment/secret", (surface: Integ
   it("answers 403 for a workspace the session is not associated with", async () => {
     mocks.resolveWorkspaceAccess.mockResolvedValue({ status: "not-found" });
 
-    const response = await POST(request({ action: "generate" }), { params });
+    const response = await POST(request({ action: "generate", name: "LP institucional" }), {
+      params
+    });
 
     expect(response.status).toBe(403);
   });
@@ -197,7 +218,7 @@ describe.each(SURFACES)("POST .../integrations/$segment/secret", (surface: Integ
     expect(mocks.createIntegrationConnection).not.toHaveBeenCalled();
   });
 
-  it("creates the connection for this surface's provider and returns the secret once", async () => {
+  it("creates a named connection on this provider and returns the secret once", async () => {
     mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
     mocks.createIntegrationConnection.mockResolvedValue({
       integration_connection_id: "connection-1",
@@ -205,57 +226,114 @@ describe.each(SURFACES)("POST .../integrations/$segment/secret", (surface: Integ
       token_last4: "ated"
     });
 
-    const response = await POST(request({ action: "generate" }), { params });
+    const response = await POST(request({ action: "generate", name: "LP institucional" }), {
+      params
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      integration_connection_id: "connection-1",
       token: "mtco_generated",
       token_last4: "ated"
     });
-    expect(mocks.getIntegrationConnectionSummary).toHaveBeenCalledWith(
-      accessAs("OWNER").workspace.context,
-      surface.provider
-    );
     expect(mocks.createIntegrationConnection).toHaveBeenCalledWith(
       accessAs("OWNER").workspace.context,
-      { provider: surface.provider }
+      { provider: surface.provider, name: "LP institucional" }
     );
   });
 
-  it("answers 409 rather than minting a second secret when this provider already has one", async () => {
+  it("refuses to generate without a name — the provider no longer names one row", async () => {
     mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
-    mocks.getIntegrationConnectionSummary.mockResolvedValue({
-      integration_connection_id: "connection-1",
-      provider: surface.provider,
-      status: "ACTIVE",
-      token_last4: "L9rA"
-    });
 
-    const response = await POST(request({ action: "generate" }), { params });
+    const absent = await POST(request({ action: "generate" }), { params });
+    const blank = await POST(request({ action: "generate", name: "   " }), { params });
 
-    expect(response.status).toBe(409);
+    expect(absent.status).toBe(400);
+    expect(blank.status).toBe(400);
     expect(mocks.createIntegrationConnection).not.toHaveBeenCalled();
   });
 
-  it("rotates this surface's provider and leaves the other origin's secret alone", async () => {
+  it("mints a second connection on the same provider — N per provider (ADR-0031)", async () => {
+    mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
+    mocks.createIntegrationConnection
+      .mockResolvedValueOnce({
+        integration_connection_id: "connection-1",
+        token: "mtco_first",
+        token_last4: "irst"
+      })
+      .mockResolvedValueOnce({
+        integration_connection_id: "connection-2",
+        token: "mtco_second",
+        token_last4: "cond"
+      });
+
+    const first = await POST(request({ action: "generate", name: "LP ACR" }), { params });
+    const second = await POST(request({ action: "generate", name: "LP REAL" }), { params });
+
+    expect([first.status, second.status]).toEqual([200, 200]);
+    await expect(second.json()).resolves.toMatchObject({
+      integration_connection_id: "connection-2"
+    });
+  });
+
+  it("answers 409 for a name this workspace already uses", async () => {
+    mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
+    mocks.createIntegrationConnection.mockRejectedValue(new Error(DUPLICATE_CONNECTION_NAME));
+
+    const response = await POST(request({ action: "generate", name: "LP institucional" }), {
+      params
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ status: "duplicate_name" });
+  });
+
+  it("rotates the connection it was given, and never a whole provider", async () => {
     mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
     mocks.rotateIntegrationConnectionSecret.mockResolvedValue({
-      integration_connection_id: "connection-1",
+      integration_connection_id: CONNECTION_ID,
       token: "mtco_rotated",
       token_last4: "ated"
     });
 
-    const response = await POST(request({ action: "rotate" }), { params });
+    const response = await POST(
+      request({ action: "rotate", integration_connection_id: CONNECTION_ID }),
+      { params }
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
+      integration_connection_id: CONNECTION_ID,
       token: "mtco_rotated",
       token_last4: "ated"
     });
     expect(mocks.rotateIntegrationConnectionSecret).toHaveBeenCalledWith(
       accessAs("OWNER").workspace.context,
-      surface.provider
+      CONNECTION_ID
     );
+  });
+
+  it("refuses to rotate without naming a connection", async () => {
+    mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
+
+    const response = await POST(request({ action: "rotate" }), { params });
+
+    expect(response.status).toBe(400);
+    expect(mocks.rotateIntegrationConnectionSecret).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a connection this workspace cannot see", async () => {
+    // RLS already made another tenant id read as absent; 404 keeps it that way
+    // instead of confirming the id exists somewhere else.
+    mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
+    mocks.rotateIntegrationConnectionSecret.mockRejectedValue(new Error(NO_SUCH_CONNECTION));
+
+    const response = await POST(
+      request({ action: "rotate", integration_connection_id: CONNECTION_ID }),
+      { params }
+    );
+
+    expect(response.status).toBe(404);
   });
 
   it("never puts the clear secret in the log line", async () => {
@@ -266,7 +344,7 @@ describe.each(SURFACES)("POST .../integrations/$segment/secret", (surface: Integ
       token_last4: "ated"
     });
 
-    await POST(request({ action: "generate" }), { params });
+    await POST(request({ action: "generate", name: "LP institucional" }), { params });
 
     expect(JSON.stringify(mocks.loggerInfo.mock.calls)).not.toContain("mtco_generated");
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
@@ -325,15 +403,24 @@ describe.each(SURFACES)("POST .../integrations/$segment/status", (surface: Integ
   it("ignores a status it does not know", async () => {
     mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
 
-    const missing = await POST(request(null), { params });
+    const absent = await POST(request(null), { params });
     const bogus = await POST(request("DELETED"), { params });
 
-    expect(missing.headers.get("location")).toBe(back);
+    expect(absent.headers.get("location")).toBe(back);
     expect(bogus.headers.get("location")).toBe(back);
     expect(mocks.setIntegrationConnectionStatus).not.toHaveBeenCalled();
   });
 
-  it("disables and re-enables this surface's provider, returning to its own screen", async () => {
+  it("bounces a form that names no connection instead of guessing one", async () => {
+    mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
+
+    const response = await POST(statusRequest(surface.segment, "DISABLED", null), { params });
+
+    expect(response.headers.get("location")).toBe(back);
+    expect(mocks.setIntegrationConnectionStatus).not.toHaveBeenCalled();
+  });
+
+  it("disables and re-enables the connection it was given, back on its own screen", async () => {
     mocks.resolveWorkspaceAccess.mockResolvedValue(accessAs("OWNER"));
 
     const disabled = await POST(request("DISABLED"), { params });
@@ -344,13 +431,13 @@ describe.each(SURFACES)("POST .../integrations/$segment/status", (surface: Integ
     expect(mocks.setIntegrationConnectionStatus).toHaveBeenNthCalledWith(
       1,
       accessAs("OWNER").workspace.context,
-      surface.provider,
+      CONNECTION_ID,
       "DISABLED"
     );
     expect(mocks.setIntegrationConnectionStatus).toHaveBeenNthCalledWith(
       2,
       accessAs("OWNER").workspace.context,
-      surface.provider,
+      CONNECTION_ID,
       "ACTIVE"
     );
   });

@@ -141,7 +141,10 @@ export {
 // would turn an additive change into a merge conflict neither branch caused.
 // ---------------------------------------------------------------------------
 export {
+  DUPLICATE_CONNECTION_NAME,
   getIntegrationConnectionSummary,
+  listIntegrationConnections,
+  NO_SUCH_CONNECTION,
   rotateIntegrationConnectionSecret,
   setIntegrationConnectionStatus,
   type IntegrationConnectionSummary

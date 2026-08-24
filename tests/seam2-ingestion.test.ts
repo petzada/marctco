@@ -46,6 +46,7 @@ interface SeededWorkspace {
   readonly workspace_id: string;
   readonly context: UserContext;
   readonly token: string;
+  readonly integration_connection_id: string;
 }
 
 async function seedWorkspace(user_id: string, name: string): Promise<SeededWorkspace> {
@@ -54,11 +55,15 @@ async function seedWorkspace(user_id: string, name: string): Promise<SeededWorks
   if (!resolved) {
     throw new Error("the provisioned workspace did not resolve for its owner");
   }
-  const connection = await createIntegrationConnection(resolved.context, { provider: "PLUGA" });
+  const connection = await createIntegrationConnection(resolved.context, {
+    provider: "PLUGA",
+    name: "Pluga"
+  });
   return {
     workspace_id: provisioned.workspace_id,
     context: resolved.context,
-    token: connection.token
+    token: connection.token,
+    integration_connection_id: connection.integration_connection_id
   };
 }
 
@@ -729,5 +734,102 @@ describe("Seam 2: outbox recovery, reprocessing and the dead letter", () => {
     const cards = await inspectCards(recovered.workspace_id);
     expect(cards).toHaveLength(2);
     expect(cards.some((card) => card.person.name === "Rita Alves")).toBe(true);
+  });
+});
+
+/**
+ * ADR-0031. Before this, `UNIQUE(workspace_id, source, external_lead_id)` was
+ * the whole identity of a transmission, and two origins that numbered their own
+ * leads could not both own lead "1": the second was read as a resend of the
+ * first and vanished — no card, no error, no quarantine, no row in the queue.
+ *
+ * The two halves of the fix are proved together because neither works alone: a
+ * second connection on the same provider is what the dropped
+ * `UNIQUE(workspace_id, provider)` allows, and the connection inside the key is
+ * what makes the two tell apart.
+ */
+describe("Seam 2: two connections of one provider, and the key that keeps them apart", () => {
+  let host: SeededWorkspace;
+  let acr_token: string;
+  let real_token: string;
+
+  async function deliver(token: string, body: Record<string, unknown>): Promise<void> {
+    const response = await POST(leadRequest(token, JSON.stringify(body)));
+    expect(response.status).toBe(200);
+    await dispatchPendingIntegrationEvents(queue.publisher, 100);
+    const worker = new Worker(
+      INTEGRATION_EVENT_QUEUE,
+      async (job: Job) => processIntegrationEventJob(job.data),
+      { connection: new IORedis(redis_url, { maxRetriesPerRequest: null }) }
+    );
+    try {
+      await vi.waitFor(
+        async () => {
+          const events = await listIntegrationEvents(host.context, { limit: 500 });
+          expect(events.filter((event) => event.status === "RECEIVED")).toHaveLength(0);
+        },
+        { timeout: 30_000, interval: 250 }
+      );
+    } finally {
+      await worker.close();
+    }
+  }
+
+  beforeAll(async () => {
+    host = await seedWorkspace(randomUUID(), `Seam 2 conexoes ${randomUUID()}`);
+    // Two more connections on the provider the workspace already has one of.
+    // Under UNIQUE(workspace_id, provider) the first of these would have been
+    // refused outright.
+    const acr = await createIntegrationConnection(host.context, {
+      provider: "PLUGA",
+      name: "Pluga ACR"
+    });
+    const real = await createIntegrationConnection(host.context, {
+      provider: "PLUGA",
+      name: "Pluga REAL"
+    });
+    acr_token = acr.token;
+    real_token = real.token;
+  });
+
+  it("gives each connection its own card for the same external_lead_id", async () => {
+    await deliver(acr_token, {
+      external_lead_id: "1",
+      name: "Cliente da ACR",
+      phone: "(11) 96666-1111"
+    });
+    await deliver(real_token, {
+      external_lead_id: "1",
+      name: "Cliente da REAL",
+      phone: "(11) 96666-2222"
+    });
+
+    const submissions = await inspectSubmissions(host.workspace_id, "1");
+    expect(submissions).toHaveLength(2);
+    expect(submissions.every((submission) => submission.transmission_count === 1)).toBe(true);
+
+    const opportunity_ids = submissions.map((submission) => submission.opportunity_id);
+    expect(new Set(opportunity_ids).size).toBe(2);
+    expect(opportunity_ids.every((id) => id !== null)).toBe(true);
+
+    const cards = await inspectCards(host.workspace_id);
+    expect(cards.filter((card) => card.person.phones.includes("+5511966661111"))).toHaveLength(1);
+    expect(cards.filter((card) => card.person.phones.includes("+5511966662222"))).toHaveLength(1);
+  });
+
+  it("keeps a resend on the same connection inert, exactly as before", async () => {
+    const cards_before = await inspectCards(host.workspace_id);
+
+    await deliver(acr_token, {
+      external_lead_id: "1",
+      name: "Cliente da ACR",
+      phone: "(11) 96666-1111"
+    });
+
+    const submissions = await inspectSubmissions(host.workspace_id, "1");
+    expect(submissions).toHaveLength(2);
+    const resent = submissions.find((submission) => submission.transmission_count === 2);
+    expect(resent).toBeDefined();
+    expect(await inspectCards(host.workspace_id)).toHaveLength(cards_before.length);
   });
 });

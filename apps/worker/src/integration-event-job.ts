@@ -106,7 +106,7 @@ export async function processIntegrationEventJob(
   // Phase two of ADR-0017, and the reason there are three phases: the insert's
   // answer is an *input* of the decision below, not an output of it.
   const submission = await recordLeadSubmission(context, {
-    key: planSubmission(inbound),
+    key: planSubmission(inbound, event.integration_connection_id),
     integration_event_id: event.id,
     received_at: event.received_at,
     whatsapp_opt_in: inbound.whatsapp_opt_in

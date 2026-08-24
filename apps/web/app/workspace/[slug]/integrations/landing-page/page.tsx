@@ -1,4 +1,4 @@
-import { getIntegrationConnectionSummary } from "@marctco/db";
+import { listIntegrationConnections } from "@marctco/db";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -39,9 +39,9 @@ export default async function LandingPageIntegrationGuide({
   const webhookUrl = publicIntegrationUrl(requestHeaders, LANDING_PAGE_ENDPOINT_PATH);
 
   const isOwner = canManageIntegrationSecret(access.workspace.role);
-  const connection = isOwner
-    ? await getIntegrationConnectionSummary(access.workspace.context, LANDING_PAGE_SURFACE.provider)
-    : null;
+  const connections = isOwner
+    ? await listIntegrationConnections(access.workspace.context, LANDING_PAGE_SURFACE.provider)
+    : [];
 
   return (
     <main className="min-h-[100dvh] bg-canvas px-md py-xl md:px-lg md:py-xxl">
@@ -79,7 +79,7 @@ export default async function LandingPageIntegrationGuide({
         <div className="mt-lg">
           {isOwner ? (
             <IntegrationSecretPanel
-              connection={connection}
+              connections={connections}
               slug={slug}
               surface={LANDING_PAGE_SURFACE}
               webhookUrl={webhookUrl}

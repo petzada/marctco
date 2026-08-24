@@ -1,5 +1,5 @@
 import {
-  getIntegrationConnectionSummary,
+  listIntegrationConnections,
   getLastSuccessfulSyncAt,
   listDeadLetterEvents,
   listIntegrationEvents,
@@ -80,10 +80,10 @@ export default async function PlugaIntegrationPage({
   const webhookUrl = publicIntegrationUrl(requestHeaders, PLUGA_LEADS_ENDPOINT_PATH);
 
   const isOwner = canManageIntegrationSecret(access.workspace.role);
-  const [connection, events, lastSync, quarantine, deadLetter] = await Promise.all([
+  const [connections, events, lastSync, quarantine, deadLetter] = await Promise.all([
     isOwner
-      ? getIntegrationConnectionSummary(access.workspace.context, PLUGA_SURFACE.provider)
-      : Promise.resolve(null),
+      ? listIntegrationConnections(access.workspace.context, PLUGA_SURFACE.provider)
+      : Promise.resolve([]),
     listIntegrationEvents(access.workspace.context, { limit: 20 }),
     getLastSuccessfulSyncAt(access.workspace.context),
     listQuarantinedEvents(access.workspace.context, { limit: 20 }),
@@ -126,7 +126,7 @@ export default async function PlugaIntegrationPage({
 
         {isOwner ? (
           <IntegrationSecretPanel
-            connection={connection}
+            connections={connections}
             slug={slug}
             surface={PLUGA_SURFACE}
             webhookUrl={webhookUrl}

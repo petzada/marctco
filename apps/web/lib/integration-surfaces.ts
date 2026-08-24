@@ -47,6 +47,10 @@ export interface IntegrationSurfaceCopy {
   readonly panelDescription: string;
   /** Label of the URL the operator pastes into the origin. */
   readonly urlFieldLabel: string;
+  /** Example name for a new connection. N per provider since ADR-0031. */
+  readonly newConnectionPlaceholder: string;
+  /** Why naming it matters, in the origin's own vocabulary. */
+  readonly newConnectionHint: string;
   readonly enableButton: string;
   readonly disableButton: string;
   readonly disableTitle: string;
@@ -63,6 +67,9 @@ export const PLUGA_SURFACE: IntegrationSurface = {
     panelDescription:
       "Cole a URL de API e o segredo nos cabeçalhos JSON da automação HTTP Request da Pluga.",
     urlFieldLabel: "URL de API",
+    newConnectionPlaceholder: "Pluga ACR",
+    newConnectionHint:
+      "Uma conexão por conta da Pluga. O nome é como você reconhece de qual delas o lead veio.",
     enableButton: "Ativar integração",
     disableButton: "Desativar integração",
     disableTitle: "Desativar a integração?",
@@ -82,6 +89,9 @@ export const LANDING_PAGE_SURFACE: IntegrationSurface = {
     panelDescription:
       "Guarde o segredo no servidor do site: no WordPress, no backend ou nos segredos da função serverless. Ele nunca vai no JavaScript da página.",
     urlFieldLabel: "URL do webhook",
+    newConnectionPlaceholder: "LP institucional",
+    newConnectionHint:
+      "Uma conexão por landing page. Cada uma com o segredo próprio: assim duas páginas que numeram os leads por conta própria não se atropelam.",
     enableButton: "Ativar conexão",
     disableButton: "Desativar conexão",
     disableTitle: "Desativar a conexão da landing page?",

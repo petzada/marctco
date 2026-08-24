@@ -140,12 +140,13 @@ async function seedOpportunity(options: SeedOpportunityOptions = {}): Promise<{
     }
   });
 
+  const connection = await seeder.integrationConnection.findFirstOrThrow({
+    where: { workspace_id }
+  });
   const event = await seeder.integrationEvent.create({
     data: {
       workspace_id,
-      integration_connection_id: (
-        await seeder.integrationConnection.findFirstOrThrow({ where: { workspace_id } })
-      ).id,
+      integration_connection_id: connection.id,
       raw: { name: options.name ?? "Lead de teste" },
       received_at: arrived_at
     }
@@ -153,6 +154,7 @@ async function seedOpportunity(options: SeedOpportunityOptions = {}): Promise<{
   await seeder.leadSubmission.create({
     data: {
       workspace_id,
+      integration_connection_id: connection.id,
       source: options.source ?? "META_LEAD_ADS",
       external_lead_id: randomUUID(),
       received_at: arrived_at,
@@ -191,6 +193,7 @@ beforeAll(async () => {
       data: {
         workspace_id: workspace,
         provider: "PLUGA",
+        name: "Pluga",
         token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
         token_last4: "aaaa"
       }
@@ -238,6 +241,7 @@ beforeAll(async () => {
       data: {
         workspace_id: neighbour_workspace,
         provider: "PLUGA",
+        name: "Pluga",
         token_hash: randomUUID().replaceAll("-", "").padEnd(64, "1"),
         token_last4: "bbbb"
       }

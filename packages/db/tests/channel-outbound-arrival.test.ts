@@ -106,7 +106,11 @@ async function ingestLead(options: {
   const submission = await recordLeadSubmission(
     job,
     {
-      key: { source: "META_LEAD_ADS", external_lead_id: `arrival-${event_id}` },
+      key: {
+        integration_connection_id: pluga_connection,
+        source: "META_LEAD_ADS",
+        external_lead_id: `arrival-${event_id}`
+      },
       integration_event_id: event_id,
       received_at: RECEIVED_AT,
       whatsapp_opt_in: inbound.whatsapp_opt_in
@@ -170,7 +174,7 @@ async function seedQuarantinedLead(
   const submission = await recordLeadSubmission(
     job,
     {
-      key: { source: "META_LEAD_ADS", external_lead_id },
+      key: { integration_connection_id: pluga_connection, source: "META_LEAD_ADS", external_lead_id },
       integration_event_id: event_id,
       received_at: RECEIVED_AT,
       whatsapp_opt_in: null
@@ -211,7 +215,11 @@ async function releaseQuarantinedLead(
   const submission = await recordLeadSubmission(
     manager,
     {
-      key: { source: quarantined.source, external_lead_id: quarantined.external_lead_id },
+      key: {
+        integration_connection_id: quarantined.integration_connection_id,
+        source: quarantined.source,
+        external_lead_id: quarantined.external_lead_id
+      },
       integration_event_id: quarantined.integration_event_id,
       received_at: quarantined.received_at,
       whatsapp_opt_in: inbound.whatsapp_opt_in
@@ -274,12 +282,14 @@ beforeAll(async () => {
           id: pluga_connection,
           workspace_id: workspace,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
           token_last4: "aaaa"
         },
         {
           workspace_id: workspace,
           provider: "WHATSMIAU",
+          name: "WhatsApp",
           token_hash: "e".repeat(64),
           token_last4: "eeee",
           instance_name: `marctco_${workspace.replaceAll("-", "")}`,

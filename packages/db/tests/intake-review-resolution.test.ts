@@ -109,6 +109,7 @@ async function seedPossibleDuplicate(assigned_user_id?: string): Promise<{
     data: {
       id: reviewed_submission_id,
       workspace_id,
+      integration_connection_id: connection_id,
       source: "META_LEAD_ADS",
       external_lead_id: reviewed_submission_id,
       last_integration_event_id: integration_event_id,
@@ -155,6 +156,7 @@ beforeAll(async () => {
         create: {
           id: connection_id,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
           token_last4: "abcd"
         }
@@ -367,6 +369,7 @@ describe("resolveIntakeReview", () => {
         {
           id: absorbed_submission_id,
           workspace_id,
+          integration_connection_id: connection_id,
           source: "META_LEAD_ADS",
           external_lead_id: `absorbed-${randomUUID()}`,
           last_integration_event_id: first_event_id,
@@ -376,6 +379,7 @@ describe("resolveIntakeReview", () => {
         {
           id: canonical_submission_id,
           workspace_id,
+          integration_connection_id: connection_id,
           source: "META_LEAD_ADS",
           external_lead_id: `canonical-${randomUUID()}`,
           last_integration_event_id: canonical_event_id,
@@ -479,6 +483,7 @@ describe("resolveIntakeReview", () => {
       job,
       {
         key: {
+          integration_connection_id: connection_id,
           source: "META_LEAD_ADS",
           external_lead_id: absorbed_submission.external_lead_id
         },

@@ -47,14 +47,17 @@ async function main(): Promise<void> {
           select: { id: true }
         });
 
-    for (const provider of ["PLUGA", "LANDING_PAGE"] as const) {
-      const existing_connection = await transaction.integrationConnection.findUnique({
-        where: {
-          workspace_id_provider: {
-            workspace_id: DEVELOPMENT_WORKSPACE_ID,
-            provider
-          }
-        },
+    // Named, and no longer one per provider: ADR-0031 dropped
+    // UNIQUE(workspace_id, provider), so the seed identifies its own rows by
+    // the name it gives them rather than by the provider.
+    const seeded_connections = [
+      { provider: "PLUGA", name: "Pluga" },
+      { provider: "LANDING_PAGE", name: "Landing page" }
+    ] as const;
+
+    for (const { provider, name } of seeded_connections) {
+      const existing_connection = await transaction.integrationConnection.findFirst({
+        where: { workspace_id: DEVELOPMENT_WORKSPACE_ID, name },
         select: { id: true }
       });
       if (existing_connection) {
@@ -66,6 +69,7 @@ async function main(): Promise<void> {
         data: {
           workspace_id: DEVELOPMENT_WORKSPACE_ID,
           provider,
+          name,
           token_hash: generated.token_hash,
           token_last4: generated.token_last4,
           target_pipeline_id: default_pipeline.id

@@ -296,6 +296,11 @@ model IntegrationConnection {
   id                 String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id       String                      @db.Uuid
   provider           IntegrationProvider
+  /// Named by the client ("LP institucional", "Pluga ACR"). With N connections
+  /// per provider the provider stops identifying anything on screen (ADR-0031).
+  /// Unique per workspace case-insensitively, by a migration-only index on
+  /// `lower(name)` — Prisma cannot express a function in `@@unique`.
+  name               String
   contract_version   String                      @default("v1")
   token_hash         String                      @unique @db.Char(64)
   token_last4        String                      @db.Char(4)
@@ -310,20 +315,25 @@ model IntegrationConnection {
   workspace          Workspace                   @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   target_pipeline    Pipeline?                   @relation("IntegrationConnectionTargetPipeline", fields: [workspace_id, target_pipeline_id], references: [workspace_id, id], onDelete: Restrict)
   events             IntegrationEvent[]
+  submissions        LeadSubmission[]
   timeline_events    OpportunityTimelineEvent[]
 
-  @@unique([workspace_id, provider])
   @@unique([workspace_id, id])
   @@index([workspace_id])
   @@map("integration_connections")
 }
 
-// Ticket 02 of Canal: at most one live WhatsMiau connection per workspace is a
-// migration-only partial unique index
-// (`provider = WHATSMIAU AND status <> DISABLED`). Prisma's @@index cannot
-// express WHERE, and restoring UNIQUE(workspace_id, provider) as the only
-// rule would contradict ADR-0031. The global unique above still exists until
-// ticket 19 drops it; the partial is the WhatsMiau exception that survives.
+// Two migration-only indexes on integration_connections that the Prisma DSL
+// cannot express, both needing a WHERE or a function:
+//
+//   - at most one live WhatsMiau connection per workspace, partial over
+//     (workspace_id) WHERE provider = WHATSMIAU AND status <> DISABLED. It is
+//     the WhatsMiau exception of ADR-0003 composed with ADR-0031, and it is
+//     what let ticket 19 drop UNIQUE(workspace_id, provider) without letting
+//     a second live WhatsMiau row in.
+//   - unique (workspace_id, lower(name)), so one workspace cannot hold
+//     "LP ACR" next to "lp acr" and leave the operator guessing which one a
+//     lead arrived through.
 
 model IntegrationEvent {
   id                          String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -476,6 +486,10 @@ model LeadSubmission {
   /// release instant for a lead that went through quarantine.
   received_at               DateTime                   @default(now()) @db.Timestamptz(6)
   last_integration_event_id String                     @db.Uuid
+  /// Which connection authenticated the send. In the key since ADR-0031: two
+  /// landing pages numbering their own `external_lead_id` both send lead "1",
+  /// and without this the second is read as a resend and swallowed.
+  integration_connection_id String                     @db.Uuid
   /// How many times this submission has arrived. A resend increments it and
   /// touches nothing else in the funnel.
   transmission_count        Int                        @default(1)
@@ -489,10 +503,11 @@ model LeadSubmission {
   updated_at                DateTime                   @updatedAt @db.Timestamptz(6)
   workspace                 Workspace                  @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
   last_integration_event    IntegrationEvent           @relation(fields: [workspace_id, last_integration_event_id], references: [workspace_id, id], onDelete: Restrict)
+  integration_connection    IntegrationConnection      @relation(fields: [workspace_id, integration_connection_id], references: [workspace_id, id], onDelete: Restrict, map: "lead_submissions_workspace_id_connection_id_fkey")
   opportunity               Opportunity?               @relation(fields: [workspace_id, opportunity_id], references: [workspace_id, id], onDelete: NoAction, onUpdate: NoAction)
   timeline_events           OpportunityTimelineEvent[]
 
-  @@unique([workspace_id, source, external_lead_id])
+  @@unique([workspace_id, integration_connection_id, source, external_lead_id], map: "lead_submissions_workspace_id_connection_source_external_key")
   @@unique([workspace_id, id])
   @@index([workspace_id])
   @@index([workspace_id, opportunity_id])

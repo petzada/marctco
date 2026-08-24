@@ -7,7 +7,9 @@ import {
   type UserContext
 } from "../src/access-context.js";
 import {
+  createIntegrationConnection,
   getIntegrationConnectionSummary,
+  listIntegrationConnections,
   rotateIntegrationConnectionSecret,
   setIntegrationConnectionStatus
 } from "../src/integration-connection-operations.js";
@@ -83,6 +85,7 @@ beforeAll(async () => {
         id: connection_id,
         workspace_id: workspace,
         provider: "PLUGA",
+        name: "Pluga",
         token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
         token_last4: "aaaa"
       }
@@ -96,34 +99,90 @@ afterAll(async () => {
   await app.$disconnect();
 });
 
-describe("getIntegrationConnectionSummary", () => {
+describe("listIntegrationConnections", () => {
   it("is OWNER only — Gestão does not see the masked secret (ADR-0015)", async () => {
-    await expect(getIntegrationConnectionSummary(manager_context, "PLUGA", app)).rejects.toThrow(
+    await expect(listIntegrationConnections(manager_context, "PLUGA", app)).rejects.toThrow(
       /Only OWNER/
     );
   });
 
   it("returns the masked material and never the hash", async () => {
-    const summary = await getIntegrationConnectionSummary(owner_context, "PLUGA", app);
+    const [summary] = await listIntegrationConnections(owner_context, "PLUGA", app);
     expect(summary).toMatchObject({
       integration_connection_id: connection_id,
       provider: "PLUGA",
+      name: "Pluga",
       status: "ACTIVE",
       token_last4: "aaaa"
     });
     expect(summary && Object.keys(summary)).not.toContain("token_hash");
   });
 
-  it("answers null for a provider with no connection yet", async () => {
-    await expect(getIntegrationConnectionSummary(owner_context, "LANDING_PAGE", app)).resolves.toBeNull();
+  it("answers an empty list for a provider with no connection yet", async () => {
+    await expect(listIntegrationConnections(owner_context, "LANDING_PAGE", app)).resolves.toEqual(
+      []
+    );
+  });
+
+  it("lists every connection of the provider — N per provider since ADR-0031", async () => {
+    const second = await createIntegrationConnection(
+      owner_context,
+      { provider: "PLUGA", name: "Pluga ACR" },
+      app
+    );
+
+    const listed = await listIntegrationConnections(owner_context, "PLUGA", app);
+
+    expect(listed.map((connection) => connection.integration_connection_id)).toContain(
+      second.integration_connection_id
+    );
+    expect(listed.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("refuses a second connection whose name differs only in case", async () => {
+    await createIntegrationConnection(
+      owner_context,
+      { provider: "PLUGA", name: "Pluga REAL" },
+      app
+    );
+
+    await expect(
+      createIntegrationConnection(owner_context, { provider: "PLUGA", name: "pluga real" }, app)
+    ).rejects.toThrow(/already exists/);
+  });
+
+  it("refuses a connection with no name at all", async () => {
+    await expect(
+      createIntegrationConnection(owner_context, { provider: "PLUGA", name: "   " }, app)
+    ).rejects.toThrow(/needs a name/);
+  });
+});
+
+describe("getIntegrationConnectionSummary", () => {
+  it("is OWNER only", async () => {
+    await expect(
+      getIntegrationConnectionSummary(manager_context, connection_id, app)
+    ).rejects.toThrow(/Only OWNER/);
+  });
+
+  it("answers the row named by the id", async () => {
+    await expect(
+      getIntegrationConnectionSummary(owner_context, connection_id, app)
+    ).resolves.toMatchObject({ integration_connection_id: connection_id, name: "Pluga" });
+  });
+
+  it("answers null for an id this workspace cannot see, rather than confirming it", async () => {
+    await expect(
+      getIntegrationConnectionSummary(owner_context, randomUUID(), app)
+    ).resolves.toBeNull();
   });
 });
 
 describe("rotateIntegrationConnectionSecret", () => {
   it("is OWNER only", async () => {
-    await expect(rotateIntegrationConnectionSecret(manager_context, "PLUGA", app)).rejects.toThrow(
-      /Only OWNER/
-    );
+    await expect(
+      rotateIntegrationConnectionSecret(manager_context, connection_id, app)
+    ).rejects.toThrow(/Only OWNER/);
   });
 
   it("issues a new secret and invalidates the previous hash immediately", async () => {
@@ -131,7 +190,7 @@ describe("rotateIntegrationConnectionSecret", () => {
       where: { id: connection_id }
     });
 
-    const rotated = await rotateIntegrationConnectionSecret(owner_context, "PLUGA", app);
+    const rotated = await rotateIntegrationConnectionSecret(owner_context, connection_id, app);
     expect(rotated.integration_connection_id).toBe(connection_id);
     expect(rotated.token).toMatch(/^mtco_/);
 
@@ -142,12 +201,37 @@ describe("rotateIntegrationConnectionSecret", () => {
     expect(after.token_hash).toBe(hashIntegrationToken(rotated.token));
     expect(after.token_last4).toBe(rotated.token_last4);
   });
+
+  it("leaves every other connection of the same provider alone", async () => {
+    const sibling = await createIntegrationConnection(
+      owner_context,
+      { provider: "PLUGA", name: "Pluga irmã" },
+      app
+    );
+    const before = await seeder.integrationConnection.findUniqueOrThrow({
+      where: { id: sibling.integration_connection_id }
+    });
+
+    await rotateIntegrationConnectionSecret(owner_context, connection_id, app);
+
+    await expect(
+      seeder.integrationConnection.findUniqueOrThrow({
+        where: { id: sibling.integration_connection_id }
+      })
+    ).resolves.toMatchObject({ token_hash: before.token_hash });
+  });
+
+  it("refuses an id this workspace cannot see", async () => {
+    await expect(
+      rotateIntegrationConnectionSecret(owner_context, randomUUID(), app)
+    ).rejects.toThrow(/no such integration connection/);
+  });
 });
 
 describe("setIntegrationConnectionStatus", () => {
   it("is OWNER only", async () => {
     await expect(
-      setIntegrationConnectionStatus(manager_context, "PLUGA", "DISABLED", app)
+      setIntegrationConnectionStatus(manager_context, connection_id, "DISABLED", app)
     ).rejects.toThrow(/Only OWNER/);
   });
 
@@ -156,15 +240,39 @@ describe("setIntegrationConnectionStatus", () => {
       where: { id: connection_id }
     });
 
-    await setIntegrationConnectionStatus(owner_context, "PLUGA", "DISABLED", app);
+    await setIntegrationConnectionStatus(owner_context, connection_id, "DISABLED", app);
     await expect(
       seeder.integrationConnection.findUniqueOrThrow({ where: { id: connection_id } })
     ).resolves.toMatchObject({ status: "DISABLED", token_hash: before.token_hash });
 
-    await setIntegrationConnectionStatus(owner_context, "PLUGA", "ACTIVE", app);
+    await setIntegrationConnectionStatus(owner_context, connection_id, "ACTIVE", app);
     await expect(
       seeder.integrationConnection.findUniqueOrThrow({ where: { id: connection_id } })
     ).resolves.toMatchObject({ status: "ACTIVE", token_hash: before.token_hash });
+  });
+
+  it("disables one connection without silencing its siblings", async () => {
+    const sibling = await createIntegrationConnection(
+      owner_context,
+      { provider: "PLUGA", name: "Pluga vizinha" },
+      app
+    );
+
+    await setIntegrationConnectionStatus(owner_context, connection_id, "DISABLED", app);
+
+    await expect(
+      seeder.integrationConnection.findUniqueOrThrow({
+        where: { id: sibling.integration_connection_id }
+      })
+    ).resolves.toMatchObject({ status: "ACTIVE" });
+
+    await setIntegrationConnectionStatus(owner_context, connection_id, "ACTIVE", app);
+  });
+
+  it("refuses an id this workspace cannot see", async () => {
+    await expect(
+      setIntegrationConnectionStatus(owner_context, randomUUID(), "DISABLED", app)
+    ).rejects.toThrow(/no such integration connection/);
   });
 });
 
@@ -187,7 +295,12 @@ describe("getLastSuccessfulSyncAt and requeueIntegrationEventForReprocessing", (
     const job = createJobContext({ workspace_id: workspace, integration_event_id: event_id });
     const submission = await recordLeadSubmission(
       job,
-      { key: { source: "META_LEAD_ADS", external_lead_id }, integration_event_id: event_id, received_at, whatsapp_opt_in: null },
+      {
+        key: { integration_connection_id: connection_id, source: "META_LEAD_ADS", external_lead_id },
+        integration_event_id: event_id,
+        received_at,
+        whatsapp_opt_in: null
+      },
       app
     );
     await applyIntakePlan(

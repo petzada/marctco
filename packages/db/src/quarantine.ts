@@ -28,6 +28,12 @@ function assertQuarantineReader(context: UserContext): void {
  */
 export interface QuarantinedEvent {
   readonly integration_event_id: string;
+  /**
+   * The connection that authenticated the original send. The release must
+   * reuse it, not re-derive it: it is half of the key the earlier
+   * `recordLeadSubmission` wrote (ADR-0031).
+   */
+  readonly integration_connection_id: string;
   readonly lead_submission_id: string;
   readonly received_at: Date;
   /**
@@ -44,6 +50,7 @@ export interface QuarantinedEvent {
 
 interface QuarantinedEventRow {
   readonly integration_event_id: string;
+  readonly integration_connection_id: string;
   readonly lead_submission_id: string;
   readonly received_at: Date;
   readonly raw: unknown;
@@ -80,6 +87,7 @@ export async function getQuarantinedEvent(
     transaction.$queryRaw<QuarantinedEventRow[]>`
       SELECT
         event.id AS integration_event_id,
+        event.integration_connection_id,
         submission.id AS lead_submission_id,
         event.received_at,
         event.raw,
@@ -170,6 +178,7 @@ export async function listQuarantinedEvents(
     transaction.$queryRaw<QuarantinedEventSummaryRow[]>`
       SELECT
         event.id AS integration_event_id,
+        event.integration_connection_id,
         submission.id AS lead_submission_id,
         event.received_at,
         submission.source::text AS source,

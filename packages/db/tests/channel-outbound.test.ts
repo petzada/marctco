@@ -477,6 +477,7 @@ describe("loadChannelOutboundSend", () => {
       data: {
         workspace_id: workspace,
         provider: "WHATSMIAU",
+        name: "WhatsApp",
         token_hash: "c".repeat(64),
         token_last4: "abcd",
         instance_name: `marctco_${workspace.replaceAll("-", "")}`,

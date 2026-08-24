@@ -75,14 +75,16 @@ const manager_context = createUserContextFromResolvedMembership({
 });
 
 /** A fresh event to hang a submission on: each transmission carries its own. */
-async function seedEvent(workspace_id = workspace): Promise<string> {
+async function seedEvent(
+  workspace_id = workspace,
+  integration_connection_id: string = workspace_id === workspace ? connection_id : neighbour_connection
+): Promise<string> {
   const id = randomUUID();
   await seeder.integrationEvent.create({
     data: {
       id,
       workspace_id,
-      integration_connection_id:
-        workspace_id === workspace ? connection_id : neighbour_connection,
+      integration_connection_id,
       raw: { name: "Maria" },
       received_at: RECEIVED_AT
     }
@@ -104,15 +106,23 @@ async function submit(
     received_at?: Date;
     workspace_id?: ReturnType<typeof randomUUID>;
     whatsapp_opt_in?: boolean | null;
+    integration_connection_id?: string;
   } = {}
 ): Promise<Submitted> {
   const workspace_id = options.workspace_id ?? workspace;
-  const event_id = await seedEvent(workspace_id);
+  const connection =
+    options.integration_connection_id ??
+    (workspace_id === workspace ? connection_id : neighbour_connection);
+  const event_id = await seedEvent(workspace_id, connection);
   const job = createJobContext({ workspace_id, integration_event_id: event_id });
   const outcome = await recordLeadSubmission(
     job,
     {
-      key: { source: options.source ?? "META_LEAD_ADS", external_lead_id },
+      key: {
+        integration_connection_id: connection,
+        source: options.source ?? "META_LEAD_ADS",
+        external_lead_id
+      },
       integration_event_id: event_id,
       received_at: options.received_at ?? RECEIVED_AT,
       whatsapp_opt_in: options.whatsapp_opt_in ?? null
@@ -243,6 +253,7 @@ beforeAll(async () => {
           id: connection_id,
           workspace_id: workspace,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
           token_last4: "aaaa"
         },
@@ -250,6 +261,7 @@ beforeAll(async () => {
           id: neighbour_connection,
           workspace_id: neighbour_workspace,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: randomUUID().replaceAll("-", "").padEnd(64, "1"),
           token_last4: "bbbb"
         }
@@ -371,7 +383,7 @@ describe("recordLeadSubmission: the constraint arbitrates, never a SELECT", () =
     const duplicate = await recordLeadSubmission(
       createJobContext({ workspace_id: workspace, integration_event_id: retransmission_event_id }),
       {
-        key: { source: "META_LEAD_ADS", external_lead_id: key },
+        key: { integration_connection_id: connection_id, source: "META_LEAD_ADS", external_lead_id: key },
         integration_event_id: retransmission_event_id,
         received_at: RELEASED_AT,
         whatsapp_opt_in: null
@@ -499,7 +511,7 @@ describe("transactional intake and applyIntakePlan: NEW_OPPORTUNITY", () => {
     await recordLeadSubmission(
       createJobContext({ workspace_id: workspace, integration_event_id: replay_event }),
       {
-        key: { source: "META_LEAD_ADS", external_lead_id: key },
+        key: { integration_connection_id: connection_id, source: "META_LEAD_ADS", external_lead_id: key },
         integration_event_id: replay_event,
         received_at: RELEASED_AT,
         whatsapp_opt_in: false
@@ -1136,7 +1148,7 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
     const release_submission = await recordLeadSubmission(
       manager_context,
       {
-        key: { source: "META_LEAD_ADS", external_lead_id },
+        key: { integration_connection_id: connection_id, source: "META_LEAD_ADS", external_lead_id },
         integration_event_id: submitted.event_id,
         received_at: RECEIVED_AT,
         whatsapp_opt_in: null
@@ -1258,6 +1270,7 @@ describe("applyIntakePlan: RETRANSMISSION and QUARANTINE", () => {
     const neighbour_submission = await seeder.leadSubmission.create({
       data: {
         workspace_id: neighbour_workspace,
+        integration_connection_id: neighbour_connection,
         source: "META_LEAD_ADS",
         external_lead_id: `superuser-scope-${randomUUID()}`,
         received_at: RECEIVED_AT,

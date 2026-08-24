@@ -126,12 +126,15 @@ export async function createWhatsAppConnection(
     const rows = await withAccessContext(prisma, context, async (transaction) =>
       transaction.$queryRaw<WhatsAppConnectionRow[]>`
         INSERT INTO integration_connections (
-          workspace_id, provider, token_hash, token_last4,
+          workspace_id, provider, name, token_hash, token_last4,
           instance_name, pairing_state, updated_at
         )
         VALUES (
           ${context.workspace_id}::uuid,
           'WHATSMIAU'::integration_provider,
+          -- Not client-named: ADR-0003 allows one live WhatsMiau connection per
+          -- workspace, so there is nothing here for a name to tell apart.
+          'WhatsApp',
           ${generated.token_hash},
           ${generated.token_last4},
           ${instance_name},

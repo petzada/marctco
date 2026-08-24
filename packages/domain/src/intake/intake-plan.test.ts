@@ -85,11 +85,27 @@ describe("reusedPersonId", () => {
 });
 
 describe("planSubmission", () => {
-  it("is the idempotency key and nothing else: source plus external_lead_id", () => {
-    expect(planSubmission(inbound({ name: "Fulana", phone: "11987654321" }))).toEqual({
+  const CONNECTION = "6f1d2c8e-9a34-4b71-8c5e-2d0f7a9b1c33";
+
+  it("is the idempotency key and nothing else: connection, source, external_lead_id", () => {
+    expect(planSubmission(inbound({ name: "Fulana", phone: "11987654321" }), CONNECTION)).toEqual({
+      integration_connection_id: CONNECTION,
       source: "META_LEAD_ADS",
       external_lead_id: "meta-1"
     });
+  });
+
+  it("keeps two connections apart when both declare the same external_lead_id", () => {
+    const other = "1b7e4f90-33aa-4c02-9de6-5a8c1f2b7e40";
+    const lead = inbound({ name: "Fulana", phone: "11987654321" });
+
+    expect(planSubmission(lead, CONNECTION)).not.toEqual(planSubmission(lead, other));
+  });
+
+  it("does not read the connection off the payload — the caller that resolved the token supplies it", () => {
+    const lead = inbound({ name: "Fulana", phone: "11987654321" });
+
+    expect(planSubmission(lead, CONNECTION).integration_connection_id).toBe(CONNECTION);
   });
 });
 

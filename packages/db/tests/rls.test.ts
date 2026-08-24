@@ -83,7 +83,7 @@ const isolation_cases = [
     table_name: "integration_connections",
     read_sql:
       "SELECT workspace_id AS tenant_id FROM integration_connections ORDER BY workspace_id",
-    write_sql: `INSERT INTO integration_connections (id, workspace_id, provider, contract_version, token_hash, token_last4, status, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'LANDING_PAGE', 'v1', '${cross_workspace_token_hash}', 'rker', 'ACTIVE', CURRENT_TIMESTAMP)`
+    write_sql: `INSERT INTO integration_connections (id, workspace_id, provider, name, contract_version, token_hash, token_last4, status, updated_at) VALUES ('${randomUUID()}', '${workspace_b}', 'LANDING_PAGE', 'Cross-workspace', 'v1', '${cross_workspace_token_hash}', 'rker', 'ACTIVE', CURRENT_TIMESTAMP)`
   },
   {
     table_name: "integration_events",
@@ -240,6 +240,7 @@ beforeAll(async () => {
           id: integration_connection_a,
           workspace_id: workspace_a,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: token_hash_a,
           token_last4: active_token_a.slice(-4),
           target_pipeline_id: null
@@ -248,6 +249,7 @@ beforeAll(async () => {
           id: integration_connection_b,
           workspace_id: workspace_b,
           provider: "PLUGA",
+          name: "Pluga",
           token_hash: token_hash_b,
           token_last4: active_token_b.slice(-4),
           target_pipeline_id: pipeline_b
@@ -359,6 +361,7 @@ beforeAll(async () => {
         {
           id: lead_submission_a,
           workspace_id: workspace_a,
+          integration_connection_id: integration_connection_a,
           source: "META_LEAD_ADS",
           external_lead_id: "rls-a",
           last_integration_event_id: integration_event_a,
@@ -367,6 +370,7 @@ beforeAll(async () => {
         {
           id: lead_submission_b,
           workspace_id: workspace_b,
+          integration_connection_id: integration_connection_b,
           source: "META_LEAD_ADS",
           external_lead_id: "rls-b",
           last_integration_event_id: integration_event_b,
@@ -1228,6 +1232,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         data: {
           workspace_id: workspace_a,
           provider: "LANDING_PAGE",
+          name: "Landing page",
           token_hash: token_hash_a,
           token_last4: "same"
         }
@@ -1255,6 +1260,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         data: {
           workspace_id: workspace_a,
           provider: "LANDING_PAGE",
+          name: "Landing page",
           token_hash: legal_hash,
           token_last4: "lega",
           target_pipeline_id: legal_pipeline.id
@@ -1300,6 +1306,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         data: {
           workspace_id: workspace_a,
           provider: "WHATSMIAU",
+          name: "WhatsApp",
           token_hash: createHash("sha256")
             .update(`mtco_whatsmiau_missing_${randomUUID()}`, "utf8")
             .digest("hex"),
@@ -1312,6 +1319,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       data: {
         workspace_id: workspace_a,
         provider: "WHATSMIAU",
+        name: "WhatsApp",
         token_hash: createHash("sha256")
           .update(`mtco_whatsmiau_live_${randomUUID()}`, "utf8")
           .digest("hex"),
@@ -1326,6 +1334,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         data: {
           workspace_id: workspace_a,
           provider: "WHATSMIAU",
+          name: "WhatsApp",
           token_hash: createHash("sha256")
             .update(`mtco_whatsmiau_second_${randomUUID()}`, "utf8")
             .digest("hex"),
@@ -1358,6 +1367,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       data: {
         workspace_id: workspace_a,
         provider: "LANDING_PAGE",
+        name: "Landing page",
         token_hash: createHash("sha256")
           .update(`mtco_target_${randomUUID()}`, "utf8")
           .digest("hex"),
