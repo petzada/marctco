@@ -10,7 +10,6 @@ const typedConfigs = tseslint.configs.recommendedTypeChecked.map((config) => ({
 export default tseslint.config(
   {
     ignores: [
-      ".agents/**",
       ".claude/**",
       "**/node_modules/**",
       "**/.next/**",
