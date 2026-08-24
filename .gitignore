@@ -44,7 +44,6 @@ desktop.ini
 .claude/worktrees/
 
 # Deliberadamente versionados — não ignorar:
-#   .agents/   skills do projeto
-#   .claude/   configuração do harness
-#   .scratch/  spec e tickets (é o issue tracker deste repo)
-#   docs/      ADRs, pesquisa e plano de construção
+#   .claude/skills/  skills do projeto, instaladas a partir de skills-lock.json
+#   .scratch/        spec e tickets (é o issue tracker deste repo)
+#   docs/            ADRs, pesquisa e plano de construção

@@ -3,7 +3,6 @@ import { extname, join, relative } from "node:path";
 
 const repository_root = process.cwd();
 const ignored_directories = new Set([
-  ".agents",
   ".claude",
   ".git",
   ".next",
