@@ -21,9 +21,6 @@ const failures = [];
 
 function visit(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name === "PROMPT-GOAL-IMPLEMENTACAO.md") {
-      continue;
-    }
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
       if (!ignored_directories.has(entry.name)) {

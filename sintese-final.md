@@ -1,7 +1,7 @@
 # CRM Revisional — Síntese final de produto (MVP)
 
 > **Fonte de verdade** para iniciar o desenvolvimento · ago/2026  
-> Consolida [decisões travadas](docs/pesquisa/decisoes.md), [síntese de mercado](docs/pesquisa/sintese.md), [análise Pluga](docs/pesquisa/pluga.md) e [síntese manual](docs/pesquisa/sintese-manual.md).
+> Consolida [decisões travadas](docs/pesquisa/decisoes.md), [síntese de mercado](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese.md), [análise Pluga](docs/pesquisa/pluga.md) e [síntese manual](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md).
 
 > ⚠️ **Documento de degrau 4** ([escada de precedência](./AGENTS.md#precedência-entre-documentos)). Cede para `decisao-features-concorrentes.md` e para os ADRs. Superado na sessão de 2026-08-04:
 >
@@ -25,7 +25,7 @@ CRM de vendas para assessorias de **revisional de juros abusivos** (financiament
 
 **Tese:** capturar lead quente → entrar no funil comercial configurado → aquecer via WhatsApp → classificar o financiamento quando disponível → assinar contrato → realizar handoff humano ao funil jurídico com histórico intacto. A Pluga é apenas a camada de entrada e De→Para de Ads; toda a inteligência comercial fica no CRM.
 
-**Referências de mercado:** [Ploomes](docs/pesquisa/ploomes.md) · [clieent](docs/pesquisa/clieent.md) · [ADVBOX](docs/pesquisa/advbox.md) · [PipeRun](docs/pesquisa/piperun.md) · [Pipedrive](docs/pesquisa/pipedrive.md)
+**Referências de mercado:** [Ploomes](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/ploomes.md) · [clieent](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/clieent.md) · [ADVBOX](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/advbox.md) · [PipeRun](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/piperun.md) · [Pipedrive](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/pipedrive.md)
 
 ---
 
@@ -183,7 +183,7 @@ PlugaV1Connector · LandingPageV1Connector
 → InboundLead → NormalizedLead → domínio (identidade, revisão, funil)
 ```
 
-Evolução futura: `MetaDirectConnector`, `GoogleDirectConnector`, `CsvImportConnector` — [sintese-manual § Caminho de evolução](docs/pesquisa/sintese-manual.md)
+Evolução futura: `MetaDirectConnector`, `GoogleDirectConnector`, `CsvImportConnector` — [sintese-manual § Caminho de evolução](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md)
 
 ### 5.4 Deduplicação
 
@@ -251,7 +251,7 @@ Especificação: [decisoes.md § Score](docs/pesquisa/decisoes.md#score-de-cabim
 | Auditoria | Log de ações sensíveis (mínimo no MVP; LGPD completa pós-validação) |
 | Feature flags | Catálogo no código + `workspace_flags`; liberação comercial/técnico |
 
-Inspirações por concorrente: CPQ/docs [Ploomes](docs/pesquisa/ploomes.md) · proposta rastreável + ASTREA-like handoff [clieent](docs/pesquisa/clieent.md) · kanban intuitivo [Pipedrive](docs/pesquisa/pipedrive.md) · case revisional [PipeRun](docs/pesquisa/piperun.md) · pós-venda jurídico (fase futura) [ADVBOX](docs/pesquisa/advbox.md)
+Inspirações por concorrente: CPQ/docs [Ploomes](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/ploomes.md) · proposta rastreável + ASTREA-like handoff [clieent](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/clieent.md) · kanban intuitivo [Pipedrive](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/pipedrive.md) · case revisional [PipeRun](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/piperun.md) · pós-venda jurídico (fase futura) [ADVBOX](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/advbox.md)
 
 ---
 
@@ -312,7 +312,7 @@ Fonte de verdade técnica: [stack-recomendada.md](./stack-recomendada.md) · [AD
 - Preço **negociado fora do app** (time comercial); sem billing in-app no MVP
 - MVP expõe **todos os módulos no código**; liberação via **`workspace_flags`** (comercial/técnico)
 - Infra Pluga: contratada pelo cliente (ou repassada no plano comercial)
-- Exemplo de packaging comercial (referência, não travado): CRM + integração + configuração — ver [sintese-manual § Monetização](docs/pesquisa/sintese-manual.md)
+- Exemplo de packaging comercial (referência, não travado): CRM + integração + configuração — ver [sintese-manual § Monetização](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md)
 
 ---
 
@@ -320,16 +320,16 @@ Fonte de verdade técnica: [stack-recomendada.md](./stack-recomendada.md) · [AD
 
 | # | Entrega | Referência |
 |---|---------|------------|
-| 1 | Workspace, RLS, roles, tags (filial/time), feature flags, funis editáveis | [sintese.md §9](docs/pesquisa/sintese.md) · [ADR-0002](docs/adr/0002-workspace-tags-times.md) |
+| 1 | Workspace, RLS, roles, tags (filial/time), feature flags, funis editáveis | [sintese.md §9](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese.md) · [ADR-0002](docs/adr/0002-workspace-tags-times.md) |
 | 2 | Endpoint Pluga + webhook LP + normalização + fila + `integration_events` | [pluga.md](docs/pesquisa/pluga.md) |
 | 3 | Tela Integrações > Pluga (URL, secret, teste, logs, sync) | [pluga.md § Tela](docs/pesquisa/pluga.md#o-que-o-crm-precisa-ter-tela-integrações--pluga) |
 | 4 | WhatsMiau + template 1º contato + SLA + atribuição comercial | [decisoes.md](docs/pesquisa/decisoes.md) |
-| 5 | Kanban comercial + docs + proposta + motivo perda | [sintese.md](docs/pesquisa/sintese.md) |
+| 5 | Kanban comercial + docs + proposta + motivo perda | [sintese.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese.md) |
 | 6 | Assinatura Clicksign + DocuSign + eventos no funil | [decisoes.md § Assinatura](docs/pesquisa/decisoes.md#assinatura-q7bc) |
 | 7 | Handoff → funil jurídico (idempotente + resumo comercial) | [decisoes.md § Handoff](docs/pesquisa/decisoes.md#handoff-comercial--jurídico-q8c--orquestração) |
 | 8 | Tela Análise de cliente + LLM score (opcional) | [decisoes.md § Score](docs/pesquisa/decisoes.md#score-de-cabimento-q6d--especificação) |
-| 9 | Dashboard comercial | [sintese.md](docs/pesquisa/sintese.md) |
-| 10 | Pós-MVP: inbox WA · VoIP · CAPI/offline conversions · Himetrica | [sintese-manual § Fase 4](docs/pesquisa/sintese-manual.md) |
+| 9 | Dashboard comercial | [sintese.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese.md) |
+| 10 | Pós-MVP: inbox WA · VoIP · CAPI/offline conversions · Himetrica | [sintese-manual § Fase 4](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md) |
 
 ---
 
@@ -352,7 +352,7 @@ Fonte de verdade técnica: [stack-recomendada.md](./stack-recomendada.md) · [AD
 | 3 | App nativo no catálogo Pluga (se viável comercialmente) |
 | 4 | OAuth Meta/Google próprio · webhooks diretos · offline conversions / CAPI |
 
-Escala Pluga: excelente para 1–10 clientes; padronizar onboarding até ~30; 30+ considerar integração nativa. Detalhe: [sintese-manual § Limitação SaaS](docs/pesquisa/sintese-manual.md)
+Escala Pluga: excelente para 1–10 clientes; padronizar onboarding até ~30; 30+ considerar integração nativa. Detalhe: [sintese-manual § Limitação SaaS](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md)
 
 ---
 
@@ -365,11 +365,11 @@ Escala Pluga: excelente para 1–10 clientes; padronizar onboarding até ~30; 30
 | [CONTEXT.md](./CONTEXT.md) | Glossário de domínio |
 | [docs/adr/](./docs/adr/) | ADRs (stack, workspace/tags) |
 | [docs/pesquisa/decisoes.md](docs/pesquisa/decisoes.md) | Decisões travadas + specs handoff/score/assinatura |
-| [docs/pesquisa/sintese.md](docs/pesquisa/sintese.md) | Síntese de produto (espelho enxuto) |
+| [docs/pesquisa/sintese.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese.md) | Síntese de produto (espelho enxuto) |
 | [docs/pesquisa/pluga.md](docs/pesquisa/pluga.md) | Contrato HTTP, pricing, tela integração |
-| [docs/pesquisa/sintese-manual.md](docs/pesquisa/sintese-manual.md) | Análise arquitetural Pluga + multi-tenant |
+| [docs/pesquisa/sintese-manual.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md) | Análise arquitetural Pluga + multi-tenant |
 | [docs/pesquisa/README.md](docs/pesquisa/README.md) | Índice da pesquisa competitiva |
-| Concorrentes | [ploomes](docs/pesquisa/ploomes.md) · [clieent](docs/pesquisa/clieent.md) · [advbox](docs/pesquisa/advbox.md) · [piperun](docs/pesquisa/piperun.md) · [pipedrive](docs/pesquisa/pipedrive.md) |
+| Concorrentes | [ploomes](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/ploomes.md) · [clieent](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/clieent.md) · [advbox](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/advbox.md) · [piperun](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/piperun.md) · [pipedrive](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/pipedrive.md) |
 
 ---
 

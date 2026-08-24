@@ -75,7 +75,7 @@ Fonte: [pluga.co/precos](https://pluga.co/precos/)
 
 Trial de 7 dias com recursos Ultimate. Log de eventos: 90 dias.
 
-> **Insumo comercial, não decisão técnica** (item A16). A monetização do CRM é negociada fora do app pelo time comercial. O que precisa estar claro na proposta: este custo é do cliente, é recorrente, o CRM não o controla, e o piso é o Basic. Ver também [sintese-manual.md § Qual plano](./sintese-manual.md).
+> **Insumo comercial, não decisão técnica** (item A16). A monetização do CRM é negociada fora do app pelo time comercial. O que precisa estar claro na proposta: este custo é do cliente, é recorrente, o CRM não o controla, e o piso é o Basic. Ver também [sintese-manual.md § Qual plano](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md).
 
 ---
 

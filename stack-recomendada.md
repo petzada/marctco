@@ -123,7 +123,7 @@ Detalhe: [ADR-0002](./docs/adr/0002-workspace-tags-times.md) · glossário: [CON
 
 | Lib | Uso |
 |-----|-----|
-| shadcn/ui + Tailwind | UI — **obrigatório** seguir [design-taste-frontend](./.agents/skills/design-taste-frontend/SKILL.md) na implementação |
+| shadcn/ui + Tailwind | UI — **obrigatório** seguir [design-taste-frontend](./.claude/skills/design-taste-frontend/SKILL.md) na implementação |
 | `@dnd-kit/core` + `sortable` + `utilities` | Kanban |
 | `react-hook-form` + `@hookform/resolvers` + Zod | Forms |
 | `@tanstack/react-query` | Fetch/cache — **[ADR-0013](./docs/adr/0013-fluxo-de-dados-no-app.md) supersede seu uso como padrão de leitura**: quem lê é Server Component. Entra na Fase 2, no Kanban e na atualização otimista |

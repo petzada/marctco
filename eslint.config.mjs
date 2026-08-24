@@ -15,8 +15,7 @@ export default tseslint.config(
       "**/.next/**",
       "**/dist/**",
       "**/coverage/**",
-      "packages/db/generated/**",
-      "PROMPT-GOAL-IMPLEMENTACAO.md"
+      "packages/db/generated/**"
     ]
   },
   eslint.configs.recommended,
