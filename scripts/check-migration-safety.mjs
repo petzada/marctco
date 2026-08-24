@@ -53,8 +53,33 @@ for (const name of migrations) {
  * Ticket 19 shipped exactly that and broke the release. The cure is to drop
  * FORCE for the length of the backfill, which lets the owning role through,
  * and restore it in the same transaction.
+ *
+ * It has to cover every table the statement touches, **read side included**.
+ * The first repair lifted FORCE on the table being written and still filled
+ * nothing, because the table joined in the `FROM` was still enforcing and the
+ * join matched no row at all.
  */
-const dml = /\b(UPDATE|INSERT\s+INTO)\s+"?(\w+)"?/gi;
+const dml = /\b(?:UPDATE|INSERT\s+INTO)\s+"?(\w+)"?/gi;
+const reads_in_dml = /\b(?:FROM|JOIN)\s+"?(\w+)"?/gi;
+
+/**
+ * Crude on purpose: split on `;` and read table names out of each statement. A
+ * real parser would be the honest tool, and also a dependency and a
+ * maintenance surface, for a scan that only has to catch one shape of mistake.
+ */
+function tablesTouchedBy(statement) {
+  const touched = new Set();
+  for (const match of statement.matchAll(dml)) {
+    touched.add(match[1]);
+  }
+  if (touched.size === 0) {
+    return touched;
+  }
+  for (const match of statement.matchAll(reads_in_dml)) {
+    touched.add(match[1]);
+  }
+  return touched;
+}
 
 /**
  * Applied in production before this rule existed, so their checksums are frozen
@@ -87,25 +112,30 @@ for (const name of migrations) {
     failures.push(`${name}: DDL without SET ROLE marctco_migrator`);
   }
 
-  for (const match of sql.matchAll(dml)) {
-    const table = match[2];
-    if (!forced_rls.has(table) || RLS_BACKFILL_GRANDFATHERED.has(name)) {
-      continue;
-    }
-    const lifted = new RegExp(
-      `ALTER\\s+TABLE\\s+"?${table}"?\\s+NO\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY`,
-      "i"
-    ).test(sql);
-    const restored = new RegExp(
-      `ALTER\\s+TABLE\\s+"?${table}"?\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY`,
-      "i"
-    ).test(sql);
-    if (!lifted) {
-      failures.push(
-        `${name}: ${match[1].replace(/\s+/g, " ")} on ${table}, which has FORCE RLS, without lifting it — the backfill would touch zero rows and report success`
-      );
-    } else if (!restored) {
-      failures.push(`${name}: lifts FORCE RLS on ${table} and never restores it`);
+  if (RLS_BACKFILL_GRANDFATHERED.has(name)) {
+    continue;
+  }
+
+  for (const statement of sql.split(";")) {
+    for (const table of tablesTouchedBy(statement)) {
+      if (!forced_rls.has(table)) {
+        continue;
+      }
+      const lifted = new RegExp(
+        `ALTER\\s+TABLE\\s+"?${table}"?\\s+NO\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY`,
+        "i"
+      ).test(sql);
+      const restored = new RegExp(
+        `ALTER\\s+TABLE\\s+"?${table}"?\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY`,
+        "i"
+      ).test(sql);
+      if (!lifted) {
+        failures.push(
+          `${name}: DML touches ${table}, which has FORCE RLS, without lifting it — it would touch zero rows and report success`
+        );
+      } else if (!restored) {
+        failures.push(`${name}: lifts FORCE RLS on ${table} and never restores it`);
+      }
     }
   }
 }

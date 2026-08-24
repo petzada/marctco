@@ -26,11 +26,21 @@
 -- owner (marctco_migrator, which created these tables) bypasses RLS. FORCE is
 -- restored before the migration ends, and the whole file is one transaction, so
 -- no other session ever observes the table without it.
+--
+-- It has to cover every table the statement touches, read side included. The
+-- second attempt lifted FORCE on lead_submissions alone and still filled
+-- nothing, because integration_events — read in the FROM clause — was still
+-- enforcing, so the join matched no row at all.
 SET ROLE marctco_migrator;
 
 ALTER TABLE lead_submissions ADD COLUMN integration_connection_id UUID;
 
+-- Both tables, not only the one being written: RLS governs the read in the
+-- FROM clause exactly as it governs the write. With FORCE still on
+-- integration_events the join matches nothing, the UPDATE fills nothing, and
+-- the guard below then reports every submission as unreachable.
 ALTER TABLE lead_submissions NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE integration_events NO FORCE ROW LEVEL SECURITY;
 
 UPDATE lead_submissions AS submission
 SET integration_connection_id = event.integration_connection_id
@@ -59,6 +69,7 @@ BEGIN
 END
 $backfill$;
 
+ALTER TABLE integration_events FORCE ROW LEVEL SECURITY;
 ALTER TABLE lead_submissions FORCE ROW LEVEL SECURITY;
 
 ALTER TABLE lead_submissions
