@@ -1,6 +1,6 @@
 # 07 — Dashboard operacional: os números do dia
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 03 (estado de SLA), 04 (estado de estagnação)
 
@@ -22,3 +22,13 @@ Este ticket entrega os números. Os gráficos são o ticket 08 e as notificaçõ
 - [x] Os números vêm das mesmas funções puras que os tickets 03 e 04 criaram — o Dashboard não recalcula SLA nem estagnação por conta própria
 - [x] Legível em tela pequena: a primeira olhada do dia é no celular
 - [x] Segue o `DESIGN.md`, sem cor inline e sem px inline
+
+## Implementation evidence
+
+**10 de 10 critérios marcados**, nenhum em aberto. Entregue em `4f14871` — quatro tiles clicáveis no escopo de perfil.
+
+**Status reconciliado em 2026-08-24.** A execução já estava registrada nos
+checkboxes e no fechamento da fase; a linha `Status:` continuava com o rótulo
+de triagem anterior (`ready-for-agent`), que o
+[PROMPT-HANDOFF.md](../PROMPT-HANDOFF.md) já apontava como não reescrito. A
+Fase 3 fechou em `039af31`; não reabrir este ticket.

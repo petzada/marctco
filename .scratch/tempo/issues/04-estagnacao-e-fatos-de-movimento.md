@@ -1,6 +1,6 @@
 # 04 — Estagnação, movimento e fatos na linha do tempo
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 01, 02, 03
 
@@ -28,3 +28,13 @@ O lead que nunca teve movimento nenhum ancora na chegada, e é assim que o mais 
 - [x] `previous_assigned_user_id` **permanece**: é a resposta barata numa linha de tabela; a linha do tempo é a resposta cara e completa, e uma não substitui a outra
 - [x] Índice parcial só na migration: `(workspace_id, last_movement_at) WHERE status = 'OPEN' AND merged_into_opportunity_id IS NULL`
 - [x] Seam 3 continua verde com o índice de unicidade reformulado, e o drift check passa
+
+## Implementation evidence
+
+**12 de 12 critérios marcados**, nenhum em aberto. Entregue em `b9876ae` — `last_movement_at`, fatos de movimento e marcador de parado.
+
+**Status reconciliado em 2026-08-24.** A execução já estava registrada nos
+checkboxes e no fechamento da fase; a linha `Status:` continuava com o rótulo
+de triagem anterior (`ready-for-agent`), que o
+[PROMPT-HANDOFF.md](../PROMPT-HANDOFF.md) já apontava como não reescrito. A
+Fase 3 fechou em `039af31`; não reabrir este ticket.

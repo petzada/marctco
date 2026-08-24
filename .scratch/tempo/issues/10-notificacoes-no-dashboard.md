@@ -1,6 +1,6 @@
 # 10 — Notificações no Dashboard
 
-**Status:** claimed
+**Status:** done
 
 **Blocked by:** 07 (a superfície), 09 (as linhas a serem lidas)
 
@@ -17,3 +17,13 @@
 - [x] Clicar leva ao lead sob `/workspace/:slug/...` — o link nasce com o tenant dentro ([ADR-0012](../../../docs/adr/0012-contexto-de-tenant-na-url.md))
 - [x] Estado vazio dizendo que não há nada queimando, e o estado vazio do Supervisor sem tag nomeando a causa
 - [x] Segue o `DESIGN.md`; escrita por route handler, sem Server Action
+
+## Implementation evidence
+
+**9 de 9 critérios marcados**, nenhum em aberto. Entregue em `039af31` — lista não resolvida e marcar como lida.
+
+**Status reconciliado em 2026-08-24.** A execução já estava registrada nos
+checkboxes e no fechamento da fase; a linha `Status:` continuava com o rótulo
+de triagem anterior (`claimed`), que o
+[PROMPT-HANDOFF.md](../PROMPT-HANDOFF.md) já apontava como não reescrito. A
+Fase 3 fechou em `039af31`; não reabrir este ticket.

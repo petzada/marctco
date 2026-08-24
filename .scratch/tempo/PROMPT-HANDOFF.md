@@ -19,7 +19,7 @@ Tickets **01–10 aceitos e integrados**:
 - **09 — Notificação: model, detecção e varredura:** `3adc7e7` — persistência idempotente e varredura agendada.
 - **10 — Notificações no Dashboard:** `039af31` — lista não resolvida e marcar como lida.
 
-Não há ticket pendente nesta pasta. Os checkboxes dos tickets 01–10 registram a execução; as linhas `Status:` permanecem rótulos de triagem e não foram reescritas.
+Não há ticket pendente nesta pasta. Os checkboxes dos tickets 01–10 registram a execução, e as linhas `Status:` foram reconciliadas para `done` em 2026-08-24 — antes disso oito delas ainda traziam o rótulo de triagem anterior, que fazia a pasta parecer uma fila de trabalho aberta.
 
 Decisão humana tomada durante o ticket 03 (permanece):
 

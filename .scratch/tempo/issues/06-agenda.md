@@ -1,6 +1,6 @@
 # 06 — Agenda
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 01 (a Agenda é uma vista sobre a Atividade)
 
@@ -22,3 +22,13 @@ O filtro **estreita** o escopo do perfil e nunca o alarga — o supervisor que f
 - [x] Supervisor **sem** tag recebe estado vazio que nomeia a causa ("você ainda não tem uma tag de equipe") e quem resolve (a Direção, na Equipe) — o padrão que a Fase 2 estabeleceu
 - [x] Usável em uma coluna no celular
 - [x] Conclusão otimista pelo `@tanstack/react-query`, no limite exato do que o [ADR-0013](../../../docs/adr/0013-fluxo-de-dados-no-app.md) autoriza; escrita por route handler, sem Server Action
+
+## Implementation evidence
+
+**12 de 12 critérios marcados**, nenhum em aberto. Entregue em `04b0862` — dia/semana, filtros na URL, escopo por Oportunidade e conclusão otimista.
+
+**Status reconciliado em 2026-08-24.** A execução já estava registrada nos
+checkboxes e no fechamento da fase; a linha `Status:` continuava com o rótulo
+de triagem anterior (`ready-for-agent`), que o
+[PROMPT-HANDOFF.md](../PROMPT-HANDOFF.md) já apontava como não reescrito. A
+Fase 3 fechou em `039af31`; não reabrir este ticket.
