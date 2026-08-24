@@ -225,7 +225,10 @@ describe("getQuarantinedEvent", () => {
       lead_submission_id: fixture.lead_submission_id,
       raw: { ad_id: "123", campaign_id: "456" },
       provider: "PLUGA",
-      name: "Pluga",
+      // The connection the send authenticated against: half of the key the
+      // earlier recordLeadSubmission wrote, which the release reuses instead
+      // of recomputing (ADR-0031).
+      integration_connection_id: connection_id,
       source: "META_LEAD_ADS",
       external_lead_id: fixture.external_lead_id
     });

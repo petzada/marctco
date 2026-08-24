@@ -1232,7 +1232,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         data: {
           workspace_id: workspace_a,
           provider: "LANDING_PAGE",
-          name: "Landing page",
+          name: "Landing page alvo",
           token_hash: token_hash_a,
           token_last4: "same"
         }
@@ -1260,7 +1260,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         data: {
           workspace_id: workspace_a,
           provider: "LANDING_PAGE",
-          name: "Landing page",
+          name: "Landing page alvo jurídico",
           token_hash: legal_hash,
           token_last4: "lega",
           target_pipeline_id: legal_pipeline.id
@@ -1291,6 +1291,10 @@ describe("Seam 3: RLS and schema invariants", () => {
       }
     ]);
 
+    // Dropped by ticket 19 (ADR-0031): a workspace holds N connections per
+    // provider, and the partial index above is the WhatsMiau exception that
+    // survives it. Asserting its absence is what stops a later migration from
+    // quietly restoring it and re-closing the door on a second landing page.
     const global_unique = await client.$queryRaw<Array<{ present: boolean }>>`
       SELECT EXISTS (
         SELECT 1
@@ -1299,14 +1303,39 @@ describe("Seam 3: RLS and schema invariants", () => {
           AND conname = 'integration_connections_workspace_id_provider_key'
       ) AS present
     `;
-    expect(global_unique).toEqual([{ present: true }]);
+    expect(global_unique).toEqual([{ present: false }]);
+
+    // The other half of ADR-0031: the submission key knows which connection
+    // authenticated the send, so two origins numbering their own leads cannot
+    // swallow each other.
+    const submission_key = await client.$queryRaw<Array<{ definition: string }>>`
+      SELECT pg_get_constraintdef(oid)::text AS definition
+      FROM pg_constraint
+      WHERE conrelid = 'public.lead_submissions'::regclass
+        AND conname = 'lead_submissions_workspace_id_connection_source_external_key'
+    `;
+    expect(submission_key).toEqual([
+      {
+        definition:
+          "UNIQUE (workspace_id, integration_connection_id, source, external_lead_id)"
+      }
+    ]);
+
+    const connection_name_unique = await client.$queryRaw<Array<{ present: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_class
+        WHERE relname = 'integration_connections_workspace_id_lower_name_idx'
+      ) AS present
+    `;
+    expect(connection_name_unique).toEqual([{ present: true }]);
 
     await expect(
       client.integrationConnection.create({
         data: {
           workspace_id: workspace_a,
           provider: "WHATSMIAU",
-          name: "WhatsApp",
+          name: "WhatsApp sem instância",
           token_hash: createHash("sha256")
             .update(`mtco_whatsmiau_missing_${randomUUID()}`, "utf8")
             .digest("hex"),
@@ -1319,7 +1348,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       data: {
         workspace_id: workspace_a,
         provider: "WHATSMIAU",
-        name: "WhatsApp",
+          name: "WhatsApp viva",
         token_hash: createHash("sha256")
           .update(`mtco_whatsmiau_live_${randomUUID()}`, "utf8")
           .digest("hex"),
@@ -1334,7 +1363,7 @@ describe("Seam 3: RLS and schema invariants", () => {
         data: {
           workspace_id: workspace_a,
           provider: "WHATSMIAU",
-          name: "WhatsApp",
+          name: "WhatsApp segunda",
           token_hash: createHash("sha256")
             .update(`mtco_whatsmiau_second_${randomUUID()}`, "utf8")
             .digest("hex"),
@@ -1367,7 +1396,7 @@ describe("Seam 3: RLS and schema invariants", () => {
       data: {
         workspace_id: workspace_a,
         provider: "LANDING_PAGE",
-        name: "Landing page",
+        name: "Landing page roteada",
         token_hash: createHash("sha256")
           .update(`mtco_target_${randomUUID()}`, "utf8")
           .digest("hex"),
