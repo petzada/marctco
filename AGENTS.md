@@ -12,7 +12,7 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 | 2 | [stack-recomendada.md](./stack-recomendada.md) | Técnica: libs, deploy, ORM, fila, auth, isolamento. **Os ADRs 0013 a 0015 supersedem** o que ela diz sobre TanStack Query como padrão de leitura, sobre os cinco papéis e sobre guardar o `raw` sem prazo. **Os ADRs 0020 e 0022 supersedem** “tag também em oportunidades” e “um workspace por grupo”. **Os ADRs 0028 a 0031 supersedem** tag como marca, empresa do grupo como unidade de isolamento, workspace por campanha exclusiva e uma conexão por provedor |
 | 3 | [decisao-features-concorrentes.md](./decisao-features-concorrentes.md) | Escopo de features, navegação, UX |
 | 4 | [sintese-final.md](./sintese-final.md) + [docs/pesquisa/decisoes.md](./docs/pesquisa/decisoes.md) | Fluxo de produto e regras de negócio não tocadas pelo degrau 3. Mesmo nível: `decisoes.md` detalha `sintese-final.md`, não rivaliza com ele |
-| 5 | [docs/pesquisa/](./docs/pesquisa/) (pluga, sintese-manual, concorrentes) | **Nada.** Evidência e referência, nunca autoridade — `pluga.md` descreve o que a Pluga faz, não o que o CRM responde |
+| 5 | [docs/pesquisa/](./docs/pesquisa/) (pluga, whatsmiau-api-v2; concorrentes e sínteses no [arquivo](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/docs/pesquisa)) | **Nada.** Evidência e referência, nunca autoridade — `pluga.md` descreve o que a Pluga faz, não o que o CRM responde |
 
 [DESIGN.md](./DESIGN.md) é a lei visual, ortogonal à escada.
 
@@ -20,11 +20,13 @@ Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau 
 
 ## Implementação
 
-Fases 0–4 entregues. Specs em [.scratch/fundacao-e-ingestao/](./.scratch/fundacao-e-ingestao/) (0–1), [.scratch/operacao-do-lead/](./.scratch/operacao-do-lead/) (2), [.scratch/tempo/](./.scratch/tempo/) (3) e [.scratch/canal/](./.scratch/canal/) (4). Fechamento 0–2: [.scratch/fechamento-fases-0-2.md](./.scratch/fechamento-fases-0-2.md). Handoffs: [Fase 3](./.scratch/tempo/PROMPT-HANDOFF.md) e [Fase 4](./.scratch/canal/PROMPT-HANDOFF.md).
+Fases 0–4 entregues e em produção. **Specs, tickets e registros das quatro fatias estão congelados** na branch de arquivo [`docs/arquivo-fases-0-4`](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4) e na tag [`fases-0-4`](https://github.com/petzada/marctco/releases/tag/fases-0-4) — Fases 0–1 ([fundação e ingestão](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/fundacao-e-ingestao)), 2 ([operação do lead](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/operacao-do-lead)), 3 ([tempo](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/tempo)) e 4 ([canal](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/canal)). Fechamento 0–2: [fechamento-fases-0-2.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/.scratch/fechamento-fases-0-2.md). Handoffs: [Fase 3](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/.scratch/tempo/PROMPT-HANDOFF.md) e [Fase 4](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/.scratch/canal/PROMPT-HANDOFF.md).
 
-**Próxima: Fase 5 (Papel)** conforme [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — documentos/proposta no card, upload R2, assinatura e vistas globais de Contratos/Documentos. A Fase 4 está fechada; não reabrir tickets de [.scratch/canal/](./.scratch/canal/).
+**O que não fechou continua aqui, em [.scratch/aberto/](./.scratch/aberto/)** — cinco tickets, e é a única fila de trabalho viva do repositório. Três são dívida contra ADR já aceito ([19](./.scratch/aberto/19-conexoes-multiplas-por-provedor.md) · ADR-0031, [08](./.scratch/aberto/08-empresa-agrupa-equipes.md) · ADR-0029 e [09](./.scratch/aberto/09-supervisor-nao-alcanca-supervisor.md) · ADR-0028); dois estão `needs-info` travados em conta Pluga paga ([13](./.scratch/aberto/13-google-lead-form-e-webhook-de-landing-page.md) e [14](./.scratch/aberto/14-tela-integracoes-pluga.md)).
 
-[PROMPT-INICIAL.md](./PROMPT-INICIAL.md) e [.scratch/tempo/PROMPT-ORQUESTRACAO.md](./.scratch/tempo/PROMPT-ORQUESTRACAO.md) são históricos das fatias que já fecharam.
+**Próxima: Fase 5 (Papel)** conforme [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — documentos/proposta no card, upload R2, assinatura e vistas globais de Contratos/Documentos. As Fases 0–4 estão fechadas; **não reabrir ticket que está no arquivo.**
+
+Antes da Fase 5, o [ticket 19](./.scratch/aberto/19-conexoes-multiplas-por-provedor.md) tem precedência: a chave idempotente ainda não inclui a conexão, e a segunda landing page passa a engolir lead em silêncio ([ADR-0031](./docs/adr/0031-conexao-na-chave-idempotente.md)).
 
 ## Ordem de construção
 

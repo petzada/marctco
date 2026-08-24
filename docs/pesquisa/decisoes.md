@@ -1,7 +1,7 @@
 # Decisões de produto (travadas) — CRM revisional
 
 > Detalhamento das decisões consolidadas em [sintese-final.md](../../sintese-final.md).  
-> Stack: [stack-recomendada.md](../../stack-recomendada.md). Alinha [sintese.md](./sintese.md), [README.md](./README.md), [pluga.md](./pluga.md), [sintese-manual.md](./sintese-manual.md).  
+> Stack: [stack-recomendada.md](../../stack-recomendada.md). Alinha [sintese.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese.md), [README.md](./README.md), [pluga.md](./pluga.md), [sintese-manual.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/docs/pesquisa/sintese-manual.md).  
 > Status: **produto + stack fechados** (ago/2026).
 
 > ⚠️ **Documento de degrau 4** ([escada de precedência](../../AGENTS.md#precedência-entre-documentos)). Cede para `decisao-features-concorrentes.md` e para os ADRs. Pontos superados na sessão de 2026-08-04:

@@ -8,7 +8,7 @@
 
 A tela que o dono da assessoria usa para ligar a captação sozinho, sem chamar suporte e sem ler documentação técnica. Ele copia a URL, gera o segredo, cola na Pluga, dispara um lead de teste e vê o resultado.
 
-É também onde a quarentena do ticket 10 fica acionável: o gestor completa os dados que faltaram e libera o lead. **Não existe "liberar sem completar"** — sair da quarentena exige ao menos um contato ([ADR-0007](../../../docs/adr/0007-ingestao-idempotencia.md)). O caso real por trás desse pedido é o contato ter chegado num campo que o mapeamento da Pluga não mapeou, e a resposta certa para isso é o gestor ler o payload cru e digitar o que está vendo.
+É também onde a quarentena do ticket 10 fica acionável: o gestor completa os dados que faltaram e libera o lead. **Não existe "liberar sem completar"** — sair da quarentena exige ao menos um contato ([ADR-0007](../../docs/adr/0007-ingestao-idempotencia.md)). O caso real por trás desse pedido é o contato ter chegado num campo que o mapeamento da Pluga não mapeou, e a resposta certa para isso é o gestor ler o payload cru e digitar o que está vendo.
 
 O mapeamento De→Para acontece **na Pluga**, não aqui. A tela fornece o contrato `v1`, modelos Meta/Google e um teste de onboarding; não constrói assistente de mapeamento.
 
@@ -30,17 +30,17 @@ O mapeamento De→Para acontece **na Pluga**, não aqui. A tela fornece o contra
 - [x] O **payload cru** é exibido ao lado do formulário, para o gestor achar o contato que o mapeamento perdeu
 - [x] Liberar **exige ao menos um contato**; sem isso a ação fica indisponível, com a razão explicada em linguagem não técnica
 - [x] Liberar um lead da quarentena cria Pessoa e Oportunidade pelo mesmo caminho da ingestão — literalmente o mesmo, sem desvio que crie `Person` sem chave
-- [x] **"O mesmo caminho" tem endereço**: o route handler chama `planPersonLookup` → leitor escopado → `decideIntake` → `applyIntakePlan`, exatamente como o job do worker, com `now` = instante da liberação. É a mesma função de `packages/domain`, não uma reimplementação equivalente ([ADR-0017](../../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
-- [x] **Liberar não enfileira evento novo.** Criar um segundo `IntegrationEvent` para a mesma submissão contraria a cópia única ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md)), e o gestor que acabou de digitar o telefone que leu no payload cru precisa ver o card agora, não depois que a fila girar
-- [x] **O formulário produz `InboundLead` direto, sem conector.** Ele coleta campos do contrato `v1` e preserva `source` e `external_lead_id` do envio original. O conector fica em `apps/worker` e não é importado aqui — ali não há forma de origem para interpretar, há um humano preenchendo o contrato ([ADR-0017](../../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
+- [x] **"O mesmo caminho" tem endereço**: o route handler chama `planPersonLookup` → leitor escopado → `decideIntake` → `applyIntakePlan`, exatamente como o job do worker, com `now` = instante da liberação. É a mesma função de `packages/domain`, não uma reimplementação equivalente ([ADR-0017](../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
+- [x] **Liberar não enfileira evento novo.** Criar um segundo `IntegrationEvent` para a mesma submissão contraria a cópia única ([ADR-0014](../../docs/adr/0014-copia-unica-e-retencao-do-payload.md)), e o gestor que acabou de digitar o telefone que leu no payload cru precisa ver o card agora, não depois que a fila girar
+- [x] **O formulário produz `InboundLead` direto, sem conector.** Ele coleta campos do contrato `v1` e preserva `source` e `external_lead_id` do envio original. O conector fica em `apps/worker` e não é importado aqui — ali não há forma de origem para interpretar, há um humano preenchendo o contrato ([ADR-0017](../../docs/adr/0017-ingestao-como-decisao-e-plano.md))
 - [x] O `arrived_at` do lead liberado é o instante da **liberação**, não o do recebimento: ele não pode nascer com relógio estourado que nenhuma ação do gestor resolve
 - [x] O tempo em quarentena continua medível pela diferença entre liberação e recebimento, e é ele que alimenta o alerta próprio da quarentena — `received_at` (evento) e `arrived_at` (liberação) sobrevivem os dois, e a fila mostra "esperando há N dias" por lead; o alerta próprio ainda não existe como painel, porque nenhum ticket construiu um dashboard de quarentena
 - [x] **Só a quarentena vive aqui.** Revisão de identidade e possível duplicado são marcadores na tela de Leads, e a resolução deles acontece lá (ticket 12) — aqui não há card onde morar
 - [x] Toda a tela lê a situação do evento de integração como fonte única — sem estado paralelo
-- [x] A tela explica, em linguagem não técnica, que o **conteúdo** de eventos com mais de 90 dias não fica guardado — só o registro de que chegaram ([ADR-0014](../../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))
+- [x] A tela explica, em linguagem não técnica, que o **conteúdo** de eventos com mais de 90 dias não fica guardado — só o registro de que chegaram ([ADR-0014](../../docs/adr/0014-copia-unica-e-retencao-do-payload.md))
 - [x] "Reprocessar" **recusa com explicação** evento cujo payload expirou, em vez de falhar obscuro
 - [x] **Nenhum estado novo para "expirado".** O payload é gravado no recebimento, antes do 200 — não há caminho para um evento existir sem ele. Logo `raw` nulo tem causa única, e a data de expiração sai de `received_at + 90 dias`: a tela diz **quando** o conteúdo saiu, sem coluna adicional
-- [x] Gerar e rotacionar segredo, ativar e desativar integração são exclusivos da **Direção** (`OWNER`); histórico, reprocessar e quarentena são da **Gestão** para cima ([ADR-0015](../../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
+- [x] Gerar e rotacionar segredo, ativar e desativar integração são exclusivos da **Direção** (`OWNER`); histórico, reprocessar e quarentena são da **Gestão** para cima ([ADR-0015](../../docs/adr/0015-perfis-de-acesso-e-escopo.md))
 - [x] Usa os tokens do ticket 02
 - [x] **Não** existe assistente de mapeamento De→Para
 

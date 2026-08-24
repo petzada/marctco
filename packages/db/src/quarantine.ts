@@ -56,7 +56,7 @@ interface QuarantinedEventRow {
 /**
  * One of the nine named operations ticket 03 tracked as carried debt
  * (`.scratch/fundacao-e-ingestao/registro.md`, "Pendências carregadas do
- * ticket 03"). MANAGER and up (ADR-0015).
+ * ticket 03", now on the `docs/arquivo-fases-0-4` branch). MANAGER and up (ADR-0015).
  *
  * Reads `source`/`external_lead_id` from `lead_submissions` rather than
  * re-parsing `raw`: that pair is the submission's committed identity, the
