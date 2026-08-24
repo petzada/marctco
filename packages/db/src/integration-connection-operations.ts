@@ -67,6 +67,11 @@ function normaliseName(name: unknown): string {
  * than a caught unique violation: in Postgres an error aborts the whole
  * transaction, and the empty `RETURNING` is the same signal without the
  * wreckage (ADR-0007 Mecanismo 1).
+ *
+ * The conflict target names that index rather than being left bare. A bare
+ * `ON CONFLICT` would swallow a `token_hash` or `instance_name` collision too
+ * and report it as a duplicate name — vanishingly rare, and a lie when it
+ * happens.
  */
 export async function createIntegrationConnection(
   context: UserContext,
@@ -96,7 +101,7 @@ export async function createIntegrationConnection(
         ${input.target_pipeline_id ?? null}::uuid,
         CURRENT_TIMESTAMP
       )
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (workspace_id, lower(name)) DO NOTHING
       RETURNING id
     `;
     return rows[0];
