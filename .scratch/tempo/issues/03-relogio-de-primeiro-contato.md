@@ -1,6 +1,6 @@
 # 03 — Relógio de primeiro contato e marcador de SLA
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 01 (a atividade é o que para o relógio), 02 (o limite comparado é o configurado)
 
@@ -25,3 +25,13 @@ A Fase 4 vai preencher a mesma coluna com a mensagem de WhatsApp: ela significa 
 - [x] A tabela de Leads e o card mostram a espera com numerais tabulares, como a parcela; lead fechado sem contato não diz "Esperando há"
 - [x] Índice parcial só na migration: `(workspace_id, arrived_at) WHERE first_contact_at IS NULL AND status = 'OPEN' AND merged_into_opportunity_id IS NULL`
 - [x] Nada de contador novo no topo da tabela passando por `markersFor` — contagem continua sendo outra pergunta
+
+## Implementation evidence
+
+**13 de 13 critérios marcados**, nenhum em aberto. Entregue em `9aa75b0` — `first_contact_at`, marcador de SLA e espera na tabela/card.
+
+**Status reconciliado em 2026-08-24.** A execução já estava registrada nos
+checkboxes e no fechamento da fase; a linha `Status:` continuava com o rótulo
+de triagem anterior (`ready-for-agent`), que o
+[PROMPT-HANDOFF.md](../PROMPT-HANDOFF.md) já apontava como não reescrito. A
+Fase 3 fechou em `039af31`; não reabrir este ticket.

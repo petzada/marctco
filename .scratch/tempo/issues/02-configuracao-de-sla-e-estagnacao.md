@@ -1,6 +1,6 @@
 # 02 — Configuração de SLA e estagnação
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** None — can start immediately.
 
@@ -23,3 +23,13 @@ Este ticket entrega a configuração e a leitura resolvida. Quem a consome são 
 - [x] `private.provision_workspace` **não é tocada** — a linha nasce na primeira escrita da tela, e não no provisionamento
 - [x] `first_contact_trigger` do [ADR-0003](../../../docs/adr/0003-whatsapp-instancia-unica-gatilho-atribuicao.md) **não** entra: é da Fase 4, e coluna sem o disparo é configuração que não configura nada
 - [x] Seam 3 verde: `workspace_settings` sob as mesmas varreduras de RLS, policy e índice
+
+## Implementation evidence
+
+**11 de 11 critérios marcados**, nenhum em aberto. Entregue em `3ed5ce3` — padrões do domínio, escrita por Gestão/Direção e configuração no workspace.
+
+**Status reconciliado em 2026-08-24.** A execução já estava registrada nos
+checkboxes e no fechamento da fase; a linha `Status:` continuava com o rótulo
+de triagem anterior (`ready-for-agent`), que o
+[PROMPT-HANDOFF.md](../PROMPT-HANDOFF.md) já apontava como não reescrito. A
+Fase 3 fechou em `039af31`; não reabrir este ticket.

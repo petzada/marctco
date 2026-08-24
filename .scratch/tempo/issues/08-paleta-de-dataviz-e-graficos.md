@@ -1,6 +1,6 @@
 # 08 — Paleta de dataviz e gráficos do Dashboard
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 07 (os gráficos entram na tela que ele cria)
 
@@ -16,3 +16,13 @@
 - [x] Nenhum hex inline e nenhum px inline dentro do componente de gráfico — `{token.refs}` em tudo, como manda o guia
 - [x] Os gráficos são legíveis em tela pequena, com rolagem própria quando não couberem
 - [x] `npx @google/design.md lint DESIGN.md` passa depois da edição
+
+## Implementation evidence
+
+**8 de 8 critérios marcados**, nenhum em aberto. Entregue em `5c5b34c` — tokens no `DESIGN.md` e séries operacionais na mesma tela.
+
+**Status reconciliado em 2026-08-24.** A execução já estava registrada nos
+checkboxes e no fechamento da fase; a linha `Status:` continuava com o rótulo
+de triagem anterior (`ready-for-agent`), que o
+[PROMPT-HANDOFF.md](../PROMPT-HANDOFF.md) já apontava como não reescrito. A
+Fase 3 fechou em `039af31`; não reabrir este ticket.
