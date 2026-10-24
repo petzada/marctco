@@ -1,62 +1,37 @@
 {
-  "name": "marctco",
-  "version": "0.0.0",
+  "name": "marctco-site",
   "private": true,
-  "packageManager": "pnpm@10.32.0",
-  "engines": {
-    "node": ">=24"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "@prisma/engines",
-      "@sentry/cli",
-      "esbuild",
-      "msgpackr-extract",
-      "prisma",
-      "sharp"
-    ]
-  },
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
-    "postinstall": "pnpm --filter @marctco/domain build && pnpm --filter @marctco/db generate",
-    "build": "pnpm --filter @marctco/domain build && pnpm --filter @marctco/db build && pnpm --filter @marctco/web build && pnpm --filter @marctco/worker build",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "eslint . --max-warnings=0 && node scripts/check-prisma-imports.mjs",
-    "test": "vitest run",
-    "test:unit": "vitest run --project domain",
-    "test:db": "vitest run --project db",
-    "test:a7": "vitest run --project a7",
-    "test:seam2": "vitest run --project seam2",
-    "test:seam4": "vitest run --project seam4",
-    "test:managed-migration": "vitest run --project managed-migration",
-    "db:up": "docker compose up -d --wait",
-    "db:down": "docker compose down -v",
-    "db:migrate:dev": "node scripts/prisma-safe.mjs migrate dev",
-    "db:migrate:deploy": "node scripts/prisma-safe.mjs migrate deploy",
-    "db:recover:foundation": "tsx packages/db/src/recover-foundation-cli.ts",
-    "db:drift": "node scripts/check-prisma-drift.mjs",
-    "db:resolve:rolled-back": "node scripts/prisma-safe.mjs migrate resolve --rolled-back",
-    "db:roles:local": "node scripts/set-local-role-passwords.mjs",
-    "check:migrations": "node scripts/check-migration-safety.mjs",
-    "ship": "node scripts/ship.mjs",
-    "prepare": "node -e \"try{if(require('fs').existsSync('.git'))require('child_process').execSync('lefthook install',{stdio:'inherit'})}catch(e){console.warn('lefthook install ignorado')}\"",
-    "test:related": "node scripts/test-related.mjs --project domain",
-    "test:ci": "vitest run"
+    "dev": "vite",
+    "build": "vite build && node scripts/check-budget.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src scripts",
+    "test": "vitest --run",
+    "test:related": "node scripts/test-related.mjs",
+    "test:ci": "vitest --run --coverage.enabled=false",
+    "prepare": "node -e \"require('fs').existsSync('.git')&&require('child_process').execSync('lefthook install',{stdio:'inherit'})\"",
+    "deploy": "cf deploy",
+    "models": "gltfpack -i blender/export/bairro.raw.glb -o public/models/bairro.glb -kn -km -cc"
+  },
+  "dependencies": {
+    "@fontsource/roboto": "^5.3.0",
+    "lenis": "^1.3.27",
+    "three": "^0.186.1"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.2",
-    "@marctco/db": "workspace:*",
-    "@marctco/domain": "workspace:*",
-    "@types/node": "24.10.1",
-    "bullmq": "5.70.1",
-    "eslint": "9.39.2",
-    "globals": "16.5.0",
-    "ioredis": "5.9.3",
-    "lefthook": "2.2.2",
-    "oxlint": "1.89.0",
-    "tsx": "4.23.7",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.66.0",
-    "vitest": "4.0.18"
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.4",
+    "@types/node": "^24.19.2",
+    "@types/three": "^0.186.0",
+    "cf": "1.0.0-beta.21",
+    "gltfpack": "^1.3.0",
+    "lefthook": "^2.2.2",
+    "oxlint": "^1.89.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   }
 }

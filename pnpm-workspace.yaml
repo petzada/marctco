@@ -1,4 +1,5 @@
+# Raiz própria: sem este arquivo o pnpm sobe até um workspace de fora do repositório.
 packages:
-  - apps/*
-  - packages/*
-
+  - "."
+onlyBuiltDependencies:
+  - lefthook

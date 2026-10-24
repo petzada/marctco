@@ -2,230 +2,63 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
 permissions:
   contents: read
 
-# Push novo no mesmo PR cancela o run anterior. Na main cada push tem grupo próprio (run_id):
-# nenhum run com release de migration fica pendente ou é substituído.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  quality:
-    name: Quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.32.0
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test:unit
-      - run: pnpm build
-
-  database:
-    name: Database
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: marctco
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d marctco"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 20
-      pgbouncer:
-        image: edoburu/pgbouncer:v1.24.1-p0
-        env:
-          DB_HOST: postgres
-          DB_PORT: 5432
-          DB_USER: postgres
-          DB_PASSWORD: postgres
-          DB_NAME: marctco
-          POOL_MODE: transaction
-          AUTH_TYPE: scram-sha-256
-        ports:
-          - 6432:5432
-      managed-postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: postgres
-          POSTGRES_USER: supabase_admin
-          POSTGRES_PASSWORD: supabase-admin-local
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U supabase_admin -d postgres"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 20
-      redis:
-        image: redis:8-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 20
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/marctco?schema=public
-      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/marctco?schema=public
-      PGBOUNCER_DATABASE_URL: postgresql://postgres:postgres@localhost:6432/marctco?schema=public&pgbouncer=true&connection_limit=1
-      REDIS_URL: redis://localhost:6379
-      MANAGED_MIGRATION_ADMIN_URL: postgresql://supabase_admin:supabase-admin-local@localhost:5433/postgres?schema=public
-      MANAGED_MIGRATION_DATABASE_URL: postgresql://postgres:managed-postgres-local@localhost:5433/marctco_managed?schema=public
-      MANAGED_MIGRATOR_DATABASE_URL: postgresql://marctco_migrator:managed-migrator-local@localhost:5433/marctco_managed?schema=public
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.32.0
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check:migrations
-      - run: pnpm db:migrate:deploy
-      - run: pnpm db:migrate:dev
-      - run: pnpm db:drift
-      - run: pnpm test:db
-      # Seam 2 runs against this job's real Postgres and real Redis, with BullMQ
-      # publishing and consuming for actual — never a processor called inline.
-      - run: pnpm test:seam2
-      # Seam 4 is the same infra for the channel outbox: real assignment, real
-      # queue, real worker, WhatsMiau HTTP replaced by a fake port.
-      - run: pnpm test:seam4
-      - run: pnpm test:a7
-      - run: pnpm test:managed-migration
-
-  # Nothing in this pipeline built an image until 2026-08-07, and so every
-  # deploy from tickets 04-06 onward failed for two days while CI stayed green:
-  # `pnpm install` in a full checkout is not the same install the Dockerfile
-  # runs, and a build that passes is not a process that starts. Both halves are
-  # gated here now.
-  image:
-    name: Image
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        app: [web, worker]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - name: Build the runtime image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/${{ matrix.app }}/Dockerfile
-          tags: marctco-${{ matrix.app }}:ci
-          load: true
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
-          # Deliberately recognisable placeholders, not the real project's. What
-          # is being tested is the wiring, and the step below greps the built
-          # bundle for exactly these strings.
-          build-args: |
-            NEXT_PUBLIC_SUPABASE_URL=https://ci-placeholder.supabase.co
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=ci-placeholder-anon-key
-      # `NEXT_PUBLIC_*` is inlined by Next at build time, so "the variable is
-      # set on the Railway service" proves nothing about the JavaScript the
-      # browser downloads. Without this, a broken ARG chain ships a login form
-      # holding empty strings, and the only symptom is a thrown error the first
-      # time somebody clicks "Entrar" — in production, at the worst moment.
-      - name: Prove the public Supabase values reached the client bundle
-        if: matrix.app == 'web'
-        run: |
-          docker run --rm --entrypoint sh marctco-web:ci -c '
-            grep -rq "ci-placeholder.supabase.co" /app/apps/web/.next/static \
-              && grep -rq "ci-placeholder-anon-key" /app/apps/web/.next/static \
-              || { echo "the public Supabase values were not inlined into the client bundle"; exit 1; }
-            echo "public Supabase values are inlined in the client bundle"
-          '
-      # Building proves the install order; only running proves the image can
-      # resolve what it imports. packages/domain went from zero dependencies to
-      # zod and libphonenumber-js, and the missing node_modules showed up
-      # nowhere until a container was actually started.
-      - name: Resolve the domain package inside the image
-        run: |
-          docker run --rm --entrypoint node marctco-${{ matrix.app }}:ci -e "
-            import('/app/packages/domain/dist/index.js')
-              .then((domain) => {
-                const inbound = domain.buildInboundLead(
-                  domain.readLeadPayload({ phone: '(11) 98765-4321' }),
-                  { source: 'META_LEAD_ADS', external_lead_id: 'ci' }
-                );
-                const phones = domain.normalize(inbound).phones;
-                if (phones[0] !== '+5511987654321') {
-                  throw new Error('normalization is wrong inside the image: ' + phones);
-                }
-                console.log('domain resolves and normalizes:', phones[0]);
-              })
-              .catch((error) => { console.error(error.message); process.exit(1); });
-          "
-
+  # O nome "CI" é o check obrigatório da proteção da main.
   ci:
     name: CI
-    if: always()
-    needs: [quality, database, image]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Require every PR gate
-        run: |
-          test '${{ needs.quality.result }}' = 'success'
-          test '${{ needs.database.result }}' = 'success'
-          test '${{ needs.image.result }}' = 'success'
-
-  # Variable PRODUCTION_RELEASE=off desliga o release enquanto o banco de produção estiver
-  # pausado (projeto Supabase inativo): os gates de PR continuam valendo e a main fica verde.
-  # Para religar: `gh variable delete PRODUCTION_RELEASE` (ou qualquer valor diferente de off).
-  release:
-    name: Production migration
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PRODUCTION_RELEASE != 'off'
-    needs: [ci]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: production
-    concurrency:
-      group: production-migrations
-      cancel-in-progress: false
-    env:
-      DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
-      DIRECT_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
-      ALLOW_REMOTE_MIGRATE_DEPLOY: "true"
-      ALLOW_FOUNDATION_RECOVERY: "true"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.32.0
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm db:recover:foundation
-      - run: pnpm db:migrate:deploy
-      - run: pnpm --filter @marctco/db exec prisma migrate status
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:ci
+      # Build com o plugin da Cloudflare e orçamento de desempenho (< 3 MB comprimido)
+      - run: pnpm build
+
+  # Publica marct.co no Cloudflare Workers. Sem o secret CLOUDFLARE_API_TOKEN, só avisa.
+  deploy:
+    name: Deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      HAS_CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy to Cloudflare
+        if: ${{ env.HAS_CLOUDFLARE_TOKEN == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec cf deploy --message "${{ github.sha }}"
+      - name: Missing token
+        if: ${{ env.HAS_CLOUDFLARE_TOKEN != 'true' }}
+        run: echo "::warning::CLOUDFLARE_API_TOKEN ausente; deploy pulado."

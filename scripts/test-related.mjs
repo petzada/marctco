@@ -36,8 +36,8 @@ if (files.length === 0) {
 
 console.log(`test-related: ${files.length} arquivo(s) alterado(s) desde ${from.slice(0, 8)}.`);
 const r = spawnSync(
-  "npx",
-  ["vitest", "related", "--run", "--passWithNoTests", ...process.argv.slice(2), ...files],
+  "pnpm",
+  ["exec", "vitest", "related", "--run", "--passWithNoTests", ...process.argv.slice(2), ...files],
   { stdio: "inherit", shell: process.platform === "win32" },
 );
 process.exit(r.status ?? 1);

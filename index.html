@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>marct.co — presença digital para o seu negócio</title>
+    <meta
+      name="description"
+      content="Google Meu Negócio, landing pages, redes sociais, tráfego pago e conteúdo com IA para empresas e comerciantes locais. Conversa direto no WhatsApp."
+    />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // Antes do primeiro paint: decide entre o passeio 3D e a versão em texto.
+      (function () {
+        var c = document.createElement("canvas");
+        var gl = null;
+        try { gl = c.getContext("webgl2") || c.getContext("webgl"); } catch (e) {}
+        document.documentElement.classList.add(gl ? "webgl" : "no-webgl");
+      })();
+    </script>
+  </head>
+  <body>
+    <canvas id="scene" aria-hidden="true"></canvas>
+    <header class="bar">
+      <a class="logo logo--bar" href="#hero" aria-label="marct.co, voltar ao início">marct.co</a>
+      <a class="cta cta--bar" id="bar-cta" href="%WHATSAPP_URL%" target="_blank" rel="noopener">%HEADER_CTA%</a>
+    </header>
+    <main id="chapters">
+<!--sections-->
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
