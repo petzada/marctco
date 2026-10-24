@@ -7,8 +7,8 @@
   --g400: #8a8a8a;
   --g200: #c4c4c4;
   --white: #ffffff;
-  /* Em aberto: serifa ou sem serifa. Provisória: o desenho comum e grosso da Arial. */
-  --font: "Arial Black", "Arial Bold", Arial, "Helvetica Neue", Helvetica, sans-serif;
+  /* Sem serifa: grossa (800) nos títulos e no logo, medium (500) no subtítulo e nos botões. */
+  --font: "Archivo Variable", Arial, "Helvetica Neue", Helvetica, sans-serif;
   --gutter: clamp(16px, 4vw, 56px);
   color-scheme: dark;
 }
@@ -22,6 +22,9 @@ html {
   background: var(--black);
   color: var(--g200);
   font-family: var(--font);
+  font-weight: 500;
+  /* Tudo minúsculo, como o logo */
+  text-transform: lowercase;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -49,7 +52,7 @@ a {
 }
 
 .logo {
-  font-weight: 900;
+  font-weight: 800;
   color: var(--white);
   letter-spacing: -0.055em;
   line-height: 1;
@@ -88,19 +91,22 @@ a {
   transform: none;
 }
 
+/* CTA discreto: só borda, sem preenchimento */
 .cta {
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  padding: 0.95em 1.4em;
-  background: var(--white);
-  color: var(--black);
-  font-weight: 900;
+  padding: 0.85em 1.3em;
+  background: transparent;
+  color: var(--white);
+  border: 1.5px solid var(--white);
+  font-weight: 500;
   font-size: 0.95rem;
-  letter-spacing: -0.01em;
   text-decoration: none;
   border-radius: 999px;
-  transition: transform 0.2s;
+  transition:
+    transform 0.2s,
+    background-color 0.2s;
 }
 
 .cta::after {
@@ -109,6 +115,7 @@ a {
 
 .cta:hover {
   transform: translateY(-2px);
+  background: rgb(255 255 255 / 0.1);
 }
 
 .cta:focus-visible {
@@ -179,31 +186,12 @@ a {
   margin-bottom: 0.2rem;
 }
 
-.kicker {
-  font-family: Arial, Helvetica, sans-serif;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--g400);
-  letter-spacing: 0.02em;
-  display: flex;
-  align-items: center;
-  gap: 0.6em;
-}
-
-.badge {
-  border: 2px solid var(--white);
-  color: var(--white);
-  border-radius: 999px;
-  padding: 0.15em 0.6em;
-  font-size: 0.75rem;
-}
-
 .title {
-  font-weight: 900;
+  font-weight: 800;
   font-size: clamp(2.3rem, 6.4vw, 5.4rem);
   line-height: 0.95;
   letter-spacing: -0.04em;
-  color: var(--g200);
+  color: var(--white);
   max-width: 13ch;
   text-wrap: balance;
 }
@@ -214,16 +202,11 @@ a {
   line-height: 1.05;
 }
 
-.chapter--contact .title {
-  color: var(--white);
-}
-
 .body {
-  font-family: Arial, Helvetica, sans-serif;
-  font-weight: 700;
+  font-weight: 500;
   font-size: clamp(1rem, 1.6vw, 1.2rem);
   line-height: 1.45;
-  color: var(--g400);
+  color: var(--white);
   max-width: 34ch;
 }
 
@@ -239,8 +222,6 @@ a {
   gap: 0.4rem 1rem;
   align-items: baseline;
   padding: 32px var(--gutter) max(32px, env(safe-area-inset-bottom));
-  font-family: Arial, Helvetica, sans-serif;
-  font-weight: 700;
   font-size: 0.85rem;
   color: var(--g400);
   background: var(--black);

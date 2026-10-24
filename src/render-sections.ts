@@ -6,20 +6,17 @@ import { SECTIONS, whatsappUrl, type Section } from "./content.ts";
 const escape = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export function ctaLink(section: Section, label = "Conversar no WhatsApp", extraClass = ""): string {
+export function ctaLink(section: Section, label = "conversar no whatsapp", extraClass = ""): string {
   return `<a class="cta ${extraClass}" href="${escape(whatsappUrl(section.whatsappText))}" target="_blank" rel="noopener">${escape(label)}</a>`;
 }
 
 function renderSection(section: Section, index: number): string {
   const heading = index === 0 ? "h1" : "h2";
-  const kicker = section.kicker
-    ? `<p class="kicker">${escape(section.kicker)}${section.badge ? ` <span class="badge">${escape(section.badge)}</span>` : ""}</p>`
-    : "";
   const logo = index === 0 ? `<p class="logo logo--hero" aria-hidden="true">marct.co</p>` : "";
   return `<section class="chapter chapter--${section.id}" id="${section.id}" data-index="${index}">
   <div class="panel">
     <div class="copy">
-      ${logo}${kicker}
+      ${logo}
       <${heading} class="title">${escape(section.title)}</${heading}>
       <p class="body">${escape(section.body)}</p>
       ${ctaLink(section)}
