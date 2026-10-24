@@ -45,29 +45,58 @@ export function renderHeaderServices(): string {
   return SERVICES.map((service) => `<span>${escape(service)}</span>`).join('<span aria-hidden="true">•</span>');
 }
 
-/** Modal do formulário de contato e o toast de confirmação. */
+const fieldHtml = (f: (typeof LEAD_FIELDS)[number]) => `
+        <label class="field">
+          <span class="field__label">${escape(f.label)}</span>
+          <input name="${f.name}" type="${f.type}" required maxlength="${f.maxLength}" autocomplete="${f.autocomplete}"
+            placeholder="${escape(f.placeholder)}"${f.type === "tel" ? ' inputmode="tel"' : ""} aria-describedby="lead-${f.name}-error" />
+          <small class="field__error" id="lead-${f.name}-error"></small>
+        </label>`;
+
+/**
+ * Modal do formulário em duas etapas: 1) contato, 2) negócio e serviços de interesse;
+ * depois do envio, a confirmação com "fechar" (lead-form.ts controla as etapas).
+ */
 export function renderLeadDialog(): string {
-  const fields = LEAD_FIELDS.map(
-    (f) => `
-      <label class="field">
-        <span class="field__label">${escape(f.label)}</span>
-        <input name="${f.name}" type="${f.type}" required maxlength="${f.maxLength}" autocomplete="${f.autocomplete}"
-          placeholder="${escape(f.placeholder)}"${f.type === "tel" ? ' inputmode="tel"' : ""} aria-describedby="lead-${f.name}-error" />
-        <small class="field__error" id="lead-${f.name}-error"></small>
-      </label>`,
+  const step = (n: 1 | 2) => LEAD_FIELDS.filter((f) => f.step === n).map(fieldHtml).join("");
+  const services = SERVICES.map(
+    (service) => `
+          <label class="check"><input type="checkbox" name="servicos" value="${escape(service)}" /><span>${escape(service)}</span></label>`,
   ).join("");
   return `<dialog class="lead" id="lead-dialog" aria-labelledby="lead-title">
   <form class="lead__form" novalidate>
     <button type="button" class="lead__close" data-close aria-label="Fechar">×</button>
-    <h2 class="lead__title" id="lead-title">Fale com a marct.co</h2>
-    <p class="lead__intro">Conte um pouco do seu negócio. Respondemos pelo WhatsApp.</p>${fields}
+    <section class="lead__step" data-step="1">
+      <p class="lead__progress">Etapa 1 de 2</p>
+      <h2 class="lead__title" id="lead-title">Fale com a marct.co</h2>
+      <p class="lead__intro">Para quem a gente responde no WhatsApp?</p>${step(1)}
+      <div class="lead__actions">
+        <button type="button" class="cta cta--primary" data-next>Avançar</button>
+      </div>
+    </section>
+    <section class="lead__step" data-step="2" hidden>
+      <p class="lead__progress">Etapa 2 de 2</p>
+      <h2 class="lead__title">Sobre o seu negócio</h2>${step(2)}
+      <fieldset class="checks">
+        <legend class="field__label">Serviços de interesse</legend>${services}
+      </fieldset>
+      <p class="lead__status" role="alert"></p>
+      <div class="lead__actions">
+        <button type="submit" class="cta cta--primary">Enviar</button>
+        <button type="button" class="cta cta--ghost" data-back>Voltar</button>
+      </div>
+      <p class="lead__privacy">Usamos esses dados só para falar com você sobre o seu negócio.</p>
+    </section>
+    <section class="lead__step lead__done" data-step="done" hidden>
+      <h2 class="lead__title">Recebemos seus dados</h2>
+      <p class="lead__intro">Em breve entramos em contato pelo WhatsApp.</p>
+      <div class="lead__actions">
+        <button type="button" class="cta cta--primary" data-close>Fechar</button>
+      </div>
+    </section>
     <div class="lead__hp" aria-hidden="true">
       <label>Site <input name="site" type="text" tabindex="-1" autocomplete="off" /></label>
     </div>
-    <p class="lead__status" role="alert"></p>
-    <button type="submit" class="cta lead__submit">Enviar</button>
-    <p class="lead__privacy">Usamos esses dados só para falar com você sobre o seu negócio.</p>
   </form>
-</dialog>
-<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>`;
+</dialog>`;
 }

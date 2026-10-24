@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS leads (
   empresa TEXT NOT NULL,
   ramo TEXT NOT NULL,
   produto TEXT NOT NULL,
+  -- Serviços de interesse marcados, separados por vírgula (pode ficar vazio)
+  servicos TEXT NOT NULL DEFAULT '',
   -- Seção do site em que o botão foi clicado (hero, gmb, lp, social, ads, ai, contact)
   origem TEXT NOT NULL DEFAULT 'site'
 );

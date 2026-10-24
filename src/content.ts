@@ -78,7 +78,7 @@ export const SECTIONS: readonly Section[] = [
     id: "contact",
     title: "Seu negócio pro mundo",
     body: "Conte-nos o que você vende e onde, e o resto é com a gente",
-    cta: "Começar no WhatsApp",
+    cta: "Pedir um serviço",
     whatsappText: "Olá! Vim pelo site da marct.co e quero conversar sobre o meu negócio.",
   },
 ];

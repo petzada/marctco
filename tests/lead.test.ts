@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWhatsapp, validateLead } from "../src/lead";
+import { normalizeWhatsapp, pickServices, validateLead } from "../src/lead";
 import worker, { type Env } from "../src/worker/index";
 
 const valid = {
@@ -8,6 +8,7 @@ const valid = {
   empresa: "Padaria Central",
   ramo: "Padaria",
   produto: "Pão de queijo",
+  servicos: ["Gestão de tráfego", "Gestão Google Meu Negócio"],
   origem: "gmb",
 };
 
@@ -51,7 +52,31 @@ describe("normalizeWhatsapp", () => {
 describe("validateLead", () => {
   it("normaliza e aceita um contato completo", () => {
     const result = validateLead({ ...valid, nome: "  Ana   Souza " });
-    expect(result).toEqual({ ok: true, lead: { ...valid, nome: "Ana Souza", whatsapp: "5511974815782" } });
+    expect(result).toEqual({
+      ok: true,
+      lead: {
+        ...valid,
+        nome: "Ana Souza",
+        whatsapp: "5511974815782",
+        servicos: "Gestão Google Meu Negócio, Gestão de tráfego",
+      },
+    });
+  });
+
+  it("na etapa 1 só confere nome, WhatsApp e empresa", () => {
+    expect(validateLead({ nome: "Ana", whatsapp: "11974815782", empresa: "Padaria" }, 1).ok).toBe(true);
+    const result = validateLead({ nome: "Ana", whatsapp: "11974815782", empresa: "Padaria" });
+    expect(result.ok || Object.keys(result.errors).sort()).toEqual(["produto", "ramo"]);
+  });
+
+  it("serviços: só os oferecidos, na ordem do site, sem repetir e opcionais", () => {
+    expect(pickServices(["Inteligência artificial", "Hackear", "Gestão de tráfego", "Gestão de tráfego"])).toEqual([
+      "Gestão de tráfego",
+      "Inteligência artificial",
+    ]);
+    expect(pickServices(undefined)).toEqual([]);
+    const result = validateLead({ ...valid, servicos: [] });
+    expect(result.ok && result.lead.servicos).toBe("");
   });
 
   it("aponta cada campo vazio ou inválido", () => {
@@ -72,8 +97,16 @@ describe("worker /api/leads", () => {
     const res = await worker.fetch(post(valid), env);
     expect(res.status).toBe(201);
     expect(rows).toHaveLength(1);
-    expect(rows[0]![0]).toMatch(/^INSERT INTO leads .* VALUES \(\?, \?, \?, \?, \?, \?\)$/);
-    expect(rows[0]!.slice(1)).toEqual(["Ana Souza", "5511974815782", "Padaria Central", "Padaria", "Pão de queijo", "gmb"]);
+    expect(rows[0]![0]).toMatch(/^INSERT INTO leads .* VALUES \(\?, \?, \?, \?, \?, \?, \?\)$/);
+    expect(rows[0]!.slice(1)).toEqual([
+      "Ana Souza",
+      "5511974815782",
+      "Padaria Central",
+      "Padaria",
+      "Pão de queijo",
+      "Gestão Google Meu Negócio, Gestão de tráfego",
+      "gmb",
+    ]);
   });
 
   it("recusa dados inválidos (422), JSON quebrado (400) e outra origem (403) sem gravar", async () => {

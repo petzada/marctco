@@ -473,49 +473,100 @@ a {
   font-size: 0.95rem;
 }
 
-.lead__submit {
-  justify-self: start;
+
+/* Etapas do formulário, serviços de interesse e botões */
+.lead__step {
+  display: grid;
+  gap: 1rem;
+}
+
+.lead__step[hidden] {
+  display: none;
+}
+
+.lead__progress {
+  font-size: 0.85rem;
+  color: var(--g400);
+}
+
+.checks {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.checks legend {
+  margin-bottom: 0.4rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  padding: 0.55em 0.8em;
+  border: 1px solid var(--g600);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.check:has(input:checked) {
+  border-color: var(--white);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.check input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--white);
+}
+
+.lead__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.4rem;
+}
+
+/* Botão em destaque (avançar, enviar, fechar): o único preenchido do site */
+.cta--primary {
+  background: var(--white);
+  color: var(--black);
+  font-weight: 400;
   cursor: pointer;
   font-family: inherit;
 }
 
-.lead__submit:disabled {
+.cta--primary:hover {
+  background: var(--g200);
+}
+
+.cta--primary:disabled {
   opacity: 0.6;
   cursor: progress;
 }
 
-/* Toast de confirmação: embaixo, centralizado */
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: max(24px, env(safe-area-inset-bottom));
-  z-index: 30;
-  max-width: min(28rem, calc(100vw - 2 * var(--gutter)));
-  padding: 0.9em 1.2em;
-  border: 1px solid var(--g600);
-  border-radius: 12px;
-  background: var(--g900);
-  color: var(--white);
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.5);
-  opacity: 0;
-  transform: translate(-50%, 12px);
-  transition:
-    opacity 0.3s,
-    transform 0.3s;
+/* Segundo clique (voltar): sem borda nem seta */
+.cta--ghost {
+  border-color: transparent;
+  cursor: pointer;
+  font-family: inherit;
 }
 
-.toast--in {
-  opacity: 1;
-  transform: translate(-50%, 0);
+.cta--ghost::after {
+  content: none;
+}
+
+.lead__done {
+  padding-block: 0.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .lead[open] {
     animation: none;
-  }
-
-  .toast {
-    transition: none;
   }
 }
 

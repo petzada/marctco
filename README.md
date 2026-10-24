@@ -15,8 +15,9 @@ câmera pela rua e cada serviço acende uma fachada:
 | IA (novo) | Estúdio no fim da rua | Holograma de influenciadora; a câmera aproxima |
 | Contato | Rua toda acesa | A câmera recua: "seu negócio, visto" |
 
-Os botões das seções abrem um formulário em modal (nome, WhatsApp, empresa, ramo e produto
-principal), gravado na tabela `leads` do D1 `marctco-leads`; um toast confirma o envio. Sem
+Os botões das seções abrem um formulário em modal, em duas etapas (nome, WhatsApp e empresa;
+depois ramo, produto principal e serviços de interesse), com rascunho salvo no navegador e
+confirmação com "fechar". Grava na tabela `leads` do D1 `marctco-leads`. Sem
 JavaScript, os mesmos botões levam ao WhatsApp. O CTA do cabeçalho vai direto ao WhatsApp.
 
 > O CRM que morava neste repositório está no branch `crm-revisional`, sem ligação com o site.
@@ -41,7 +42,7 @@ amarelas; amarelo quente
 | `src/scene/street.ts` | Fachadas provisórias (código), nos grupos com os nomes das coleções do Blender |
 | `src/scene/effects.ts` | O efeito 3D colorido de cada serviço, dirigido pelo progresso local da seção |
 | `src/lead.ts` | Campos e validação do formulário, usados no navegador e no Worker |
-| `src/lead-form.ts` | Modal, envio para `/api/leads` e toast |
+| `src/lead-form.ts` | Modal em duas etapas, rascunho, envio para `/api/leads` e confirmação |
 | `src/worker/index.ts` | Worker: `POST /api/leads` grava no D1; o resto são os assets |
 | `migrations/` | Schema do D1 (tabela `leads`), aplicado pelo job Deploy |
 | `src/scene/world.ts` | Renderer, luz, bloom, troca pelo `.glb`, Actions no scroll e o quadro de cada frame |

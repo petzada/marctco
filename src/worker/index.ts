@@ -43,11 +43,11 @@ export async function handleLead(request: Request, env: Env): Promise<Response> 
   const result = validateLead(body);
   if (!result.ok) return json({ ok: false, errors: result.errors }, 422);
 
-  const { nome, whatsapp, empresa, ramo, produto, origem } = result.lead;
+  const { nome, whatsapp, empresa, ramo, produto, servicos, origem } = result.lead;
   await env.DB.prepare(
-    "INSERT INTO leads (nome, whatsapp, empresa, ramo, produto, origem) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO leads (nome, whatsapp, empresa, ramo, produto, servicos, origem) VALUES (?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(nome, whatsapp, empresa, ramo, produto, origem)
+    .bind(nome, whatsapp, empresa, ramo, produto, servicos, origem)
     .run();
   return json({ ok: true }, 201);
 }
