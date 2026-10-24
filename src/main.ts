@@ -39,6 +39,7 @@ async function start(): Promise<void> {
     // A cena carrega depois do texto: a primeira tela já é legível sem three.js.
     const { World } = await import("./scene/world");
     world = new World({ canvas, lowPower });
+    if (import.meta.env.DEV) Object.assign(window, { __world: world }); // inspeção no console
   } catch (error) {
     console.error(error);
     root.classList.replace("webgl", "no-webgl");

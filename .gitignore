@@ -13,3 +13,7 @@ blender/*.blend2
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# .glb bruto do Blender; o comprimido vai para public/models/ (pnpm models)
+blender/export/
+blender/__pycache__/

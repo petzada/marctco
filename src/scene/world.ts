@@ -6,8 +6,10 @@ import {
   Fog,
   HalfFloatType,
   HemisphereLight,
+  LoopOnce,
   Mesh,
   MeshBasicMaterial,
+  type MeshStandardMaterial,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PointLight,
@@ -26,7 +28,7 @@ import { CAMERA_KEYS, cameraAt, verticalFov } from "../camera-path";
 import { SECTIONS } from "../content";
 import { activation, effectProgress, smoothstep } from "../timeline";
 import { ACCENT, buildEffects } from "./effects";
-import { SECTION_SLOT, SLOT_NAMES, buildStreet } from "./street";
+import { SECTION_SLOT, SLOT_NAMES, buildStreet, glassMaterial, type SlotName } from "./street";
 
 export interface WorldOptions {
   canvas: HTMLCanvasElement;
@@ -120,18 +122,47 @@ export class World {
       if (!replacement) continue;
       const slot = this.street.slots[name];
       slot.clear();
+      if (name === "street") this.street.fillerGlass.length = 0;
+      replacement.traverse((o) => {
+        const mesh = o as Mesh;
+        if (!mesh.isMesh) return;
+        mesh.castShadow = mesh.receiveShadow = this.renderer.shadowMap.enabled;
+        mesh.material = this.lightableMaterial(name, mesh.material as MeshStandardMaterial);
+      });
       slot.add(replacement);
     }
     if (gltf.animations.length) {
-      this.mixer = new AnimationMixer(gltf.scene);
+      // As Actions apontam para nós pelo nome; depois da troca eles vivem nos grupos da rua.
+      this.mixer = new AnimationMixer(this.street.root);
       for (const clip of gltf.animations) {
-        const action = this.mixer.clipAction(clip);
+        // Uma vez só e parada no último quadro: em LoopRepeat, t = 1 voltaria ao início
+        const action = this.mixer.clipAction(clip).setLoop(LoopOnce, 1);
+        action.clampWhenFinished = true;
         action.play();
         action.paused = true;
         this.actions.set(clip.name, action);
       }
     }
     return true;
+  }
+
+  /**
+   * Os vidros do .glb ("glass*") passam a usar os materiais que o site acende: o da
+   * fachada, as janelas do bairro (três níveis de brilho) e os postes.
+   */
+  private lightableMaterial(slot: SlotName, material: MeshStandardMaterial): MeshStandardMaterial {
+    const name = material.name;
+    if (!name.startsWith("glass")) return material;
+    if (name === "glass_lamp") return this.street.lampGlass;
+    if (name.startsWith("glass_filler")) {
+      const m = glassMaterial();
+      m.emissive.copy(ACCENT.windows);
+      m.userData.level = [0.6, 1, 1.4][Number(name.at(-1))] ?? 1;
+      m.userData.on = true;
+      this.street.fillerGlass.push(m);
+      return m;
+    }
+    return this.street.facades[slot]?.glass ?? material;
   }
 
   /**
@@ -162,7 +193,7 @@ export class World {
         if (slot !== "billboard_ads") facade.glass.emissive.lerpColors(this.glassWhite, ACCENT.windows, allLit);
       }
       const action = this.actions.get(section.id);
-      if (action) action.time = t * action.getClip().duration;
+      if (action) action.time = Math.min(t, 0.999) * action.getClip().duration;
       this.effects[i]?.update({ t, active, time, camera: this.camera });
     });
     this.mixer?.update(0);
