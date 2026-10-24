@@ -14,10 +14,12 @@ import {
   Shape,
   TorusGeometry,
   Vector3,
+  type BufferGeometry,
   type Camera,
   type MeshStandardMaterial,
   type Object3D,
 } from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { clamp01, smoothstep } from "../timeline";
 import type { Street } from "./street";
 
@@ -251,17 +253,15 @@ function hologram(stage: Street["anchors"]["aiStage"]): Effect {
   beam.position.y = 1.3;
   root.add(beam);
 
-  // Silhueta low-poly: cabeça, cabelo, tronco, saia, pernas e braços
+  // Silhueta low-poly: cabeça, cabelo, tronco, saia, pernas e braços. As peças são
+  // estáticas entre si: uma malha só por material (2 draw calls em vez de 20).
   const figure = new Group();
   const wire = new MeshBasicMaterial({ color: ACCENT.holoWire, wireframe: true, transparent: true, opacity: 0.85 });
   const fill = glow(0.18, ACCENT.holoFill);
-  const part = (geo: ConstructorParameters<typeof Mesh>[0], x: number, y: number, z = 0, rz = 0) => {
-    for (const m of [wire, fill]) {
-      const p = new Mesh(geo, m);
-      p.position.set(x, y, z);
-      p.rotation.z = rz;
-      figure.add(p);
-    }
+  const parts: BufferGeometry[] = [];
+  const part = (geo: BufferGeometry, x: number, y: number, z = 0, rz = 0) => {
+    parts.push(geo.toNonIndexed().rotateZ(rz).translate(x, y, z));
+    geo.dispose();
   };
   part(new IcosahedronGeometry(0.17, 1), 0, 1.86);
   part(new IcosahedronGeometry(0.2, 0), 0, 1.9, -0.05);
@@ -273,6 +273,9 @@ function hologram(stage: Street["anchors"]["aiStage"]): Effect {
   part(new CylinderGeometry(0.05, 0.04, 0.62, 5), 0.08, 0.32);
   part(new CylinderGeometry(0.04, 0.035, 0.6, 5), -0.27, 1.28, 0, -0.18);
   part(new CylinderGeometry(0.04, 0.035, 0.6, 5), 0.27, 1.28, 0, 0.18);
+  const body = mergeGeometries(parts);
+  for (const g of parts) g.dispose();
+  for (const m of [wire, fill]) figure.add(new Mesh(body, m));
   figure.position.y = 0.12;
   root.add(figure);
 

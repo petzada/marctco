@@ -1,0 +1,4 @@
+# Cabeçalhos dos assets estáticos no Cloudflare Workers. Tudo em /assets/ tem hash no nome
+# (JS, CSS, fontes e o .glb): cache imutável de um ano no navegador e na borda.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

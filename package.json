@@ -15,7 +15,7 @@
     "test:ci": "vitest --run --coverage.enabled=false",
     "prepare": "node -e \"require('fs').existsSync('.git')&&require('child_process').execSync('lefthook install',{stdio:'inherit'})\"",
     "deploy": "cf deploy",
-    "models": "gltfpack -i blender/export/bairro.raw.glb -o public/models/bairro.glb -kn -km -cc"
+    "models": "gltfpack -i blender/export/bairro.raw.glb -o src/models/bairro.glb -kn -km -cc"
   },
   "dependencies": {
     "@fontsource/roboto": "^5.3.0",
@@ -25,11 +25,14 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-beta.v.4",
     "@types/node": "^24.19.2",
+    "@types/stats.js": "^0.17.4",
     "@types/three": "^0.186.0",
     "cf": "1.0.0-beta.21",
     "gltfpack": "^1.3.0",
     "lefthook": "^2.2.2",
     "oxlint": "^1.89.0",
+    "rollup-plugin-visualizer": "^7.1.1",
+    "stats.js": "^0.17.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
