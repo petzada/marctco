@@ -1,4 +1,5 @@
 import "@fontsource/roboto/latin-200.css"; // o latino cobre todos os acentos do português
+import "@fontsource/roboto/latin-700.css";
 import "@fontsource/roboto/latin-900.css";
 import "./styles.css";
 import { SECTIONS, whatsappUrl } from "./content";
@@ -23,7 +24,8 @@ function measure(): void {
 function updateOverlay(p: number): void {
   if (root.classList.contains("no-webgl")) return;
   chapters.forEach((el, i) => el.style.setProperty("--show", activation(p, i).toFixed(3)));
-  root.classList.toggle("past-hero", p > 0.5);
+  // Logo do header só na última etapa (bairro aceso e texto colado na borda)
+  root.classList.toggle("at-end", p > chapters.length - 1.3);
   const index = Math.round(p);
   if (index !== activeIndex) {
     activeIndex = index;
