@@ -46,8 +46,9 @@ async function start(): Promise<void> {
   const debug = perfMode
     ? Object.fromEntries((["noshadow", "nobloom", "noadapt", "nocompile", "nodispose"] as const).map((k) => [k, params.has(k)]))
     : undefined;
-  // O .glb (~95 kB) baixa em paralelo com o chunk do three.js, não depois dele
-  const model = fetchModel();
+  // O .glb (~95 kB) baixa em paralelo com o chunk do three.js, mas só depois das fontes: o
+  // título do hero (o LCP) repinta com a Roboto, e o modelo disputando a banda atrasava isso
+  const model = document.fonts.ready.then(() => fetchModel());
   let world: import("./scene/world").World;
   try {
     // A cena carrega depois do texto: a primeira tela já é legível sem three.js.
