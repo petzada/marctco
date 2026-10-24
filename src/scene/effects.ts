@@ -1,6 +1,7 @@
 import {
   AdditiveBlending,
   BoxGeometry,
+  Color,
   ConeGeometry,
   CylinderGeometry,
   DoubleSide,
@@ -36,12 +37,29 @@ export interface Effect {
   update(s: FrameState): void;
 }
 
+// Cor só nos efeitos: o bairro é cinza e o que a marct.co faz aparece colorido.
+// Valores acima de 1 passam do limiar do bloom e brilham.
+export const ACCENT = {
+  pin: new Color(0xea4335).multiplyScalar(1.15),
+  star: new Color(0xfbbc04).multiplyScalar(2.4),
+  posts: [0xe1306c, 0x833ab4, 0xf77737, 0xfcaf45, 0x405de6, 0xfd1d1d, 0xc13584].map((c) =>
+    new Color(c).multiplyScalar(1.6),
+  ),
+  billboard: new Color(0xff8a1f),
+  wave: new Color(0x2f7bff).multiplyScalar(2),
+  holoWire: new Color(0x22e4ff).multiplyScalar(2),
+  holoFill: new Color(0xff4fd8),
+  windows: new Color(0xffc46b),
+} as const;
+
+const tinted = (color: Color) => new MeshBasicMaterial({ color });
+
 const white = (opacity = 1) =>
   new MeshBasicMaterial({ color: 0xffffff, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
 
-const glow = (opacity: number) =>
+const glow = (opacity: number, color: Color | number = 0xffffff) =>
   new MeshBasicMaterial({
-    color: 0xffffff,
+    color,
     transparent: true,
     opacity,
     blending: AdditiveBlending,
@@ -66,7 +84,7 @@ function starGeometry(r: number): ExtrudeGeometry {
 function mapsPin(at: Street["anchors"]["gmbRoof"]): Effect {
   const root = new Group();
   const pin = new Group();
-  const mat = white();
+  const mat = tinted(ACCENT.pin);
   const head = new Mesh(new IcosahedronGeometry(0.42, 1), mat);
   head.position.y = 0.95;
   const tip = new Mesh(new ConeGeometry(0.38, 0.95, 8), mat);
@@ -80,7 +98,7 @@ function mapsPin(at: Street["anchors"]["gmbRoof"]): Effect {
 
   const starGeo = starGeometry(0.17);
   const stars = Array.from({ length: 5 }, (_, i) => {
-    const s = new Mesh(starGeo, white());
+    const s = new Mesh(starGeo, tinted(ACCENT.star));
     s.position.set((i - 2) * 0.42, 2.05 - Math.abs(i - 2) * 0.08, 0);
     root.add(s);
     return s;
@@ -148,13 +166,12 @@ function screenBuild(at: Street["anchors"]["lpWindow"], glass: MeshStandardMater
 function orbitingPosts(door: Street["anchors"]["socialDoor"]): Effect {
   const root = new Group();
   const cardMat = new MeshBasicMaterial({ color: 0xbdbdbd });
-  const photoMat = new MeshBasicMaterial({ color: 0x3a3a3a });
-  const lineMat = white();
+  const lineMat = new MeshBasicMaterial({ color: 0x5a5a5a });
   const n = 7;
-  const cards = Array.from({ length: n }, () => {
+  const cards = Array.from({ length: n }, (_, i) => {
     const card = new Group();
     card.add(new Mesh(new BoxGeometry(0.62, 0.8, 0.03), cardMat));
-    const photo = new Mesh(new BoxGeometry(0.52, 0.48, 0.035), photoMat);
+    const photo = new Mesh(new BoxGeometry(0.52, 0.48, 0.035), tinted(ACCENT.posts[i % ACCENT.posts.length]!));
     photo.position.y = 0.09;
     const line = new Mesh(new BoxGeometry(0.32, 0.05, 0.035), lineMat);
     line.position.set(-0.08, -0.27, 0);
@@ -186,8 +203,9 @@ function reachWaves(billboard: Street["anchors"]["billboard"], glass: MeshStanda
   const root = new Group();
   const geo = new RingGeometry(0.965, 1, 64);
   geo.rotateX(-Math.PI / 2);
+  glass.emissive.copy(ACCENT.billboard);
   const rings = Array.from({ length: 4 }, () => {
-    const m = new Mesh(geo, glow(0));
+    const m = new Mesh(geo, glow(0, ACCENT.wave));
     root.add(m);
     return m;
   });
@@ -214,19 +232,19 @@ function reachWaves(billboard: Street["anchors"]["billboard"], glass: MeshStanda
 function hologram(stage: Street["anchors"]["aiStage"]): Effect {
   const root = new Group();
   const emitter = new Mesh(new CylinderGeometry(0.85, 0.95, 0.12, 24), new MeshBasicMaterial({ color: 0x1e1e1e }));
-  const rim = new Mesh(new TorusGeometry(0.88, 0.03, 6, 48), white());
+  const rim = new Mesh(new TorusGeometry(0.88, 0.03, 6, 48), tinted(ACCENT.holoWire));
   rim.rotation.x = Math.PI / 2;
   rim.position.y = 0.07;
   root.add(emitter, rim);
 
-  const beam = new Mesh(new CylinderGeometry(0.55, 0.85, 2.5, 24, 1, true), glow(0.06));
+  const beam = new Mesh(new CylinderGeometry(0.55, 0.85, 2.5, 24, 1, true), glow(0.06, ACCENT.holoWire));
   beam.position.y = 1.3;
   root.add(beam);
 
   // Silhueta low-poly: cabeça, cabelo, tronco, saia, pernas e braços
   const figure = new Group();
-  const wire = new MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.85 });
-  const fill = glow(0.18);
+  const wire = new MeshBasicMaterial({ color: ACCENT.holoWire, wireframe: true, transparent: true, opacity: 0.85 });
+  const fill = glow(0.18, ACCENT.holoFill);
   const part = (geo: ConstructorParameters<typeof Mesh>[0], x: number, y: number, z = 0, rz = 0) => {
     for (const m of [wire, fill]) {
       const p = new Mesh(geo, m);
@@ -248,7 +266,7 @@ function hologram(stage: Street["anchors"]["aiStage"]): Effect {
   figure.position.y = 0.12;
   root.add(figure);
 
-  const scan = new Mesh(new TorusGeometry(0.5, 0.012, 4, 40), white());
+  const scan = new Mesh(new TorusGeometry(0.5, 0.012, 4, 40), tinted(ACCENT.holoFill.clone().multiplyScalar(2)));
   scan.rotation.x = Math.PI / 2;
   root.add(scan);
 

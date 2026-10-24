@@ -1,6 +1,6 @@
 // Orçamento de desempenho (README): cena completa < 3 MB comprimida.
 // Soma o gzip de tudo o que o build publica em dist/ e falha acima do limite.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
@@ -13,7 +13,9 @@ const files = (dir) =>
 
 let total = 0;
 const rows = [];
-for (const path of files("dist")) {
+// Com o plugin da Cloudflare os assets saem em dist/client; sem ele, direto em dist.
+const root = existsSync("dist/client") ? "dist/client" : "dist";
+for (const path of files(root)) {
   const raw = readFileSync(path);
   // .glb já vem comprimido (Meshopt/Draco); gzip só nos textos
   const size = /\.(glb|png|jpe?g|webp|avif|ktx2)$/.test(path) ? raw.length : gzipSync(raw, { level: 9 }).length;

@@ -199,6 +199,7 @@ function filler(x: number, z: number, w: number, h: number, facing: 1 | -1, out:
   for (let row = 0; row < Math.floor((h - 0.6) / 1.1); row++) {
     for (let c = 0; c < cols; c++) {
       const m = glassMaterial();
+      m.emissive.set(0xffc46b); // só acende no final, já em cor quente
       m.userData.level = 0.5 + ((x * 7 + row * 3 + c * 5) % 10) / 9; // brilho fixo por janela
       m.userData.on = (x * 13 + row * 7 + c * 11) % 3 !== 0; // nem toda janela acende
       out.push(m);
@@ -276,6 +277,7 @@ export function buildStreet(): Street {
   for (const x of [1.5, 8.5, 15.5, 33.5]) s.add(box(1.4, 0.3, 0.4, MAT.trim, x, 0.45, 2.6));
 
   const lampGlass = glassMaterial();
+  lampGlass.emissive.set(0xffd9a0);
   // Postes nos vãos entre fachadas, para não cruzar a frente de nenhuma vitrine
   for (const x of [-7, 3.6, 10.6, 17.6, 28, 37]) s.add(lamp(x, -1.7, lampGlass));
   for (const x of [-4, 3.6, 10.6, 17.6, 28.5, 37]) s.add(lamp(x, 1.7, lampGlass));

@@ -13,7 +13,8 @@
     "test": "vitest --run",
     "test:related": "node scripts/test-related.mjs",
     "test:ci": "vitest --run --coverage.enabled=false",
-    "prepare": "node -e \"require('fs').existsSync('.git')&&require('child_process').execSync('lefthook install',{stdio:'inherit'})\""
+    "prepare": "node -e \"require('fs').existsSync('.git')&&require('child_process').execSync('lefthook install',{stdio:'inherit'})\"",
+    "deploy": "cf deploy"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
@@ -21,7 +22,9 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "2.0.0-beta.v.4",
     "@types/three": "^0.186.0",
+    "cf": "1.0.0-beta.21",
     "lefthook": "^2.2.2",
     "oxlint": "^1.89.0",
     "typescript": "^5.9.3",

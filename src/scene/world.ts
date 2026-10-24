@@ -25,7 +25,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { CAMERA_KEYS, cameraAt, verticalFov } from "../camera-path";
 import { SECTIONS } from "../content";
 import { activation, effectProgress, smoothstep } from "../timeline";
-import { buildEffects } from "./effects";
+import { ACCENT, buildEffects } from "./effects";
 import { SECTION_SLOT, SLOT_NAMES, buildStreet } from "./street";
 
 export interface WorldOptions {
@@ -48,6 +48,7 @@ export class World {
   private readonly spot = new PointLight(0xffffff, 0, 12, 1.6);
   private readonly dot = new Mesh(new SphereGeometry(0.14, 16, 12), new MeshBasicMaterial({ color: 0xffffff }));
   private readonly lookAt = new Vector3();
+  private readonly glassWhite = new Color(0xffffff);
   /** Actions do .glb nomeadas pelo id da seção (gmb, lp, …), tocadas pelo scroll. */
   private readonly actions = new Map<string, AnimationAction>();
   private mixer: AnimationMixer | null = null;
@@ -157,6 +158,8 @@ export class World {
         const scale = facade.glass.userData.litScale ?? 1;
         const extra = (facade.glass.userData.screen ?? 0) + (facade.glass.userData.billboard ?? 0) * 1.4;
         facade.glass.emissiveIntensity = Math.max(active * 1.5, allLit * 1.3, visited) * scale + extra;
+        // No final o bairro acende em cor quente; o outdoor mantém a cor própria
+        if (slot !== "billboard_ads") facade.glass.emissive.lerpColors(this.glassWhite, ACCENT.windows, allLit);
       }
       const action = this.actions.get(section.id);
       if (action) action.time = t * action.getClip().duration;

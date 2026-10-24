@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # O nome "CI" é o check obrigatório da proteção da main.
@@ -24,11 +24,41 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test:ci
-      # Build e orçamento de desempenho (< 3 MB comprimido)
+      # Build com o plugin da Cloudflare e orçamento de desempenho (< 3 MB comprimido)
       - run: pnpm build
+
+  # Publica marct.co no Cloudflare Workers. Sem o secret CLOUDFLARE_API_TOKEN, só avisa.
+  deploy:
+    name: Deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      HAS_CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy to Cloudflare
+        if: ${{ env.HAS_CLOUDFLARE_TOKEN == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec cf deploy --message "${{ github.sha }}"
+      - name: Missing token
+        if: ${{ env.HAS_CLOUDFLARE_TOKEN != 'true' }}
+        run: echo "::warning::CLOUDFLARE_API_TOKEN ausente; deploy pulado."

@@ -8,3 +8,8 @@ coverage/
 # Backups automáticos do Blender
 blender/*.blend1
 blender/*.blend2
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
