@@ -1,4 +1,5 @@
-import "@fontsource-variable/bricolage-grotesque/standard.css";
+import "@fontsource/roboto/latin-200.css"; // o latino cobre todos os acentos do português
+import "@fontsource/roboto/latin-900.css";
 import "./styles.css";
 import { SECTIONS, whatsappUrl } from "./content";
 import { activation, anchorsFor, progressAt, snapProgress } from "./timeline";

@@ -7,10 +7,11 @@
   --g400: #8a8a8a;
   --g200: #c4c4c4;
   --white: #ffffff;
-  /* Bricolage Grotesque: 800 e largura normal nos títulos e no logo; condensada (75%) e
-     fina (350) no subtítulo e nos botões. */
-  --font: "Bricolage Grotesque Variable", "Arial Narrow", Arial, sans-serif;
+  /* Roboto: Black (900) nos títulos e no logo; ExtraLight (200) no subtítulo e nos botões. */
+  --font: "Roboto", Arial, sans-serif;
   --gutter: clamp(16px, 4vw, 56px);
+  /* Largura útil da linha: títulos e subtítulos encolhem para caber numa linha só */
+  --line: calc(100vw - 2 * var(--gutter));
   color-scheme: dark;
 }
 
@@ -23,8 +24,7 @@ html {
   background: var(--black);
   color: var(--g200);
   font-family: var(--font);
-  font-weight: 350;
-  font-stretch: 75%;
+  font-weight: 200;
   /* Tudo minúsculo, como o logo */
   text-transform: lowercase;
   -webkit-font-smoothing: antialiased;
@@ -54,8 +54,7 @@ a {
 }
 
 .logo {
-  font-weight: 800;
-  font-stretch: 100%;
+  font-weight: 900;
   color: var(--white);
   letter-spacing: -0.055em;
   line-height: 1;
@@ -103,10 +102,10 @@ a {
   background: transparent;
   color: var(--white);
   border: 1.5px solid var(--white);
-  font-weight: 350;
-  font-stretch: 75%;
+  font-weight: 200;
   font-size: 1.05rem;
   letter-spacing: 0.01em;
+  white-space: nowrap;
   text-decoration: none;
   border-radius: 999px;
   transition:
@@ -148,7 +147,7 @@ a {
 }
 
 .webgl .chapter--contact {
-  height: 190svh;
+  height: 160svh;
 }
 
 .panel {
@@ -181,16 +180,8 @@ a {
   text-shadow: 0 2px 24px rgb(0 0 0 / 0.6);
 }
 
-.chapter--hero .panel,
-.chapter--contact .panel {
+.chapter--hero .panel {
   align-items: center;
-}
-
-/* Em pé, a cena ocupa o terço de cima: o texto do contato desce para não cobrir o bairro aceso */
-@media (max-width: 767px) {
-  .chapter--contact .panel {
-    align-items: flex-end;
-  }
 }
 
 .logo--hero {
@@ -198,60 +189,73 @@ a {
   margin-bottom: 0.2rem;
 }
 
-/* Título em uma linha a partir do tablet; no celular quebra equilibrado */
+/* Títulos e subtítulos numa linha só: o tamanho acompanha a largura da tela.
+   Os divisores vêm do texto mais longo (título com 37 caracteres, subtítulo com 91). */
 .title {
-  font-weight: 800;
-  font-stretch: 100%;
-  font-size: clamp(2rem, 4.4vw, 4.4rem);
-  line-height: 0.98;
-  letter-spacing: -0.035em;
+  font-weight: 900;
+  font-size: min(3.8rem, calc(var(--line) / 21));
+  line-height: 1;
+  letter-spacing: -0.03em;
   color: var(--white);
-  text-wrap: balance;
+  white-space: nowrap;
 }
 
 .chapter--hero .title {
-  font-size: clamp(1.5rem, 3.4vw, 3.1rem);
-}
-
-@media (min-width: 768px) {
-  .title {
-    white-space: nowrap;
-  }
+  font-size: min(2.8rem, calc(var(--line) / 21));
 }
 
 .body {
-  font-size: clamp(1.15rem, 1.8vw, 1.45rem);
+  font-size: min(1.35rem, calc(var(--line) / 44));
   line-height: 1.3;
-  letter-spacing: 0.005em;
   color: var(--white);
-  max-width: 38ch;
+  white-space: nowrap;
+}
+
+/* No celular o subtítulo numa linha ficaria ilegível (< 8 px): ele quebra */
+@media (max-width: 767px) {
+  .body {
+    font-size: 1.05rem;
+    white-space: normal;
+    max-width: 34ch;
+  }
+
 }
 
 .copy .cta {
   margin-top: 0.6rem;
 }
 
-/* Rodapé sem barra: continua a última tela, centrado sobre a cena */
+/* Rodapé numa linha, dentro da última tela: descrição, razão social e CNPJ */
 .foot {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  justify-items: center;
-  gap: 0.6rem;
-  padding: 24px var(--gutter) max(40px, calc(env(safe-area-inset-bottom) + 24px));
-  text-align: center;
-  color: var(--g400);
+  position: absolute;
+  inset: auto 0 max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.25rem 1.1em;
+  padding: 0 var(--gutter);
+  font-size: min(0.9rem, calc(var(--line) / 70));
+  color: var(--g200);
+  white-space: nowrap;
   text-shadow: 0 2px 16px rgb(0 0 0 / 0.8);
+  pointer-events: auto;
 }
 
-.foot .logo {
-  font-size: 1.6rem;
+/* Contato no canto inferior esquerdo, colado no rodapé: o bairro aceso fica no centro */
+.chapter--contact .panel {
+  padding-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 2.6rem);
 }
 
-.foot p {
-  font-size: 0.95rem;
-  line-height: 1.35;
-  max-width: 44ch;
+@media (max-width: 767px) {
+  .chapter--contact .panel {
+    padding-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 4.6rem);
+  }
+}
+
+.no-webgl .foot {
+  position: static;
+  margin-top: 48px;
 }
 
 /* Sem WebGL: a mesma página, em texto, uma seção por tela */
@@ -277,5 +281,17 @@ a {
   .cta {
     transition: none;
     transform: none;
+  }
+}
+
+.no-webgl .chapter--contact .panel {
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* No celular o rodapé numa linha ficaria ilegível: as três partes quebram entre si */
+@media (max-width: 767px) {
+  .foot {
+    font-size: 0.75rem;
   }
 }
