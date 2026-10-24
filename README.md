@@ -97,6 +97,10 @@ Worker só de assets estáticos (`cloudflare.config.ts`, CLI `cf`) nos domínios
 O plugin da Cloudflare para Vite exige Node 22.18+; em Node mais antigo o `pnpm build` local
 sai como site estático puro (o mesmo conteúdo servido). O CI usa Node 24.
 
+Cada contato gravado também chega no Telegram, pelo bot do BotFather, com os dados e o
+botão "Abrir no WhatsApp" (`src/worker/telegram.ts`). O deploy entrega ao Worker os segredos
+do repositório `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`; sem eles, o aviso é pulado.
+
 Ver os contatos recebidos (o `cf` usa o login do seu notebook; só leitura):
 
 ```bash
