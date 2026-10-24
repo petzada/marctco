@@ -39,7 +39,7 @@
     "db:roles:local": "node scripts/set-local-role-passwords.mjs",
     "check:migrations": "node scripts/check-migration-safety.mjs",
     "ship": "node scripts/ship.mjs",
-    "prepare": "lefthook install",
+    "prepare": "node -e \"try{if(require('fs').existsSync('.git'))require('child_process').execSync('lefthook install',{stdio:'inherit'})}catch(e){console.warn('lefthook install ignorado')}\"",
     "test:related": "node scripts/test-related.mjs --project domain",
     "test:ci": "vitest run"
   },
