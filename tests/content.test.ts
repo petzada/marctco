@@ -12,6 +12,7 @@ describe("seções", () => {
     for (const s of SECTIONS) {
       expect(html).toContain(`id="${s.id}"`);
       expect(html).toContain(whatsappUrl(s.whatsappText).replace(/&/g, "&amp;"));
+      expect(html).toContain(`>${s.cta}</a>`);
     }
   });
 

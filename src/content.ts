@@ -8,54 +8,67 @@ export type SectionId = "hero" | "gmb" | "lp" | "social" | "ads" | "ai" | "conta
 
 export interface Section {
   id: SectionId;
+  /** Título em uma linha. */
   title: string;
   /** Subtítulo: nomeia o serviço, já que a página não tem eyebrow. */
   body: string;
+  /** Rótulo do botão de WhatsApp da seção. */
+  cta: string;
   /** Texto que já chega preenchido na conversa do WhatsApp. */
   whatsappText: string;
 }
 
+/** Rótulo do CTA fixo do cabeçalho. */
+export const HEADER_CTA = "Entrar em contato";
+
 export const SECTIONS: readonly Section[] = [
   {
     id: "hero",
-    title: "Presença digital para o comércio do bairro.",
-    body: "Role e passeie pela rua.",
+    title: "Presença digital para o seu negócio",
+    body: "Role e descubra nossa entrega",
+    cta: "Entrar em contato",
     whatsappText: "Olá! Vim pelo site da marct.co e quero colocar meu negócio no mapa.",
   },
   {
     id: "gmb",
-    title: "Ser achado no mapa.",
-    body: "Google Meu Negócio completo: fotos, horário e avaliações. Quem procura perto encontra você primeiro.",
+    title: "Seja encontrado no mapa",
+    body: "Google Meu Negócio: quem procura perto, encontra você primeiro",
+    cta: "Quero ser descoberto",
     whatsappText: "Olá! Quero ajuda com o Google Meu Negócio da minha empresa.",
   },
   {
     id: "lp",
-    title: "Um endereço próprio que converte.",
-    body: "Landing page rápida, só sua, feita para virar conversa.",
+    title: "Um endereço digital que converte",
+    body: "Página de negócios personalizada, feita para virar uma conversa",
+    cta: "Quero uma LP",
     whatsappText: "Olá! Quero uma landing page para o meu negócio.",
   },
   {
     id: "social",
-    title: "Sua vitrine aberta todo dia.",
-    body: "Redes sociais e mídias digitais: calendário, posts e respostas, com gestão e conteúdo.",
+    title: "Sua vitrine aberta todos os dias",
+    body: "Redes sociais e mídias digitais com estratégias específicas de conversão",
+    cta: "Quero essa gestão",
     whatsappText: "Olá! Quero ajuda com as redes sociais do meu negócio.",
   },
   {
     id: "ads",
-    title: "Anúncio para quem está perto.",
-    body: "Tráfego pago no raio do seu bairro, sem pagar por quem nunca vai passar na porta.",
+    title: "Anúncio para quem precisa receber",
+    body: "Tráfego pago focado na sua região, sem pagar por quem nunca vai passar na porta",
+    cta: "Quero mais clientes",
     whatsappText: "Olá! Quero anunciar para quem está perto do meu negócio.",
   },
   {
     id: "ai",
-    title: "Influenciadores e comerciais de IA.",
-    body: "Conteúdo sintético: rostos, vozes e vídeos gerados com IA para a sua marca, e outras ferramentas sob medida.",
+    title: "Conteúdo sintético para o seu negócio",
+    body: "Rostos, vozes e vídeos gerados com inteligência artificial, expandindo sua marca nas redes",
+    cta: "Quero mais conteúdo",
     whatsappText: "Olá! Quero saber mais sobre conteúdo com IA para o meu negócio.",
   },
   {
     id: "contact",
-    title: "Seu negócio, visto.",
-    body: "Conte o que você vende e onde. A conversa começa no WhatsApp.",
+    title: "Seu negócio pro mundo",
+    body: "Conte-nos o que você vende e onde, e o resto é com a gente",
+    cta: "Começar no WhatsApp",
     whatsappText: "Olá! Vim pelo site da marct.co e quero conversar sobre o meu negócio.",
   },
 ];

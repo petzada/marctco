@@ -1,6 +1,6 @@
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig, type Plugin } from "vite";
-import { SECTIONS, whatsappUrl } from "./src/content.ts";
+import { HEADER_CTA, SECTIONS, whatsappUrl } from "./src/content.ts";
 import { renderSections } from "./src/render-sections.ts";
 
 // As seções saem de src/content.ts direto no HTML: o texto existe sem JavaScript e sem WebGL.
@@ -10,7 +10,8 @@ function sectionsHtml(): Plugin {
     transformIndexHtml: (html) =>
       html
         .replace("<!--sections-->", renderSections())
-        .replace("%WHATSAPP_URL%", whatsappUrl(SECTIONS[SECTIONS.length - 1]!.whatsappText).replace(/&/g, "&amp;")),
+        .replace("%WHATSAPP_URL%", whatsappUrl(SECTIONS[SECTIONS.length - 1]!.whatsappText).replace(/&/g, "&amp;"))
+        .replace("%HEADER_CTA%", HEADER_CTA),
   };
 }
 

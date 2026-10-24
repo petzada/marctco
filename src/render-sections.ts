@@ -6,7 +6,7 @@ import { SECTIONS, whatsappUrl, type Section } from "./content.ts";
 const escape = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export function ctaLink(section: Section, label = "conversar no whatsapp", extraClass = ""): string {
+export function ctaLink(section: Section, label = section.cta, extraClass = ""): string {
   return `<a class="cta ${extraClass}" href="${escape(whatsappUrl(section.whatsappText))}" target="_blank" rel="noopener">${escape(label)}</a>`;
 }
 

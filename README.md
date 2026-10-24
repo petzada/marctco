@@ -24,7 +24,8 @@ CTA único em todas as seções: conversa no WhatsApp, com a mensagem já escrit
 Vite + three.js em TypeScript, sem framework de UI. Lenis suaviza o scroll; a timeline da
 câmera é própria (`src/timeline.ts`, `src/camera-path.ts`). Bloom só no que passa do branco.
 
-Identidade: bairro cinza e preto, texto branco em Archivo (800 nos títulos, 500 no resto),
+Identidade: bairro cinza e preto, texto branco em Bricolage Grotesque (800 nos títulos; condensada
+75% e peso 350 no subtítulo e nos botões),
 tudo minúsculo. **Cor só nos efeitos** que a marct.co faz aparecer (pin e estrelas, posts,
 outdoor e ondas, holograma, o bairro acendendo no final) — `ACCENT` em `src/scene/effects.ts`.
 

@@ -1,4 +1,4 @@
-/* Monocromático: cinza e preto; branco puro só no logo, na luz da fachada ativa e no CTA. */
+/* Bairro e texto monocromáticos; a cor fica só nos efeitos da cena (src/scene/effects.ts). */
 :root {
   --black: #0a0a0a;
   --g900: #121212;
@@ -7,8 +7,9 @@
   --g400: #8a8a8a;
   --g200: #c4c4c4;
   --white: #ffffff;
-  /* Sem serifa: grossa (800) nos títulos e no logo, medium (500) no subtítulo e nos botões. */
-  --font: "Archivo Variable", Arial, "Helvetica Neue", Helvetica, sans-serif;
+  /* Bricolage Grotesque: 800 e largura normal nos títulos e no logo; condensada (75%) e
+     fina (350) no subtítulo e nos botões. */
+  --font: "Bricolage Grotesque Variable", "Arial Narrow", Arial, sans-serif;
   --gutter: clamp(16px, 4vw, 56px);
   color-scheme: dark;
 }
@@ -22,7 +23,8 @@ html {
   background: var(--black);
   color: var(--g200);
   font-family: var(--font);
-  font-weight: 500;
+  font-weight: 350;
+  font-stretch: 75%;
   /* Tudo minúsculo, como o logo */
   text-transform: lowercase;
   -webkit-font-smoothing: antialiased;
@@ -53,6 +55,7 @@ a {
 
 .logo {
   font-weight: 800;
+  font-stretch: 100%;
   color: var(--white);
   letter-spacing: -0.055em;
   line-height: 1;
@@ -100,8 +103,10 @@ a {
   background: transparent;
   color: var(--white);
   border: 1.5px solid var(--white);
-  font-weight: 500;
-  font-size: 0.95rem;
+  font-weight: 350;
+  font-stretch: 75%;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
   text-decoration: none;
   border-radius: 999px;
   transition:
@@ -124,8 +129,8 @@ a {
 }
 
 .cta--bar {
-  padding: 0.7em 1.1em;
-  font-size: 0.85rem;
+  padding: 0.6em 1.1em;
+  font-size: 0.95rem;
 }
 
 /* Capítulos: cada um é um trecho alto de scroll com o texto parado (sticky) sobre a cena */
@@ -166,7 +171,7 @@ a {
 }
 
 .copy {
-  max-width: 40rem;
+  max-width: 100%;
   display: grid;
   justify-items: start;
   gap: 0.9rem;
@@ -181,51 +186,72 @@ a {
   align-items: center;
 }
 
+/* Em pé, a cena ocupa o terço de cima: o texto do contato desce para não cobrir o bairro aceso */
+@media (max-width: 767px) {
+  .chapter--contact .panel {
+    align-items: flex-end;
+  }
+}
+
 .logo--hero {
   font-size: clamp(3.6rem, 15vw, 10rem);
   margin-bottom: 0.2rem;
 }
 
+/* Título em uma linha a partir do tablet; no celular quebra equilibrado */
 .title {
   font-weight: 800;
-  font-size: clamp(2.3rem, 6.4vw, 5.4rem);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+  font-stretch: 100%;
+  font-size: clamp(2rem, 4.4vw, 4.4rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
   color: var(--white);
-  max-width: 13ch;
   text-wrap: balance;
 }
 
 .chapter--hero .title {
-  font-size: clamp(1.4rem, 3.4vw, 2.4rem);
-  max-width: 22ch;
-  line-height: 1.05;
+  font-size: clamp(1.5rem, 3.4vw, 3.1rem);
+}
+
+@media (min-width: 768px) {
+  .title {
+    white-space: nowrap;
+  }
 }
 
 .body {
-  font-weight: 500;
-  font-size: clamp(1rem, 1.6vw, 1.2rem);
-  line-height: 1.45;
+  font-size: clamp(1.15rem, 1.8vw, 1.45rem);
+  line-height: 1.3;
+  letter-spacing: 0.005em;
   color: var(--white);
-  max-width: 34ch;
+  max-width: 38ch;
 }
 
 .copy .cta {
   margin-top: 0.6rem;
 }
 
+/* Rodapé sem barra: continua a última tela, centrado sobre a cena */
 .foot {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  align-items: baseline;
-  padding: 32px var(--gutter) max(32px, env(safe-area-inset-bottom));
-  font-size: 0.85rem;
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 24px var(--gutter) max(40px, calc(env(safe-area-inset-bottom) + 24px));
+  text-align: center;
   color: var(--g400);
-  background: var(--black);
-  border-top: 1px solid var(--g800);
+  text-shadow: 0 2px 16px rgb(0 0 0 / 0.8);
+}
+
+.foot .logo {
+  font-size: 1.6rem;
+}
+
+.foot p {
+  font-size: 0.95rem;
+  line-height: 1.35;
+  max-width: 44ch;
 }
 
 /* Sem WebGL: a mesma página, em texto, uma seção por tela */

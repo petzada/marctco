@@ -45,7 +45,9 @@ export const ACCENT = {
   posts: [0xe1306c, 0x833ab4, 0xf77737, 0xfcaf45, 0x405de6, 0xfd1d1d, 0xc13584].map((c) =>
     new Color(c).multiplyScalar(1.6),
   ),
-  billboard: new Color(0xff8a1f),
+  // Azul-claro e contido: conversa com o azul das ondas sem estourar
+  billboard: new Color(0x9fcfff),
+  lpScreen: new Color(0xffd23f),
   wave: new Color(0x2f7bff).multiplyScalar(2),
   holoWire: new Color(0x22e4ff).multiplyScalar(2),
   holoFill: new Color(0xff4fd8),
@@ -126,7 +128,8 @@ function mapsPin(at: Street["anchors"]["gmbRoof"]): Effect {
 function screenBuild(at: Street["anchors"]["lpWindow"], glass: MeshStandardMaterial): Effect {
   const root = new Group();
   const { w, h } = at;
-  const soft = new MeshBasicMaterial({ color: 0x9a9a9a });
+  // Blocos escuros sobre a tela amarela; título e botão em branco
+  const soft = new MeshBasicMaterial({ color: 0x2b2b2b });
   const strong = white();
   // [x, y, largura, altura, material] em fração da vitrine, a partir do canto superior esquerdo
   const pieces: [number, number, number, number, MeshBasicMaterial][] = [
@@ -149,8 +152,10 @@ function screenBuild(at: Street["anchors"]["lpWindow"], glass: MeshStandardMater
   return {
     object: root,
     update({ t, active }) {
+      // A vitrine acende amarela enquanto a porta de aço sobe (Action "lp", t 0 → 0,45)
+      glass.userData.base = ACCENT.lpScreen;
       glass.userData.litScale = 0.2;
-      glass.userData.screen = smoothstep(0, 0.2, t) * 0.12; // fundo da tela, somado em world.ts
+      glass.userData.screen = smoothstep(0.05, 0.4, t) * 0.75; // fundo da tela, somado em world.ts
       root.visible = t > 0;
       meshes.forEach((m, i) => {
         const k = easeOut(smoothstep(0.1 + i * 0.09, 0.25 + i * 0.09, t));
@@ -203,7 +208,8 @@ function reachWaves(billboard: Street["anchors"]["billboard"], glass: MeshStanda
   const root = new Group();
   const geo = new RingGeometry(0.965, 1, 64);
   geo.rotateX(-Math.PI / 2);
-  glass.emissive.copy(ACCENT.billboard);
+  glass.userData.base = ACCENT.billboard;
+  glass.userData.litScale = 0.4; // painel aceso, mas sem estourar no bloom
   const rings = Array.from({ length: 4 }, () => {
     const m = new Mesh(geo, glow(0, ACCENT.wave));
     root.add(m);
@@ -221,7 +227,7 @@ function reachWaves(billboard: Street["anchors"]["billboard"], glass: MeshStanda
       root.visible = reach > 0;
       rings.forEach((r, i) => {
         const phase = (time * 0.22 + i / rings.length) % 1;
-        r.scale.setScalar(0.5 + phase * 17 * reach);
+        r.scale.setScalar(0.5 + phase * 11 * reach);
         (r.material as MeshBasicMaterial).opacity = (1 - phase) ** 1.5 * 0.9 * reach;
       });
     },

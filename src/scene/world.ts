@@ -187,10 +187,13 @@ export class World {
         const visited = p > i ? 0.25 : 0;
         // A vitrine da landing page acende pouco: quem brilha são as peças da tela
         const scale = facade.glass.userData.litScale ?? 1;
-        const extra = (facade.glass.userData.screen ?? 0) + (facade.glass.userData.billboard ?? 0) * 1.4;
+        const extra = (facade.glass.userData.screen ?? 0) + (facade.glass.userData.billboard ?? 0) * 0.6;
         facade.glass.emissiveIntensity = Math.max(active * 1.5, allLit * 1.3, visited) * scale + extra;
-        // No final o bairro acende em cor quente; o outdoor mantém a cor própria
-        if (slot !== "billboard_ads") facade.glass.emissive.lerpColors(this.glassWhite, ACCENT.windows, allLit);
+        // Cor própria do efeito (tela da LP, outdoor) ou branco; no final o bairro acende
+        // em cor quente, menos o outdoor, que mantém a dele
+        const base: Color = facade.glass.userData.base ?? this.glassWhite;
+        if (slot === "billboard_ads") facade.glass.emissive.copy(base);
+        else facade.glass.emissive.lerpColors(base, ACCENT.windows, allLit);
       }
       const action = this.actions.get(section.id);
       if (action) action.time = Math.min(t, 0.999) * action.getClip().duration;
