@@ -46,6 +46,12 @@ const MAT = {
 };
 
 /** Vidro que acende: escuro apagado, branco puro (com bloom) quando a intensidade passa de 1. */
+/** Toldo da padaria em azul e branco: o emissivo segue o brilho da fachada (world.ts). */
+const AWNING: [MeshStandardMaterial, MeshStandardMaterial] = [
+  new MeshStandardMaterial({ color: 0x2f6fd6, emissive: 0x3f8cff, emissiveIntensity: 0, roughness: 0.8, flatShading: true }),
+  new MeshStandardMaterial({ color: 0xe9eef6, emissive: 0xdfe9ff, emissiveIntensity: 0, roughness: 0.8, flatShading: true }),
+];
+
 export function glassMaterial(): MeshStandardMaterial {
   return new MeshStandardMaterial({ color: 0x1a1a1a, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.4 });
 }
@@ -81,6 +87,8 @@ export interface Street {
   /** Janelas dos prédios de enchimento: só acendem no contato. */
   fillerGlass: MeshStandardMaterial[];
   lampGlass: MeshStandardMaterial;
+  /** Listras do toldo da padaria (azul e branco), acesas junto com a fachada. */
+  awning: [MeshStandardMaterial, MeshStandardMaterial];
   /** Pontos de ancoragem dos efeitos de cada seção. */
   anchors: {
     gmbRoof: [number, number, number];
@@ -109,7 +117,7 @@ function bakery(): Facade {
   g.add(...windows(glass, [x - 1.5, x + 1.5], 1.5, 1.1, 1.2, FRONT + 0.02));
   // Toldo em ripas alternadas
   for (let i = 0; i < 8; i++) {
-    const slat = box(w / 8, 0.06, 0.9, i % 2 ? MAT.trim : MAT.wallDark, x - w / 2 + w / 16 + (i * w) / 8, 2.45, FRONT + 0.42);
+    const slat = box(w / 8, 0.06, 0.9, AWNING[i % 2]!, x - w / 2 + w / 16 + (i * w) / 8, 2.45, FRONT + 0.42);
     slat.rotation.x = 0.35;
     g.add(slat);
   }
@@ -300,6 +308,7 @@ export function buildStreet(): Street {
     facades: { shop_gmb: gmb, shop_lp: lp, shop_social: social, billboard_ads: ads, studio_ai: ai },
     fillerGlass,
     lampGlass,
+    awning: AWNING,
     anchors: {
       gmbRoof: [FACADE_X.gmb, 4.4, FRONT - 1.6],
       lpWindow: { x: FACADE_X.lp - 0.55, y: 1.45, z: FRONT + 0.1, w: 3.6, h: 2.0 },

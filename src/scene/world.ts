@@ -50,7 +50,6 @@ export class World {
   private readonly spot = new PointLight(0xffffff, 0, 12, 1.6);
   private readonly dot = new Mesh(new SphereGeometry(0.14, 16, 12), new MeshBasicMaterial({ color: 0xffffff }));
   private readonly lookAt = new Vector3();
-  private readonly glassWhite = new Color(0xffffff);
   /** Actions do .glb nomeadas pelo id da seção (gmb, lp, …), tocadas pelo scroll. */
   private readonly actions = new Map<string, AnimationAction>();
   private mixer: AnimationMixer | null = null;
@@ -129,6 +128,13 @@ export class World {
         mesh.castShadow = mesh.receiveShadow = this.renderer.shadowMap.enabled;
         mesh.material = this.lightableMaterial(name, mesh.material as MeshStandardMaterial);
       });
+      // Toldo da padaria: no .glb as listras usam "wall_dark" e "trim"; viram azul e branco
+      replacement.getObjectByName("gmb_awning")?.traverse((o) => {
+        const mesh = o as Mesh;
+        if (!mesh.isMesh) return;
+        const name = (mesh.material as MeshStandardMaterial).name;
+        mesh.material = this.street.awning[name === "trim" ? 1 : 0];
+      });
       slot.add(replacement);
     }
     if (gltf.animations.length) {
@@ -189,11 +195,10 @@ export class World {
         const scale = facade.glass.userData.litScale ?? 1;
         const extra = (facade.glass.userData.screen ?? 0) + (facade.glass.userData.billboard ?? 0) * 0.6;
         facade.glass.emissiveIntensity = Math.max(active * 1.5, allLit * 1.3, visited) * scale + extra;
-        // Cor própria do efeito (tela da LP, outdoor) ou branco; no final o bairro acende
-        // em cor quente, menos o outdoor, que mantém a dele
-        const base: Color = facade.glass.userData.base ?? this.glassWhite;
-        if (slot === "billboard_ads") facade.glass.emissive.copy(base);
-        else facade.glass.emissive.lerpColors(base, ACCENT.windows, allLit);
+        if (slot === "shop_gmb") for (const m of this.street.awning) m.emissiveIntensity = facade.glass.emissiveIntensity * 0.35;
+        // Negócios acendem azul (ou a cor do efeito: tela da LP, outdoor), inclusive no
+        // final, quando o resto do bairro acende em amarelo
+        facade.glass.emissive.copy(facade.glass.userData.base ?? ACCENT.business);
       }
       const action = this.actions.get(section.id);
       if (action) action.time = Math.min(t, 0.999) * action.getClip().duration;

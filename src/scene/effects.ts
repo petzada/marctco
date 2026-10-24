@@ -38,19 +38,22 @@ export interface Effect {
 }
 
 // Cor só nos efeitos: o bairro é cinza e o que a marct.co faz aparece colorido.
-// Valores acima de 1 passam do limiar do bloom e brilham.
+// Azul é o negócio local (vidros das fachadas, tela da LP, outdoor, ondas, holograma);
+// amarelo quente é o resto do bairro acendendo no final. Valores acima de 1 brilham no bloom.
 export const ACCENT = {
   pin: new Color(0xea4335).multiplyScalar(1.15),
   star: new Color(0xfbbc04).multiplyScalar(2.4),
   posts: [0xe1306c, 0x833ab4, 0xf77737, 0xfcaf45, 0x405de6, 0xfd1d1d, 0xc13584].map((c) =>
     new Color(c).multiplyScalar(1.6),
   ),
-  // Azul-claro e contido: conversa com o azul das ondas sem estourar
+  // Azul-claro e contido nos vidros dos negócios e no outdoor; a tela da LP um tom acima
+  // Mais saturado que o outdoor: com o brilho alto um azul-claro lava para branco
+  business: new Color(0x3f8cff),
   billboard: new Color(0x9fcfff),
-  lpScreen: new Color(0xffd23f),
+  lpScreen: new Color(0x5aa8ff),
   wave: new Color(0x2f7bff).multiplyScalar(2),
-  holoWire: new Color(0x22e4ff).multiplyScalar(2),
-  holoFill: new Color(0xff4fd8),
+  holoWire: new Color(0x5fb4ff).multiplyScalar(2),
+  holoFill: new Color(0x7a86ff),
   windows: new Color(0xffc46b),
 } as const;
 
@@ -128,7 +131,7 @@ function mapsPin(at: Street["anchors"]["gmbRoof"]): Effect {
 function screenBuild(at: Street["anchors"]["lpWindow"], glass: MeshStandardMaterial): Effect {
   const root = new Group();
   const { w, h } = at;
-  // Blocos escuros sobre a tela amarela; título e botão em branco
+  // Blocos escuros sobre a tela azul; título e botão em branco
   const soft = new MeshBasicMaterial({ color: 0x2b2b2b });
   const strong = white();
   // [x, y, largura, altura, material] em fração da vitrine, a partir do canto superior esquerdo
@@ -152,7 +155,7 @@ function screenBuild(at: Street["anchors"]["lpWindow"], glass: MeshStandardMater
   return {
     object: root,
     update({ t, active }) {
-      // A vitrine acende amarela enquanto a porta de aço sobe (Action "lp", t 0 → 0,45)
+      // A vitrine acende azul enquanto a porta de aço sobe (Action "lp", t 0 → 0,45)
       glass.userData.base = ACCENT.lpScreen;
       glass.userData.litScale = 0.2;
       glass.userData.screen = smoothstep(0.05, 0.4, t) * 0.75; // fundo da tela, somado em world.ts
