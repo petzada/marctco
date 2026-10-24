@@ -38,6 +38,7 @@ jobs:
   resolve:
     name: Mark a failed migration as rolled back
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: production
     # The same group the release job uses, so a recovery can never interleave
     # with a deploy.
