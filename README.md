@@ -83,7 +83,9 @@ pnpm typecheck && pnpm lint
 
 Seis projetos vitest: `domain`, `db`, `a7`, `seam2`, `seam4` e
 `managed-migration`. O CI roda os quatro jobs (Quality, Database, Image web,
-Image worker) em cada PR, e o release de migration só dispara em push na `main`.
+Image worker) em cada PR, e o release de migration só dispara em push na `main` — e só
+se a variable `PRODUCTION_RELEASE` do repositório não for `off` (fica `off` enquanto o
+projeto Supabase de produção estiver pausado; apague a variable para religar).
 
 ## Contribuir
 

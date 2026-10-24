@@ -198,9 +198,12 @@ jobs:
           test '${{ needs.database.result }}' = 'success'
           test '${{ needs.image.result }}' = 'success'
 
+  # Variable PRODUCTION_RELEASE=off desliga o release enquanto o banco de produção estiver
+  # pausado (projeto Supabase inativo): os gates de PR continuam valendo e a main fica verde.
+  # Para religar: `gh variable delete PRODUCTION_RELEASE` (ou qualquer valor diferente de off).
   release:
     name: Production migration
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PRODUCTION_RELEASE != 'off'
     needs: [ci]
     runs-on: ubuntu-latest
     timeout-minutes: 15
