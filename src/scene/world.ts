@@ -19,6 +19,7 @@ import {
   Vector3,
   WebGLRenderer,
   type AnimationAction,
+  type Material,
 } from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
@@ -28,15 +29,24 @@ import { CAMERA_KEYS, CAMERA_KEYS_PORTRAIT, cameraAt, verticalFov, type CameraKe
 import { SECTIONS } from "../content";
 import { activation, effectProgress, smoothstep } from "../timeline";
 import { ACCENT, buildEffects } from "./effects";
+import { fetchModel } from "./model";
 import { SECTION_SLOT, SLOT_NAMES, buildStreet, glassMaterial, type SlotName } from "./street";
 
 export interface WorldOptions {
   canvas: HTMLCanvasElement;
   /** Celular: sem sombras e bloom em resolução menor. */
   lowPower: boolean;
+  /** Chaves de diagnóstico (só com ?perf): desligam sombras, bloom ou a resolução adaptativa. */
+  debug?: Partial<Record<"noshadow" | "nobloom" | "noadapt" | "nocompile" | "nodispose", boolean>>;
 }
 
-const MODEL_URL = `${import.meta.env.BASE_URL}models/bairro.glb`;
+// Resolução adaptativa: degraus do fator sobre o pixel ratio base. Cai um degrau quando a
+// mediana do intervalo entre quadros passa de 22 ms (abaixo de ~45 fps) por duas janelas
+// seguidas; se o degrau não ajudar (a demora não é de preenchimento), volta e para de tentar.
+const SCALE_STEPS = [1, 0.85, 0.7, 0.6] as const;
+const ADAPT_WINDOW = 60;
+const SLOW_MS = 22;
+const FAST_MS = 14;
 
 export class World {
   private readonly renderer: WebGLRenderer;
@@ -55,12 +65,35 @@ export class World {
   private mixer: AnimationMixer | null = null;
   /** Quadros de câmera: os do desktop ou, com a tela em pé, os do celular. */
   private keys: readonly CameraKey[] = CAMERA_KEYS;
+  private readonly basePixelRatio: number;
+  private adapt: boolean;
+  private readonly debug: NonNullable<WorldOptions["debug"]>;
+  private scaleStep = 0;
+  private width = 1;
+  private height = 1;
+  /** Shaders compilados fora da thread principal: até lá nenhum quadro é desenhado. */
+  private compiled = false;
+  private lastP = Number.NaN;
+  private dirty = true;
+  private readonly frames: number[] = [];
+  private slowWindows = 0;
+  private fastWindows = 0;
+  /** Mediana da janela anterior a um degrau, para conferir se ele ajudou. */
+  private probe: number | null = null;
 
-  constructor({ canvas, lowPower }: WorldOptions) {
+  /** Renderer, para a medição (perf.ts). */
+  get gl(): WebGLRenderer {
+    return this.renderer;
+  }
+
+  constructor({ canvas, lowPower, debug = {} }: WorldOptions) {
     this.renderer = new WebGLRenderer({ canvas, antialias: !lowPower, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
+    this.basePixelRatio = Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2);
+    this.adapt = !debug.noadapt;
+    this.debug = debug;
+    this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.shadowMap.enabled = !lowPower;
+    this.renderer.shadowMap.enabled = !lowPower && !debug.noshadow;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
 
     const bg = new Color(0x0a0a0a);
@@ -70,7 +103,7 @@ export class World {
     const moon = new DirectionalLight(0xffffff, 1.5);
     moon.position.set(-12, 24, 14);
     moon.target.position.set(15, 0, 0);
-    if (!lowPower) {
+    if (this.renderer.shadowMap.enabled) {
       moon.castShadow = true;
       moon.shadow.mapSize.set(2048, 1024);
       Object.assign(moon.shadow.camera, { left: -28, right: 28, top: 14, bottom: -14, far: 80 });
@@ -80,7 +113,7 @@ export class World {
 
     this.scene.add(this.street.root);
     for (const e of this.effects) if (e) this.scene.add(e.object);
-    if (!lowPower) {
+    if (this.renderer.shadowMap.enabled) {
       this.street.root.traverse((o) => {
         if ((o as Mesh).isMesh) o.castShadow = o.receiveShadow = true;
       });
@@ -92,11 +125,37 @@ export class World {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // Limiar alto: só o branco puro (emissivo acima de 1, materiais brancos) brilha.
     this.bloom = new UnrealBloomPass(new Vector2(256, 256), 0.5, 0.3, 0.95);
+    this.bloom.enabled = !debug.nobloom;
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+
+    void this.compile();
+  }
+
+  /**
+   * Compila os shaders em paralelo (KHR_parallel_shader_compile) sem travar a thread
+   * principal. Sem isso o primeiro quadro compilava tudo de uma vez, dentro do rAF.
+   */
+  private async compile(): Promise<void> {
+    this.compiled = false;
+    // Os efeitos ficam invisíveis até a sua seção: visíveis durante a compilação para
+    // os programas deles já existirem quando aparecerem.
+    const hidden = this.effects.filter((e) => e && !e.object.visible).map((e) => e!.object);
+    for (const o of hidden) o.visible = true;
+    try {
+      if (!this.debug.nocompile) await this.renderer.compileAsync(this.scene, this.camera);
+    } catch {
+      // Sem a extensão o three compila na hora; segue para o render normal
+    } finally {
+      for (const o of hidden) o.visible = false;
+      this.compiled = true;
+      this.dirty = true;
+    }
   }
 
   resize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
     this.camera.aspect = width / height;
     this.camera.fov = verticalFov(this.camera.aspect);
     // Em pé, o texto ocupa a metade de baixo: o assunto da cena sobe para o terço de cima.
@@ -104,27 +163,79 @@ export class World {
     if (width < height) this.camera.setViewOffset(width, height, 0, height * 0.17, width, height);
     else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height, false);
-    this.composer.setSize(width, height);
+    this.applySize();
     const scale = window.innerWidth < 768 ? 0.35 : 0.5;
     this.bloom.resolution.set(width * scale, height * scale);
+    this.dirty = true;
   }
 
-  /** Tenta trocar as fachadas provisórias pelo .glb do Blender; sem arquivo, segue com as caixas. */
-  async loadModel(): Promise<boolean> {
-    const head = await fetch(MODEL_URL, { method: "HEAD" }).catch(() => null);
-    if (!head?.ok || !head.headers.get("content-type")?.includes("model")) return false;
+  private applySize(): void {
+    this.renderer.setPixelRatio(this.basePixelRatio * SCALE_STEPS[this.scaleStep]!);
+    this.renderer.setSize(this.width, this.height, false);
+    this.composer.setSize(this.width, this.height);
+    this.dirty = true;
+  }
+
+  /**
+   * Resolução adaptativa: com a mediana do intervalo entre quadros acima de 22 ms por duas
+   * janelas de 60 quadros, o render cai um degrau (até 60 % do pixel ratio). Se a janela
+   * seguinte não melhorar pelo menos 15 %, o gargalo não é o preenchimento: desfaz e desliga.
+   * Estável abaixo de 14 ms por quatro janelas, sobe de volta. Só muda a resolução interna.
+   */
+  private adaptResolution(frameMs: number): void {
+    if (!this.adapt) return;
+    this.frames.push(frameMs);
+    if (this.frames.length < ADAPT_WINDOW) return;
+    const sorted = [...this.frames].sort((a, b) => a - b);
+    const p50 = sorted[sorted.length >> 1]!;
+    this.frames.length = 0;
+    if (this.probe !== null) {
+      // Janela logo depois de um degrau: valeu a pena?
+      const helped = p50 < this.probe * 0.85;
+      this.probe = null;
+      if (!helped) {
+        this.scaleStep--;
+        this.applySize();
+        this.adapt = false;
+      }
+      return;
+    }
+    if (p50 > SLOW_MS && this.scaleStep < SCALE_STEPS.length - 1) {
+      this.fastWindows = 0;
+      if (++this.slowWindows >= 2) {
+        this.slowWindows = 0;
+        this.probe = p50;
+        this.scaleStep++;
+        this.applySize();
+      }
+    } else if (p50 < FAST_MS && this.scaleStep > 0) {
+      this.slowWindows = 0;
+      if (++this.fastWindows >= 4) {
+        this.fastWindows = 0;
+        this.scaleStep--;
+        this.applySize();
+      }
+    } else {
+      this.slowWindows = 0;
+      this.fastWindows = 0;
+    }
+  }
+
+  /**
+   * Troca as fachadas provisórias pelo .glb do Blender. `data` pode vir de um fetch
+   * começado antes (main.ts), para o download andar em paralelo com o three.js.
+   */
+  async loadModel(data?: Promise<ArrayBuffer | null>): Promise<boolean> {
+    const buffer = await (data ?? fetchModel());
+    if (!buffer) return false;
     const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
       import("three/examples/jsm/loaders/GLTFLoader.js"),
       import("three/examples/jsm/libs/meshopt_decoder.module.js"),
     ]);
-    const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(MODEL_URL);
-    for (const name of SLOT_NAMES) {
+    const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(buffer, "");
+    const replacements = SLOT_NAMES.flatMap((name) => {
       const replacement = gltf.scene.getObjectByName(name);
-      if (!replacement) continue;
-      const slot = this.street.slots[name];
-      slot.clear();
-      if (name === "street") this.street.fillerGlass.length = 0;
+      if (!replacement) return [];
       replacement.traverse((o) => {
         const mesh = o as Mesh;
         if (!mesh.isMesh) return;
@@ -138,7 +249,33 @@ export class World {
         const name = (mesh.material as MeshStandardMaterial).name;
         mesh.material = this.street.awning[name === "trim" ? 1 : 0];
       });
+      return [{ name, replacement }];
+    });
+    // Compila os materiais novos com as luzes desta cena antes da troca: o quadro seguinte
+    // já sai pronto, sem compilar shader dentro do rAF
+    if (!this.debug.nocompile) await this.renderer.compileAsync(gltf.scene, this.camera, this.scene).catch(() => undefined);
+
+    const disposed = new Set<Material>();
+    for (const { name, replacement } of replacements) {
+      const slot = this.street.slots[name];
+      // As caixas provisórias saem da GPU junto com a cena
+      slot.traverse((o) => {
+        const mesh = o as Mesh;
+        if (!mesh.isMesh) return;
+        if (this.debug.nodispose) return;
+        mesh.geometry.dispose();
+        const material = mesh.material as Material;
+        if (this.isDisposable(name, material) && !disposed.has(material)) {
+          disposed.add(material);
+          material.dispose();
+        }
+      });
+      slot.clear();
       slot.add(replacement);
+    }
+    // Os vidros provisórios das janelas ficam só na lista: os do .glb já entraram em lightableMaterial
+    if (replacements.some((r) => r.name === "street")) {
+      this.street.fillerGlass = this.street.fillerGlass.filter((m) => m.userData.fromModel);
     }
     if (gltf.animations.length) {
       // As Actions apontam para nós pelo nome; depois da troca eles vivem nos grupos da rua.
@@ -152,6 +289,14 @@ export class World {
         this.actions.set(clip.name, action);
       }
     }
+    this.dirty = true;
+    return true;
+  }
+
+  /** Materiais provisórios que o site não reaproveita (os vidros acesos continuam em uso). */
+  private isDisposable(slot: SlotName, material: Material): boolean {
+    if (material === this.street.lampGlass || this.street.awning.includes(material as MeshStandardMaterial)) return false;
+    if (material === this.street.facades[slot]?.glass) return false;
     return true;
   }
 
@@ -168,6 +313,7 @@ export class World {
       m.emissive.copy(ACCENT.windows);
       m.userData.level = [0.6, 1, 1.4][Number(name.at(-1))] ?? 1;
       m.userData.on = true;
+      m.userData.fromModel = true;
       this.street.fillerGlass.push(m);
       return m;
     }
@@ -177,8 +323,14 @@ export class World {
   /**
    * Um quadro da cena no progresso `p`; `time` em segundos. Com `still` (movimento
    * reduzido) cada seção já alcançada mostra o efeito completo, sem tocar.
+   * Devolve false quando nada mudou e o quadro anterior foi mantido.
    */
-  render(p: number, time: number, intro: number, still = false): void {
+  render(p: number, time: number, intro: number, still = false, frameMs = 0): boolean {
+    if (!this.compiled) return false;
+    if (frameMs > 0) this.adaptResolution(frameMs);
+
+    const moved = p !== this.lastP;
+    this.lastP = p;
     const cam = cameraAt(p, this.keys);
     this.camera.position.set(...cam.position);
     this.lookAt.set(...cam.target);
@@ -186,6 +338,9 @@ export class World {
 
     const last = SECTIONS.length - 1;
     const allLit = smoothstep(last - 0.7, last, p);
+    // Algum efeito à vista anima com o tempo (órbita, ondas, holograma)? Senão, com `p`
+    // parado e a introdução terminada, o quadro anterior continua valendo.
+    let animated = intro < 1;
 
     SECTIONS.forEach((section, i) => {
       const slot = SECTION_SLOT[i];
@@ -213,9 +368,13 @@ export class World {
       }
       const action = this.actions.get(section.id);
       if (action) action.time = Math.min(t, 0.999) * action.getClip().duration;
-      this.effects[i]?.update({ t, active, time, camera: this.camera });
+      const effect = this.effects[i];
+      if (effect) {
+        effect.update({ t, active, time, camera: this.camera });
+        if (effect.object.visible && !still) animated = true;
+      }
     });
-    this.mixer?.update(0);
+    if (moved) this.mixer?.update(0);
 
     for (const m of this.street.fillerGlass) {
       m.emissiveIntensity = m.userData.on ? allLit * m.userData.level * 1.1 : 0;
@@ -233,6 +392,9 @@ export class World {
     this.spot.position.set(groundX, 2.6 + fall, 1.2);
     this.spot.intensity = 9 * intro * (1 - allLit * 0.6);
 
+    if (!moved && !animated && !this.dirty) return false;
+    this.dirty = false;
     this.composer.render();
+    return true;
   }
 }

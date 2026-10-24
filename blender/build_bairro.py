@@ -2,7 +2,7 @@
 
 Roda no Blender aberto (pelo Blender MCP ou por `python blender/run_in_blender.py
 blender/build_bairro.py`) ou sem interface: `blender -b --python blender/build_bairro.py`.
-Depois: `pnpm models` comprime o .glb (Meshopt) para public/models/bairro.glb.
+Depois: `pnpm models` comprime o .glb (Meshopt) para src/models/bairro.glb.
 
 Contrato com o site (src/scene/world.ts):
 - Um Empty por fachada com o nome da coleção: street, shop_gmb, shop_lp, shop_social,

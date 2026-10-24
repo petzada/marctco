@@ -4,6 +4,7 @@ import "@fontsource/roboto/latin-900.css";
 import "./styles.css";
 import { SECTIONS, whatsappUrl } from "./content";
 import { setupLeadForm } from "./lead-form";
+import { fetchModel } from "./scene/model";
 import { activation, anchorsFor, progressAt, snapProgress } from "./timeline";
 
 const root = document.documentElement;
@@ -39,11 +40,20 @@ function updateOverlay(p: number): void {
 async function start(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>("#scene")!;
   const lowPower = matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
+  // Medição e chaves de diagnóstico só em desenvolvimento ou com ?perf na URL
+  const params = new URLSearchParams(location.search);
+  const perfMode = import.meta.env.DEV || params.has("perf");
+  const debug = perfMode
+    ? Object.fromEntries((["noshadow", "nobloom", "noadapt", "nocompile", "nodispose"] as const).map((k) => [k, params.has(k)]))
+    : undefined;
+  // O .glb (~95 kB) baixa em paralelo com o chunk do three.js, mas só depois das fontes: o
+  // título do hero (o LCP) repinta com a Roboto, e o modelo disputando a banda atrasava isso
+  const model = document.fonts.ready.then(() => fetchModel());
   let world: import("./scene/world").World;
   try {
     // A cena carrega depois do texto: a primeira tela já é legível sem three.js.
     const { World } = await import("./scene/world");
-    world = new World({ canvas, lowPower });
+    world = new World({ canvas, lowPower, debug });
     if (import.meta.env.DEV) Object.assign(window, { __world: world }); // inspeção no console
   } catch (error) {
     console.error(error);
@@ -58,7 +68,7 @@ async function start(): Promise<void> {
   };
   resize();
   window.addEventListener("resize", resize);
-  void world.loadModel().catch((error) => console.warn("bairro.glb não carregou; seguem as fachadas provisórias", error));
+  void world.loadModel(model).catch((error) => console.warn("bairro.glb não carregou; seguem as fachadas provisórias", error));
 
   const setupScroll = async () => {
     lenis?.destroy();
@@ -70,8 +80,17 @@ async function start(): Promise<void> {
   await setupScroll();
   reducedMotion.addEventListener("change", () => void setupScroll());
 
+  // Fora do modo de medição o módulo nem é baixado
+  const perf = perfMode
+    ? await import("./perf").then(({ createPerfMonitor }) => createPerfMonitor(world.gl, SECTIONS.map((s) => s.id)))
+    : null;
+
   const t0 = performance.now();
+  let lastNow = 0;
   const frame = (now: number) => {
+    perf?.begin();
+    const frameMs = lastNow ? now - lastNow : 0;
+    lastNow = now;
     lenis?.raf(now);
     const still = reducedMotion.matches;
     const raw = progressAt(window.scrollY, anchors);
@@ -79,7 +98,8 @@ async function start(): Promise<void> {
     const seconds = (now - t0) / 1000;
     const intro = still ? 1 : Math.min(1, seconds / 1.8);
     updateOverlay(still ? p : raw);
-    world.render(p, still ? 0 : seconds, 1 - (1 - intro) ** 3, still);
+    const rendered = world.render(p, still ? 0 : seconds, 1 - (1 - intro) ** 3, still, frameMs);
+    perf?.end(now, p, rendered);
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

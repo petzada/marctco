@@ -97,7 +97,7 @@ export interface Street {
   slots: Record<SlotName, Group>;
   /** Vidros de cada fachada de serviço. */
   facades: Partial<Record<SlotName, Facade>>;
-  /** Janelas dos prédios de enchimento: só acendem no contato. */
+  /** Janelas dos prédios de enchimento: só acendem no contato (trocadas junto com o .glb). */
   fillerGlass: MeshStandardMaterial[];
   lampGlass: MeshStandardMaterial;
   /** Listras do toldo da padaria (azul e branco), acesas junto com a fachada. */
