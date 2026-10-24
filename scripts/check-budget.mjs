@@ -13,8 +13,13 @@ const files = (dir) =>
 
 let total = 0;
 const rows = [];
-// Com o plugin da Cloudflare os assets saem em dist/client; sem ele, direto em dist.
-const root = existsSync("dist/client") ? "dist/client" : "dist";
+// Com o plugin da Cloudflare (Node 22.18+) os assets saem na Build Output da Cloudflare;
+// sem ele, direto em dist.
+const root = [".cloudflare/output/v0/workers/default/assets", "dist"].find((dir) => existsSync(dir));
+if (!root) {
+  console.error("check-budget: nenhuma saída de build encontrada.");
+  process.exit(1);
+}
 for (const path of files(root)) {
   const raw = readFileSync(path);
   // .glb já vem comprimido (Meshopt/Draco); gzip só nos textos

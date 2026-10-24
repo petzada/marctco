@@ -17,3 +17,6 @@ blender/*.blend2
 # .glb bruto do Blender; o comprimido vai para public/models/ (pnpm models)
 blender/export/
 blender/__pycache__/
+
+# Build Output da Cloudflare (cf build / plugin do Vite)
+.cloudflare/
