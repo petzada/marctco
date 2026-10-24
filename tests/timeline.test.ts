@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAMERA_KEYS, cameraAt, verticalFov } from "../src/camera-path";
+import { CAMERA_KEYS, CAMERA_KEYS_PORTRAIT, cameraAt, verticalFov } from "../src/camera-path";
 import { SECTIONS } from "../src/content";
 import { activation, anchorsFor, effectProgress, holdEase, progressAt, snapProgress } from "../src/timeline";
 
@@ -40,8 +40,16 @@ describe("cameraAt", () => {
     expect(cameraAt(1.1)).toEqual(CAMERA_KEYS[1]);
   });
 
-  it("tem um quadro por seção", () => {
+  it("tem um quadro por seção, no desktop e no celular", () => {
     expect(CAMERA_KEYS).toHaveLength(SECTIONS.length);
+    expect(CAMERA_KEYS_PORTRAIT).toHaveLength(SECTIONS.length);
+  });
+
+  it("no celular só o hero e o contato mudam: mais perto da rua", () => {
+    const height = (k: (typeof CAMERA_KEYS)[number]) => k.position[1];
+    expect(height(CAMERA_KEYS_PORTRAIT[0]!)).toBeLessThan(height(CAMERA_KEYS[0]!));
+    expect(height(CAMERA_KEYS_PORTRAIT.at(-1)!)).toBeLessThan(height(CAMERA_KEYS.at(-1)!));
+    expect(CAMERA_KEYS_PORTRAIT.slice(1, -1)).toEqual(CAMERA_KEYS.slice(1, -1));
   });
 });
 

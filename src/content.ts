@@ -18,7 +18,17 @@ export interface Section {
   whatsappText: string;
 }
 
-/** Rótulo do CTA fixo do cabeçalho. */
+/** Serviços listados ao lado do logo no header da última etapa. */
+export const SERVICES = [
+  "Gestão Google Meu Negócio",
+  "Criação de landing pages",
+  "Gestão de mídias sociais",
+  "Gestão de tráfego",
+  "Conteúdo sintético",
+  "Inteligência artificial",
+] as const;
+
+/** Rótulo do CTA fixo do cabeçalho (vai direto para o WhatsApp). */
 export const HEADER_CTA = "Entrar em contato";
 
 export const SECTIONS: readonly Section[] = [
@@ -68,7 +78,7 @@ export const SECTIONS: readonly Section[] = [
     id: "contact",
     title: "Seu negócio pro mundo",
     body: "Conte-nos o que você vende e onde, e o resto é com a gente",
-    cta: "Começar no WhatsApp",
+    cta: "Pedir um serviço",
     whatsappText: "Olá! Vim pelo site da marct.co e quero conversar sobre o meu negócio.",
   },
 ];
