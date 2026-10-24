@@ -40,20 +40,21 @@ export interface Effect {
 // Cor só nos efeitos: o bairro é cinza e o que a marct.co faz aparece colorido.
 // Azul é o negócio local (vidros das fachadas, tela da LP, outdoor, ondas, holograma);
 // amarelo quente é o resto do bairro acendendo no final. Valores acima de 1 brilham no bloom.
+/** O azul da marca nos negócios: fachadas, toldo, tela da LP, outdoor, ondas e holograma. */
+export const BLUE = 0x3f8cff;
+
 export const ACCENT = {
   pin: new Color(0xea4335).multiplyScalar(1.15),
   star: new Color(0xfbbc04).multiplyScalar(2.4),
-  posts: [0xe1306c, 0x833ab4, 0xf77737, 0xfcaf45, 0x405de6, 0xfd1d1d, 0xc13584].map((c) =>
-    new Color(c).multiplyScalar(1.6),
-  ),
-  // Azul-claro e contido nos vidros dos negócios e no outdoor; a tela da LP um tom acima
-  // Mais saturado que o outdoor: com o brilho alto um azul-claro lava para branco
-  business: new Color(0x3f8cff),
-  billboard: new Color(0x9fcfff),
-  lpScreen: new Color(0x5aa8ff),
-  wave: new Color(0x2f7bff).multiplyScalar(2),
-  holoWire: new Color(0x5fb4ff).multiplyScalar(2),
-  holoFill: new Color(0x7a86ff),
+  // Posts da mesma loja: tons vizinhos do azul (só a luminosidade varia)
+  posts: [-0.16, -0.08, 0, 0.07, 0.13, -0.04, 0.1].map((dl) => new Color(BLUE).offsetHSL(0, 0, dl).multiplyScalar(1.2)),
+  // Um azul só para tudo que é negócio local; o brilho muda, o tom não
+  business: new Color(BLUE),
+  billboard: new Color(BLUE),
+  lpScreen: new Color(BLUE),
+  wave: new Color(BLUE),
+  holoWire: new Color(BLUE),
+  holoFill: new Color(BLUE),
   windows: new Color(0xffc46b),
 } as const;
 

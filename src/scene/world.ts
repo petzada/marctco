@@ -190,12 +190,20 @@ export class World {
       const t = still ? (i <= p ? 1 : 0) : effectProgress(p, i);
       const facade = slot ? this.street.facades[slot] : undefined;
       if (facade) {
-        const visited = p > i ? 0.25 : 0;
-        // A vitrine da landing page acende pouco: quem brilha são as peças da tela
+        // Azul padronizado: acima de 1 o tone mapping clareia o azul e abaixo escurece, então
+        // todo vidro de negócio aceso fica em 1,0 e, depois de visto, continua aceso.
+        // A vitrine da LP acende pouco por si: quem dá o azul é o fundo da tela (screen).
+        const lit = Math.max(active, i <= p ? 1 : 0, allLit);
         const scale = facade.glass.userData.litScale ?? 1;
         const extra = (facade.glass.userData.screen ?? 0) + (facade.glass.userData.billboard ?? 0) * 0.6;
-        facade.glass.emissiveIntensity = Math.max(active * 1.5, allLit * 1.3, visited) * scale + extra;
-        if (slot === "shop_gmb") for (const m of this.street.awning) m.emissiveIntensity = facade.glass.emissiveIntensity * 0.35;
+        facade.glass.emissiveIntensity = Math.min(1, lit * scale + extra);
+        if (slot === "shop_gmb") {
+          // Cinza até a seção começar; azul e branco conforme o toldo abre, e assim fica
+          for (const m of this.street.awning) {
+            m.color.lerpColors(m.userData.off, m.userData.on, t);
+            m.emissiveIntensity = t * m.userData.glow;
+          }
+        }
         // Negócios acendem azul (ou a cor do efeito: tela da LP, outdoor), inclusive no
         // final, quando o resto do bairro acende em amarelo
         facade.glass.emissive.copy(facade.glass.userData.base ?? ACCENT.business);
