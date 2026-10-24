@@ -1,92 +1,75 @@
-# marctco
+# marct.co
 
-CRM de vendas para **assessorias de revisional de juros** (veículo, imóvel, EP),
-com operação comercial e jurídica no mesmo workspace. Multi-tenant, isolamento
-por RLS em duas camadas, ingestão idempotente de leads e canal de primeiro
-contato no WhatsApp.
+Site da agência marct.co: presença digital para empresas e comerciantes locais.
 
-Em produção na Railway: **web** (Next.js) + **worker** (BullMQ) + **Redis**,
-sobre Postgres gerenciado no Supabase.
+A página é um passeio por um bairro em miniatura (diorama 3D low-poly). O scroll leva a
+câmera pela rua e cada serviço acende uma fachada:
 
-## Como isto se lê
+| Seção | Fachada | Na cena |
+|---|---|---|
+| Hero | Rua inteira, do alto, apagada | Um ponto de luz pousa na rua |
+| Google Meu Negócio | Padaria | Pin do Maps sobe do telhado com as estrelas |
+| Landing pages | Loja com vitrine | A vitrine vira uma tela que se monta peça por peça |
+| Redes sociais | Salão | Cards de post saem da porta e entram em órbita |
+| Tráfego pago | Esquina com outdoor | O outdoor liga e emite ondas de alcance |
+| IA (novo) | Estúdio no fim da rua | Holograma de influenciadora; a câmera aproxima |
+| Contato | Rua toda acesa | A câmera recua: "seu negócio, visto" |
 
-Os documentos deste repositório **conflitam de propósito**, e a ordem em que se
-resolvem está em **[AGENTS.md](./AGENTS.md)** — a escada de precedência, a lista
-dos 31 ADRs e o estado de implementação. **Comece por lá.**
+CTA único em todas as seções: conversa no WhatsApp, com a mensagem já escrita por serviço.
 
-| Onde | O quê |
+> O CRM que morava neste repositório está no branch `crm-revisional`, sem ligação com o site.
+
+## Stack
+
+Vite + three.js em TypeScript, sem framework de UI. Lenis suaviza o scroll; a timeline da
+câmera é própria (`src/timeline.ts`, `src/camera-path.ts`). Bloom só no branco puro.
+
+| Arquivo | Papel |
 |---|---|
-| [AGENTS.md](./AGENTS.md) | Escada de precedência, ADRs, estado das fases |
-| [CONTEXT.md](./CONTEXT.md) | Linguagem do domínio (PT-BR) e o mapeamento para o código (inglês) |
-| [docs/adr/](./docs/adr/) | As 31 decisões irreversíveis. 139 arquivos de código as citam em comentário |
-| [DESIGN.md](./DESIGN.md) | Lei visual — tokens, densidade, paleta de dataviz |
-| [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) | As 8 fases e os itens registrados como abertos |
-| [.scratch/aberto/](./.scratch/aberto/) | **A fila de trabalho viva.** Cinco tickets, e nada além disso |
-| [`docs/arquivo-fases-0-4`](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4) | Branch congelada: specs, tickets e registros das fatias que já fecharam |
+| `src/content.ts` | Todo o texto, a ordem das seções e o número do WhatsApp |
+| `src/render-sections.ts` | HTML das seções, gerado no build: o texto existe sem JS e sem WebGL |
+| `src/timeline.ts` | Scroll → progresso `p` (`p = i` é a câmera parada na seção i) |
+| `src/camera-path.ts` | Um quadro de câmera por seção e a interpolação entre eles |
+| `src/scene/street.ts` | A rua com fachadas provisórias, nos grupos com os nomes das coleções do Blender |
+| `src/scene/effects.ts` | O efeito 3D de cada serviço, dirigido pelo progresso local da seção |
+| `src/scene/world.ts` | Renderer, luz, bloom, carga do `.glb` e o quadro de cada frame |
 
-**Antes de qualquer migration, leia o [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).**
-Model sem linha na tabela de mapeamento é model com nome improvisado.
-
-## Estado
-
-Fases 0 a 4 entregues: fundação, ingestão, operação do lead, tempo e canal.
-**Próxima é a Fase 5 (Papel)** — documentos e proposta no card, upload, assinatura
-e as vistas globais de Contratos e Documentos.
-
-Antes dela tem precedência o [ticket 19](./.scratch/aberto/19-conexoes-multiplas-por-provedor.md):
-a chave idempotente ainda não inclui a conexão, e a segunda landing page passa a
-engolir lead em silêncio ([ADR-0031](./docs/adr/0031-conexao-na-chave-idempotente.md)).
-
-## Estrutura
-
-```
-apps/web        Next.js 16 · React 19 · Tailwind 4 — telas e route handlers
-apps/worker     consumidor BullMQ — ingestão e disparo de canal
-packages/domain domínio puro, sem I/O (ADR-0011)
-packages/db     Prisma, migrations e as operações nomeadas (ADR-0016)
-tests/          costuras ponta a ponta (seams 2 e 4)
-scripts/        guardas de migration, drift e fronteira de import
-```
-
-`packages/db` **não devolve o client do Prisma** — devolve operações nomeadas
-sob contexto de acesso ([ADR-0016](./docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md)),
-e `scripts/check-prisma-imports.mjs` falha o lint se alguém furar essa fronteira.
-
-## Rodar local
-
-Requer **Node 24+** e **pnpm 10.32**. O `pnpm install` instala os hooks do lefthook.
+## Scripts
 
 ```bash
 pnpm install
-pnpm --filter @marctco/web dev
+pnpm dev          # http://localhost:5173
+pnpm lint
+pnpm typecheck
+pnpm test         # vitest --run
+pnpm build        # build + orçamento de tamanho (scripts/check-budget.mjs)
 ```
 
-Banco (Postgres, PgBouncer e Redis) não sobe no notebook de desenvolvimento: tudo que
-precisa dele roda no job **Database** do CI, com Postgres efêmero. O
-`docker-compose.yml` (`pnpm db:up`) fica para quem tiver Docker.
+Gates locais (lefthook): pre-commit roda o oxlint nos arquivos em stage; pre-push roda o
+typecheck e os testes ligados ao diff. O CI (`.github/workflows/ci.yml`) roda tudo e o build.
 
-Copie `.env.example` para `.env`. **A string de conexão de produção não existe em
-arquivo** — vive como secret do GitHub Actions e no Railway ([ADR-0010](./docs/adr/0010-migrations-e-ci-cd.md)).
+## Blender → site
 
-## Testes
+1. Uma coleção por fachada no `.blend`, com nomes estáveis: `street`, `shop_gmb`, `shop_lp`,
+   `shop_social`, `billboard_ads`, `studio_ai`.
+2. Animações como Actions nomeadas pelo id da seção (`gmb`, `lp`, `social`, `ads`, `ai`):
+   o scroll as toca via `AnimationMixer`, do início ao fim enquanto a câmera está na fachada.
+3. Exportar glTF binário com compressão Meshopt para `public/models/bairro.glb`.
+4. Materiais simples (cinzas, emissivo branco); a luz principal fica no three.js.
 
-Os gates locais rodam sozinhos (`lefthook.yml`): no commit, `oxlint` nos arquivos em
-stage; no push, `pnpm typecheck` e `pnpm test:related` (projeto `domain`, só os testes
-ligados aos arquivos alterados desde o merge-base com a `main`).
+Sem `bairro.glb`, o site usa as fachadas provisórias. Com ele, cada grupo de mesmo nome é
+trocado pelo objeto do arquivo. O `.blend` fica em `blender/` (Git LFS se passar de ~50 MB).
 
-```bash
-pnpm test:related  # domínio, só o diff do branch
-pnpm test:unit     # domínio puro inteiro, sem banco
-pnpm test:ci       # tudo (o CI roda; db, a7, seam2, seam4 e managed-migration exigem banco)
-pnpm typecheck && pnpm lint
-```
+## Orçamento de desempenho
 
-Seis projetos vitest: `domain`, `db`, `a7`, `seam2`, `seam4` e
-`managed-migration`. O CI roda os quatro jobs (Quality, Database, Image web,
-Image worker) em cada PR, e o release de migration só dispara em push na `main`.
+- Cena completa < 3 MB comprimida (o build falha acima disso)
+- Primeira tela legível sem three.js: a cena carrega depois do texto
+- Celular: sem sombras, pixel ratio até 1,5 e bloom em resolução menor
+- `prefers-reduced-motion`: sem scroll suave; a câmera pula de quadro em quadro por seção
+- Sem WebGL: a mesma página em texto, uma seção por tela
 
-## Contribuir
+## Em aberto
 
-Branch por ticket — `pnpm ship` recusa rodar a partir da `main`. O tracker é
-local: issues são arquivos markdown, e a convenção está em
-[docs/agents/issue-tracker.md](./docs/agents/issue-tracker.md).
+- Fonte: serifa ou sem serifa (provisória: o desenho grosso da Arial, `--font` em `src/styles.css`)
+- Número do WhatsApp (`WHATSAPP_NUMBER` em `src/content.ts`), cidade/região, cases e depoimentos
+- Domínio e hospedagem (site estático: Vercel, Netlify ou Cloudflare Pages)

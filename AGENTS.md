@@ -1,89 +1,10 @@
-# marctco
+# marct.co — site da agência
 
-CRM de vendas para assessorias de revisional de juros (veículo, imóvel, EP), com operação comercial e jurídica no mesmo workspace.
+Leia o [README.md](./README.md): conceito, stack, mapa dos arquivos e o pipeline Blender → site.
 
-## Precedência entre documentos
-
-Os documentos conflitam entre si. **Resolva sempre por esta escada — o degrau mais alto vence.**
-
-| # | Documento | Autoridade sobre |
-|---|-----------|------------------|
-| 1 | [CONTEXT.md](./CONTEXT.md) + [docs/adr/](./docs/adr/) | Nomes de domínio e decisões irreversíveis. Vence tudo; se outro doc contradiz, o outro doc está com bug. Autoridade sobre **código/schema**, não sobre rótulo de UI |
-| 2 | [stack-recomendada.md](./stack-recomendada.md) | Técnica: libs, deploy, ORM, fila, auth, isolamento. **Os ADRs 0013 a 0015 supersedem** o que ela diz sobre TanStack Query como padrão de leitura, sobre os cinco papéis e sobre guardar o `raw` sem prazo. **Os ADRs 0020 e 0022 supersedem** “tag também em oportunidades” e “um workspace por grupo”. **Os ADRs 0028 a 0031 supersedem** tag como marca, empresa do grupo como unidade de isolamento, workspace por campanha exclusiva e uma conexão por provedor |
-| 3 | [decisao-features-concorrentes.md](./decisao-features-concorrentes.md) | Escopo de features, navegação, UX |
-| 4 | [sintese-final.md](./sintese-final.md) + [docs/pesquisa/decisoes.md](./docs/pesquisa/decisoes.md) | Fluxo de produto e regras de negócio não tocadas pelo degrau 3. Mesmo nível: `decisoes.md` detalha `sintese-final.md`, não rivaliza com ele |
-| 5 | [docs/pesquisa/](./docs/pesquisa/) (pluga, whatsmiau-api-v2; concorrentes e sínteses no [arquivo](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/docs/pesquisa)) | **Nada.** Evidência e referência, nunca autoridade — `pluga.md` descreve o que a Pluga faz, não o que o CRM responde |
-
-[DESIGN.md](./DESIGN.md) é a lei visual, ortogonal à escada.
-
-**Precedência resolve o conflito; o lado perdedor recebe nota de supersessão apontando para quem venceu.** Sem isso, a próxima sessão re-litiga do zero.
-
-## Implementação
-
-Fases 0–4 entregues e em produção. **Specs, tickets e registros das quatro fatias estão congelados** na branch de arquivo [`docs/arquivo-fases-0-4`](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4) e na tag [`fases-0-4`](https://github.com/petzada/marctco/releases/tag/fases-0-4) — Fases 0–1 ([fundação e ingestão](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/fundacao-e-ingestao)), 2 ([operação do lead](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/operacao-do-lead)), 3 ([tempo](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/tempo)) e 4 ([canal](https://github.com/petzada/marctco/tree/docs/arquivo-fases-0-4/.scratch/canal)). Fechamento 0–2: [fechamento-fases-0-2.md](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/.scratch/fechamento-fases-0-2.md). Handoffs: [Fase 3](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/.scratch/tempo/PROMPT-HANDOFF.md) e [Fase 4](https://github.com/petzada/marctco/blob/docs/arquivo-fases-0-4/.scratch/canal/PROMPT-HANDOFF.md).
-
-**O que não fechou continua aqui, em [.scratch/aberto/](./.scratch/aberto/)** — cinco tickets, e é a única fila de trabalho viva do repositório. Três são dívida contra ADR já aceito ([19](./.scratch/aberto/19-conexoes-multiplas-por-provedor.md) · ADR-0031, [08](./.scratch/aberto/08-empresa-agrupa-equipes.md) · ADR-0029 e [09](./.scratch/aberto/09-supervisor-nao-alcanca-supervisor.md) · ADR-0028); dois estão `needs-info` travados em conta Pluga paga ([13](./.scratch/aberto/13-google-lead-form-e-webhook-de-landing-page.md) e [14](./.scratch/aberto/14-tela-integracoes-pluga.md)).
-
-**Próxima: Fase 5 (Papel)** conforme [docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — documentos/proposta no card, upload R2, assinatura e vistas globais de Contratos/Documentos. As Fases 0–4 estão fechadas; **não reabrir ticket que está no arquivo.**
-
-Antes da Fase 5, o [ticket 19](./.scratch/aberto/19-conexoes-multiplas-por-provedor.md) tem precedência: a chave idempotente ainda não inclui a conexão, e a segunda landing page passa a engolir lead em silêncio ([ADR-0031](./docs/adr/0031-conexao-na-chave-idempotente.md)).
-
-## Ordem de construção
-
-[docs/plano-de-construcao.md](./docs/plano-de-construcao.md) — 8 fases, o veredito de Analytics no MVP, e os itens registrados como abertos. Supersede `sintese-final.md` §13. Os ADRs referenciam as fases pelo número.
-
-## ADRs
-
-| # | Decisão |
-|---|---------|
-| [0001](./docs/adr/0001-stack-monolito-modular-ts.md) | Stack: monólito modular TypeScript |
-| [0002](./docs/adr/0002-workspace-tags-times.md) | Workspace é fronteira de captação; tags em membros organizam times |
-| [0003](./docs/adr/0003-whatsapp-instancia-unica-gatilho-atribuicao.md) | WhatsApp: instância única, mensagem disparada na atribuição |
-| [0004](./docs/adr/0004-fronteira-flag-configuracao-estado.md) | Fronteira entre feature flag, configuração de workspace e estado |
-| [0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md) | **Código em inglês, UI e glossário em PT-BR** — contém o mapeamento canônico de nomes |
-| [0006](./docs/adr/0006-rls-duas-camadas-guc-worker.md) | Isolamento multi-tenant: duas camadas, GUC, worker sob RLS |
-| [0007](./docs/adr/0007-ingestao-idempotencia.md) | **Ingestão, outbox, identidade e duplicidade** — o ponto mais irreversível do sistema |
-| [0008](./docs/adr/0008-fronteira-conector-dominio.md) | Contrato canônico `v1` e fronteira conector/domínio |
-| [0009](./docs/adr/0009-etapas-editaveis-papeis-e-status.md) | Funis independentes do financiamento, papéis de etapa, roteamento e handoff humano |
-| [0010](./docs/adr/0010-migrations-e-ci-cd.md) | Migrations e CI/CD: Docker local, Postgres efêmero no CI, release serializado |
-| [0011](./docs/adr/0011-monorepo-pnpm-e-dominio-puro.md) | Monorepo pnpm e pacote de domínio puro |
-| [0012](./docs/adr/0012-contexto-de-tenant-na-url.md) | Contexto de tenant no segmento de URL, `slug` UUIDv4, 404 uniforme, rate limit em memória |
-| [0013](./docs/adr/0013-fluxo-de-dados-no-app.md) | **Fluxo de dados:** Server Component lê, route handler escreve, paginação keyset, condição arbitra escrita concorrente |
-| [0014](./docs/adr/0014-copia-unica-e-retencao-do-payload.md) | Cópia única do payload e expiração em 90 dias |
-| [0015](./docs/adr/0015-perfis-de-acesso-e-escopo.md) | **Perfis de acesso:** Atendente, Supervisor, Gestão, Direção — escopo por tela |
-| [0016](./docs/adr/0016-contexto-de-acesso-e-leitor-escopado.md) | **Contexto de acesso e leitor escopado** — `packages/db` não devolve o client do Prisma |
-| [0017](./docs/adr/0017-ingestao-como-decisao-e-plano.md) | **Ingestão é decisão pura; o plano de escrita é dado** — `IntakePlan`, dois chamadores |
-| [0018](./docs/adr/0018-marcador-como-modulo.md) | Marcador é módulo de domínio: `markersFor` responde "o que este lead tem" |
-| [0019](./docs/adr/0019-resolucao-pre-contexto-e-executor-privado.md) | Resolução pré-contexto: lista fechada de funções privadas (sete desde o ticket 00 da Fase 4; era quatro, depois cinco no ticket 15, seis na Fase 3), executor `NOLOGIN` sob `FORCE RLS`, `UserContext` único |
-| [0020](./docs/adr/0020-tag-no-membro-define-o-time.md) | **Tag no membro define o time;** tag na oportunidade não se herda |
-| [0021](./docs/adr/0021-dois-caminhos-de-nascimento-login-fechado.md) | **Dois caminhos de nascimento;** login fechado — marctco provisiona, Direção cadastra colaborador |
-| [0022](./docs/adr/0022-workspace-e-fronteira-de-captacao.md) | **Workspace é fronteira de captação;** emendado: a fronteira é o dono ([ADR-0030](./docs/adr/0030-workspace-e-fronteira-do-dono.md)); tag no membro é o time |
-| [0023](./docs/adr/0023-desligamento-desativa-o-vinculo.md) | **Desatrelar** é de um workspace; **desligar** é do quadro — Direção atravessa todos os tenants |
-| [0024](./docs/adr/0024-fila-sem-dono-e-da-gestao.md) | **Fila sem dono** é da Gestão e da Direção; Supervisor só reatribui dentro do time |
-| [0025](./docs/adr/0025-destino-da-fila-e-supervisor-ou-ator.md) | **Destino da fila** é Supervisor (com tag) ou o próprio ator; Atendente nunca nasce dono direto |
-| [0026](./docs/adr/0026-atribuicao-em-massa.md) | **Atribuição em massa:** mesma operação, N linhas, um destino; 1 a 1 permanece |
-| [0027](./docs/adr/0027-sem-papel-de-plataforma.md) | **Sem papel de plataforma** — marctco provisiona; os quatro perfis são do cliente |
-| [0028](./docs/adr/0028-tag-e-o-time-supervisor-nao-alcanca-supervisor.md) | **Tag é o time** (não "marca ou time"); o time exclui os outros `SUPERVISOR` |
-| [0029](./docs/adr/0029-empresa-e-agrupamento-de-equipe.md) | **Empresa agrupa equipes para leitura** — `Company` + `Tag.company_id`; nunca tenant, escopo, RLS ou coluna da Oportunidade |
-| [0030](./docs/adr/0030-workspace-e-fronteira-do-dono.md) | **Workspace é fronteira do dono;** campanha exclusiva não abre tenant |
-| [0031](./docs/adr/0031-conexao-na-chave-idempotente.md) | **A conexão entra na chave idempotente;** N conexões por provedor |
-
-**Antes de qualquer migration, leia [ADR-0005](./docs/adr/0005-idioma-codigo-en-ui-pt-br.md).** Model sem linha na tabela de mapeamento é model com nome improvisado.
-
-## Agent skills
-
-### Issue tracker
-
-Issues e specs vivem como arquivos markdown em `.scratch/<feature>/` neste repo — não há tracker externo. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Os cinco papéis canônicos, sem renomeação — gravados como `Status:` no topo de cada arquivo de issue. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: um `CONTEXT.md` na raiz e ADRs em `docs/adr/`. See `docs/agents/domain.md`.
-
-### Frontend UI
-
-Ao implementar UI (shadcn/Tailwind), seguir a skill **design-taste-frontend** (registrada na stack travada).
+- Texto e ordem das seções só em `src/content.ts`; a cena, o HTML e o fallback leem de lá.
+- Monocromático: cinza e preto; branco puro só no logo, na luz da fachada ativa e no CTA.
+- Lógica de scroll e câmera é pura (`src/timeline.ts`, `src/camera-path.ts`) e tem teste.
+- Ao trocar o provisório pelo `.glb`, preserve os nomes dos grupos e das Actions.
+- UI: siga a skill **design-taste-frontend**.
+- O CRM (histórico deste repositório) vive no branch `crm-revisional`; não misture.
