@@ -66,7 +66,23 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec cf deploy --message "${{ github.sha }}"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # Segredos do Worker (aviso de contato no Telegram) vão junto com a versão; arquivo
+        # temporário só legível pelo runner, e só com os que existirem
+        run: |
+          umask 077
+          secrets="$RUNNER_TEMP/worker-secrets.env"
+          : > "$secrets"
+          for name in TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+            if [ -n "${!name}" ]; then printf '%s=%s\n' "$name" "${!name}" >> "$secrets"; fi
+          done
+          if [ -s "$secrets" ]; then
+            pnpm exec cf deploy --message "${{ github.sha }}" --secrets-file "$secrets"
+          else
+            pnpm exec cf deploy --message "${{ github.sha }}"
+          fi
+          rm -f "$secrets"
       - name: Missing token
         if: ${{ env.HAS_CLOUDFLARE_TOKEN != 'true' }}
         run: echo "::warning::CLOUDFLARE_API_TOKEN ausente; deploy pulado."
