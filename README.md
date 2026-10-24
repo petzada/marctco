@@ -117,4 +117,6 @@ cf d1 query 9e73d86c-f8c6-4dee-a0de-3faf263e6834 --sql "SELECT * FROM leads ORDE
 - Primeira tela legível sem three.js: a cena carrega depois do texto
 - Celular: sem sombras, pixel ratio até 1,5 e bloom em resolução menor
 - `prefers-reduced-motion`: sem scroll suave; a câmera pula de quadro em quadro por seção
-- Sem WebGL: a mesma página em texto, uma seção por tela
+- Sem WebGL ou sem GPU de verdade (render por software, como no PageSpeed): a mesma página em
+  texto, uma seção por tela, sem baixar o three.js. `?3d` força o passeio e `?2d` força o texto
+- O 3D só começa depois do `load`, quando o navegador fica ocioso
