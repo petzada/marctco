@@ -54,24 +54,30 @@ e `scripts/check-prisma-imports.mjs` falha o lint se alguém furar essa fronteir
 
 ## Rodar local
 
-Requer **Node 24+**, **pnpm 10.32** e Docker.
+Requer **Node 24+** e **pnpm 10.32**. O `pnpm install` instala os hooks do lefthook.
 
 ```bash
 pnpm install
-pnpm db:up              # Postgres 54329 · PgBouncer 64329 · Redis 63799
-pnpm db:migrate:deploy
 pnpm --filter @marctco/web dev
 ```
+
+Banco (Postgres, PgBouncer e Redis) não sobe no notebook de desenvolvimento: tudo que
+precisa dele roda no job **Database** do CI, com Postgres efêmero. O
+`docker-compose.yml` (`pnpm db:up`) fica para quem tiver Docker.
 
 Copie `.env.example` para `.env`. **A string de conexão de produção não existe em
 arquivo** — vive como secret do GitHub Actions e no Railway ([ADR-0010](./docs/adr/0010-migrations-e-ci-cd.md)).
 
 ## Testes
 
+Os gates locais rodam sozinhos (`lefthook.yml`): no commit, `oxlint` nos arquivos em
+stage; no push, `pnpm typecheck` e `pnpm test:related` (projeto `domain`, só os testes
+ligados aos arquivos alterados desde o merge-base com a `main`).
+
 ```bash
-pnpm test          # tudo
-pnpm test:unit     # domínio puro, sem banco
-pnpm test:db       # integração; exige pnpm db:up
+pnpm test:related  # domínio, só o diff do branch
+pnpm test:unit     # domínio puro inteiro, sem banco
+pnpm test:ci       # tudo (o CI roda; db, a7, seam2, seam4 e managed-migration exigem banco)
 pnpm typecheck && pnpm lint
 ```
 

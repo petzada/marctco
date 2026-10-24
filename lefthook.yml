@@ -1,0 +1,20 @@
+# Gates locais: pre-commit só nos arquivos em stage (< 10 s); pre-push só no diff do branch.
+# Sem banco local: os projetos vitest db, a7, seam2, seam4 e managed-migration, o lint
+# tipado, o build e as imagens ficam no CI (job Database com Postgres efêmero).
+
+pre-commit:
+  parallel: true
+  jobs:
+    # Lint sem tipos (~1 s no repo inteiro); o ESLint tipado e o check-prisma-imports rodam no CI.
+    - name: lint
+      glob: "*.{ts,tsx,js,mjs,cjs}"
+      run: pnpm exec oxlint {staged_files}
+
+pre-push:
+  piped: true
+  jobs:
+    - name: 1_typecheck
+      run: pnpm typecheck
+    # Só o projeto domain (sem banco), restrito aos arquivos alterados desde o merge-base.
+    - name: 2_related
+      run: node scripts/test-related.mjs --project domain
