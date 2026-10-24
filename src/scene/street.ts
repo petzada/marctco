@@ -1,5 +1,6 @@
 import {
   BoxGeometry,
+  Color,
   ConeGeometry,
   CylinderGeometry,
   Group,
@@ -45,13 +46,23 @@ const MAT = {
   pole: gray(0x3d3d3d),
 };
 
-/** Vidro que acende: escuro apagado, branco puro (com bloom) quando a intensidade passa de 1. */
-/** Toldo da padaria em azul e branco: o emissivo segue o brilho da fachada (world.ts). */
+/**
+ * Toldo da padaria: cinza como o resto do bairro até abrir; ao abrir vira azul e branco e
+ * acende com a fachada (world.ts mistura `off` → `on` pelo progresso da seção).
+ */
+function awningMaterial(off: number, on: number, emissive: number): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({ color: off, emissive, emissiveIntensity: 0, roughness: 0.8, flatShading: true });
+  m.userData.off = new Color(off);
+  m.userData.on = new Color(on);
+  return m;
+}
+
 const AWNING: [MeshStandardMaterial, MeshStandardMaterial] = [
-  new MeshStandardMaterial({ color: 0x2f6fd6, emissive: 0x3f8cff, emissiveIntensity: 0, roughness: 0.8, flatShading: true }),
-  new MeshStandardMaterial({ color: 0xe9eef6, emissive: 0xdfe9ff, emissiveIntensity: 0, roughness: 0.8, flatShading: true }),
+  awningMaterial(0x474747, 0x2f6fd6, 0x3f8cff),
+  awningMaterial(0x707070, 0xe9eef6, 0xdfe9ff),
 ];
 
+/** Vidro que acende: escuro apagado, branco puro (com bloom) quando a intensidade passa de 1. */
 export function glassMaterial(): MeshStandardMaterial {
   return new MeshStandardMaterial({ color: 0x1a1a1a, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.4 });
 }

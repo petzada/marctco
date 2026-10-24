@@ -195,7 +195,13 @@ export class World {
         const scale = facade.glass.userData.litScale ?? 1;
         const extra = (facade.glass.userData.screen ?? 0) + (facade.glass.userData.billboard ?? 0) * 0.6;
         facade.glass.emissiveIntensity = Math.max(active * 1.5, allLit * 1.3, visited) * scale + extra;
-        if (slot === "shop_gmb") for (const m of this.street.awning) m.emissiveIntensity = facade.glass.emissiveIntensity * 0.35;
+        if (slot === "shop_gmb") {
+          // Cinza até a seção começar; azul e branco conforme o toldo abre, e assim fica
+          for (const m of this.street.awning) {
+            m.color.lerpColors(m.userData.off, m.userData.on, t);
+            m.emissiveIntensity = facade.glass.emissiveIntensity * 0.35 * t;
+          }
+        }
         // Negócios acendem azul (ou a cor do efeito: tela da LP, outdoor), inclusive no
         // final, quando o resto do bairro acende em amarelo
         facade.glass.emissive.copy(facade.glass.userData.base ?? ACCENT.business);
