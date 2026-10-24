@@ -108,8 +108,19 @@ async function start(): Promise<void> {
 // O formulário funciona com ou sem WebGL; com o modal aberto o scroll suave para
 setupLeadForm({ onOpen: () => lenis?.stop(), onClose: () => lenis?.start() });
 
+/**
+ * O 3D só começa quando a página fica ociosa: texto, fontes e botões chegam e respondem
+ * primeiro, e a montagem da cena não disputa a thread com o carregamento.
+ */
+function whenIdle(run: () => void): void {
+  const schedule = () =>
+    "requestIdleCallback" in window ? requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 200);
+  if (document.readyState === "complete") schedule();
+  else addEventListener("load", schedule, { once: true });
+}
+
 if (root.classList.contains("webgl")) {
   measure();
   updateOverlay(0);
-  void start();
+  whenIdle(() => void start());
 }

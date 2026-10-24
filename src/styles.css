@@ -92,9 +92,9 @@ a {
     transform 0.4s;
 }
 
-/* No header o logo e os serviços só aparecem na última etapa, com o bairro aceso */
-.at-end .bar__brand,
-.no-webgl .bar__brand {
+/* No header o logo e os serviços só aparecem na última etapa, com o bairro aceso (na
+   versão em texto não há etapas: o logo já está no hero e o header fica só com o CTA) */
+.at-end .bar__brand {
   opacity: 1;
   transform: none;
 }

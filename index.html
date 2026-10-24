@@ -60,12 +60,26 @@
       }
     </script>
     <script>
-      // Antes do primeiro paint: decide entre o passeio 3D e a versão em texto.
+      // Antes do primeiro paint: decide entre o passeio 3D e a versão em texto. Sem GPU de
+      // verdade (render por software, como SwiftShader) a cena trava a página: fica o texto.
+      // ?3d na URL força o passeio (para testar numa máquina assim) e ?2d força o texto.
       (function () {
-        var c = document.createElement("canvas");
-        var gl = null;
-        try { gl = c.getContext("webgl2") || c.getContext("webgl"); } catch (e) {}
-        document.documentElement.classList.add(gl ? "webgl" : "no-webgl");
+        var ok = false;
+        try {
+          var c = document.createElement("canvas");
+          var opts = { failIfMajorPerformanceCaveat: true };
+          var gl = c.getContext("webgl2", opts) || c.getContext("webgl", opts);
+          if (gl) {
+            var info = gl.getExtension("WEBGL_debug_renderer_info");
+            var renderer = String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+            ok = !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer);
+            var lose = gl.getExtension("WEBGL_lose_context");
+            if (lose) lose.loseContext();
+          }
+        } catch (e) {}
+        if (/[?&]3d(?:[=&]|$)/.test(location.search)) ok = true;
+        if (/[?&]2d(?:[=&]|$)/.test(location.search)) ok = false;
+        document.documentElement.classList.add(ok ? "webgl" : "no-webgl");
       })();
     </script>
   </head>
