@@ -10,6 +10,7 @@ import {
   type Material,
 } from "three";
 import { FACADE_X } from "../camera-path";
+import { BLUE } from "./effects";
 
 // Rua em maquete com fachadas provisórias. Os nomes dos grupos são os das coleções do
 // .blend (shop_gmb, shop_lp, shop_social, billboard_ads, studio_ai, street): quando o
@@ -50,16 +51,17 @@ const MAT = {
  * Toldo da padaria: cinza como o resto do bairro até abrir; ao abrir vira azul e branco e
  * acende com a fachada (world.ts mistura `off` → `on` pelo progresso da seção).
  */
-function awningMaterial(off: number, on: number, emissive: number): MeshStandardMaterial {
+function awningMaterial(off: number, on: number, emissive: number, glow: number): MeshStandardMaterial {
   const m = new MeshStandardMaterial({ color: off, emissive, emissiveIntensity: 0, roughness: 0.8, flatShading: true });
   m.userData.off = new Color(off);
   m.userData.on = new Color(on);
+  m.userData.glow = glow; // brilho máximo: o azul em 1, o branco contido para não lavar o toldo
   return m;
 }
 
 const AWNING: [MeshStandardMaterial, MeshStandardMaterial] = [
-  awningMaterial(0x474747, 0x2f6fd6, 0x3f8cff),
-  awningMaterial(0x707070, 0xe9eef6, 0xdfe9ff),
+  awningMaterial(0x474747, BLUE, BLUE, 1),
+  awningMaterial(0x707070, 0xe9eef6, 0xdfe9ff, 0.3),
 ];
 
 /** Vidro que acende: escuro apagado, branco puro (com bloom) quando a intensidade passa de 1. */
