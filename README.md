@@ -58,6 +58,8 @@ pnpm typecheck
 pnpm test         # vitest --run
 pnpm build        # build + orçamento de tamanho (scripts/check-budget.mjs)
 pnpm models       # comprime blender/export/bairro.raw.glb → public/models/bairro.glb (Meshopt)
+# banner de compartilhamento (og.png, 1200x630, "m" preto na Roboto Black)
+uv run --with pillow --with fonttools --with brotli scripts/og-image.py
 ```
 
 Gates locais (lefthook): pre-commit roda o oxlint nos arquivos em stage; pre-push roda o
