@@ -75,11 +75,15 @@ a {
   pointer-events: none;
 }
 
-.bar > * {
+.bar > .cta {
   pointer-events: auto;
 }
 
-.logo--bar {
+.bar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 1.1em;
+  min-width: 0;
   font-size: 1.35rem;
   opacity: 0;
   transform: translateY(-6px);
@@ -88,11 +92,40 @@ a {
     transform 0.4s;
 }
 
-/* No header o logo só aparece na última etapa, com o bairro aceso */
-.at-end .logo--bar,
-.no-webgl .logo--bar {
+/* No header o logo e os serviços só aparecem na última etapa, com o bairro aceso */
+.at-end .bar__brand,
+.no-webgl .bar__brand {
   opacity: 1;
   transform: none;
+}
+
+.at-end .bar__brand {
+  pointer-events: auto;
+}
+
+.logo--bar {
+  font-size: 1em;
+}
+
+/* Serviços na fonte do subtítulo, no tamanho do CTA do header (~2/3 do logo), separados
+   por bullets; encolhem um pouco nas telas mais estreitas para caber numa linha */
+.bar__services {
+  font-size: min(0.95rem, calc((100vw - 2 * var(--gutter) - 340px) / 66));
+  display: flex;
+  gap: 0.55em;
+  white-space: nowrap;
+  color: var(--white);
+}
+
+.bar__services [aria-hidden] {
+  color: var(--g400);
+}
+
+/* Abaixo disso a linha não cabe legível ao lado do CTA */
+@media (max-width: 1279px) {
+  .bar__services {
+    display: none;
+  }
 }
 
 /* CTA discreto: só borda, sem preenchimento */
@@ -227,13 +260,19 @@ a {
   margin-top: 0.6rem;
 }
 
-/* Rodapé numa linha, dentro da última tela: descrição, razão social e CNPJ */
+/* Rodapé numa linha no fim da última seção, na borda direita: descrição, razão social e CNPJ */
+.chapter--contact {
+  position: relative;
+}
+
 .foot {
   position: absolute;
+  z-index: 1;
   inset: auto 0 max(16px, env(safe-area-inset-bottom));
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-end;
+  text-align: right;
   align-items: baseline;
   gap: 0.25rem 1.1em;
   padding: 0 var(--gutter);
@@ -249,11 +288,6 @@ a {
   padding-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 2.6rem);
 }
 
-@media (max-width: 767px) {
-  .chapter--contact .panel {
-    padding-bottom: calc(max(16px, env(safe-area-inset-bottom)) + 4.6rem);
-  }
-}
 
 .no-webgl .foot {
   position: static;
@@ -295,5 +329,210 @@ a {
 @media (max-width: 767px) {
   .foot {
     font-size: 0.75rem;
+  }
+}
+
+/* Formulário de contato: modal no centro, fundo escurecido e desfocado */
+.lead {
+  width: min(32rem, calc(100vw - 2 * var(--gutter)));
+  max-height: calc(100svh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--g800);
+  border-radius: 16px;
+  background: var(--g900);
+  color: var(--white);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lead::backdrop {
+  background: rgb(0 0 0 / 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.lead[open] {
+  animation: lead-in 0.25s ease-out;
+}
+
+@keyframes lead-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.lead__form {
+  position: relative;
+  display: grid;
+  gap: 1rem;
+  padding: clamp(24px, 5vw, 36px);
+}
+
+.lead__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--g200);
+  font: inherit;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lead__close:hover,
+.lead__close:focus-visible {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.lead__title {
+  font-weight: 900;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  padding-right: 40px;
+}
+
+.lead__intro,
+.lead__privacy {
+  color: var(--g200);
+  line-height: 1.4;
+}
+
+.lead__privacy {
+  font-size: 0.85rem;
+  color: var(--g400);
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field__label {
+  font-size: 0.95rem;
+}
+
+.field input {
+  width: 100%;
+  padding: 0.8em 0.9em;
+  border: 1px solid var(--g600);
+  border-radius: 10px;
+  background: var(--black);
+  color: var(--white);
+  font: inherit;
+  font-weight: 400;
+  font-size: 1rem; /* 16 px: o iOS não dá zoom ao focar */
+  text-transform: none; /* o que a pessoa digita fica como digitou */
+}
+
+.field input::placeholder {
+  color: var(--g400);
+  text-transform: lowercase;
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: #ff6b6b;
+}
+
+.field__error {
+  min-height: 0;
+  color: #ff8a8a;
+  font-size: 0.85rem;
+}
+
+.field__error:empty {
+  display: none;
+}
+
+/* Campo-isca para robôs: fora da tela, nunca visível */
+.lead__hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.lead__status:empty {
+  display: none;
+}
+
+.lead__status {
+  color: #ff8a8a;
+  font-size: 0.95rem;
+}
+
+.lead__submit {
+  justify-self: start;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.lead__submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Toast de confirmação: embaixo, centralizado */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 30;
+  max-width: min(28rem, calc(100vw - 2 * var(--gutter)));
+  padding: 0.9em 1.2em;
+  border: 1px solid var(--g600);
+  border-radius: 12px;
+  background: var(--g900);
+  color: var(--white);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.5);
+  opacity: 0;
+  transform: translate(-50%, 12px);
+  transition:
+    opacity 0.3s,
+    transform 0.3s;
+}
+
+.toast--in {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lead[open] {
+    animation: none;
+  }
+
+  .toast {
+    transition: none;
+  }
+}
+
+/* Celular: abertura colada na margem de baixo da primeira dobra; rodapé centralizado, com
+   um pouco mais de margem até o fim da página e até o último CTA */
+@media (max-width: 767px) {
+  .chapter--hero .panel {
+    align-items: flex-end;
+  }
+
+  .foot {
+    justify-content: center;
+    text-align: center;
+    bottom: max(28px, env(safe-area-inset-bottom));
+  }
+
+  .chapter--contact .panel {
+    padding-bottom: calc(max(28px, env(safe-area-inset-bottom)) + 6rem);
   }
 }

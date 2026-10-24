@@ -24,7 +24,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { CAMERA_KEYS, cameraAt, verticalFov } from "../camera-path";
+import { CAMERA_KEYS, CAMERA_KEYS_PORTRAIT, cameraAt, verticalFov, type CameraKey } from "../camera-path";
 import { SECTIONS } from "../content";
 import { activation, effectProgress, smoothstep } from "../timeline";
 import { ACCENT, buildEffects } from "./effects";
@@ -53,6 +53,8 @@ export class World {
   /** Actions do .glb nomeadas pelo id da seção (gmb, lp, …), tocadas pelo scroll. */
   private readonly actions = new Map<string, AnimationAction>();
   private mixer: AnimationMixer | null = null;
+  /** Quadros de câmera: os do desktop ou, com a tela em pé, os do celular. */
+  private keys: readonly CameraKey[] = CAMERA_KEYS;
 
   constructor({ canvas, lowPower }: WorldOptions) {
     this.renderer = new WebGLRenderer({ canvas, antialias: !lowPower, powerPreference: "high-performance" });
@@ -98,6 +100,7 @@ export class World {
     this.camera.aspect = width / height;
     this.camera.fov = verticalFov(this.camera.aspect);
     // Em pé, o texto ocupa a metade de baixo: o assunto da cena sobe para o terço de cima.
+    this.keys = width < height ? CAMERA_KEYS_PORTRAIT : CAMERA_KEYS;
     if (width < height) this.camera.setViewOffset(width, height, 0, height * 0.17, width, height);
     else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
@@ -176,7 +179,7 @@ export class World {
    * reduzido) cada seção já alcançada mostra o efeito completo, sem tocar.
    */
   render(p: number, time: number, intro: number, still = false): void {
-    const cam = cameraAt(p);
+    const cam = cameraAt(p, this.keys);
     this.camera.position.set(...cam.position);
     this.lookAt.set(...cam.target);
     this.camera.lookAt(this.lookAt);
@@ -221,8 +224,9 @@ export class World {
     this.hemi.intensity = 0.6 + allLit * 0.6;
 
     // O ponto de luz pousa na rua no hero e depois acompanha a fachada ativa
-    const target = cameraAt(Math.max(p, 1)).target;
-    const groundX = p < 1 ? CAMERA_KEYS[0]!.target[0] + (target[0] - CAMERA_KEYS[0]!.target[0]) * p : target[0];
+    const target = cameraAt(Math.max(p, 1), this.keys).target;
+    const start = this.keys[0]!.target[0];
+    const groundX = p < 1 ? start + (target[0] - start) * p : target[0];
     const fall = (1 - intro) ** 2 * 14;
     this.dot.position.set(groundX, 0.26 + fall, 0.4);
     this.dot.visible = allLit < 0.95;

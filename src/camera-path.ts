@@ -21,6 +21,17 @@ export const CAMERA_KEYS: readonly CameraKey[] = [
   { position: [15, 22, 30], target: [15, 1, -3] }, // contato: recua, bairro aceso
 ];
 
+/**
+ * Celular em pé: a vista de cima mostraria o bairro inteiro pequeno. O hero começa com
+ * zoom no ponto de luz que pousa na rua e corre de lado até a padaria; no contato a câmera
+ * fica mais perto, mostrando uma faixa vertical do bairro aceso em vez da rua inteira.
+ */
+export const CAMERA_KEYS_PORTRAIT: readonly CameraKey[] = CAMERA_KEYS.map((key, i, keys) => {
+  if (i === 0) return { position: [15, 5.2, 7.6], target: [15, 0.3, 0.2] };
+  if (i === keys.length - 1) return { position: [17, 9, 12.5], target: [17, 3, -4.5] };
+  return key;
+});
+
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [
   lerp(a[0], b[0], t),

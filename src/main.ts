@@ -3,6 +3,7 @@ import "@fontsource/roboto/latin-700.css";
 import "@fontsource/roboto/latin-900.css";
 import "./styles.css";
 import { SECTIONS, whatsappUrl } from "./content";
+import { setupLeadForm } from "./lead-form";
 import { activation, anchorsFor, progressAt, snapProgress } from "./timeline";
 
 const root = document.documentElement;
@@ -12,6 +13,7 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 let anchors: number[] = [];
 let activeIndex = -1;
+let lenis: import("lenis").default | null = null;
 
 function measure(): void {
   anchors = anchorsFor(
@@ -58,7 +60,6 @@ async function start(): Promise<void> {
   window.addEventListener("resize", resize);
   void world.loadModel().catch((error) => console.warn("bairro.glb não carregou; seguem as fachadas provisórias", error));
 
-  let lenis: import("lenis").default | null = null;
   const setupScroll = async () => {
     lenis?.destroy();
     lenis = null;
@@ -83,6 +84,9 @@ async function start(): Promise<void> {
   };
   requestAnimationFrame(frame);
 }
+
+// O formulário funciona com ou sem WebGL; com o modal aberto o scroll suave para
+setupLeadForm({ onOpen: () => lenis?.stop(), onClose: () => lenis?.start() });
 
 if (root.classList.contains("webgl")) {
   measure();

@@ -53,6 +53,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Tabela do formulário (migrations/) no D1 antes de publicar o Worker que grava nela
+      - name: Apply D1 migrations
+        if: ${{ env.HAS_CLOUDFLARE_TOKEN == 'true' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec cf d1 migrations apply marctco-leads
       - name: Deploy to Cloudflare
         if: ${{ env.HAS_CLOUDFLARE_TOKEN == 'true' }}
         env:
