@@ -1,9 +1,28 @@
 # marct.co
 
-Site da agência marct.co: presença digital para empresas e comerciantes locais.
+![Status](https://img.shields.io/badge/status-em%20desenvolvimento%20ativo-brightgreen) ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green) ![three.js](https://img.shields.io/badge/three.js-0.186-black?logo=three.js) ![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white) ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)
 
-A página é um passeio por um bairro em miniatura (diorama 3D low-poly). O scroll leva a
-câmera pela rua e cada serviço acende uma fachada:
+Site da agência **marct.co**, de presença digital para empresas e comércios locais: um passeio em 3D por um bairro em miniatura que apresenta cada serviço e capta leads.
+
+## Índice
+
+- [Status do projeto](#status-do-projeto)
+- [Demonstração](#demonstração)
+- [Tecnologias utilizadas](#tecnologias-utilizadas)
+- [Pré-requisitos e instalação](#pré-requisitos-e-instalação)
+- [Como utilizar](#como-utilizar)
+- [Testes](#testes)
+- [Contribuição](#contribuição)
+- [Licença](#licença)
+- [Autor e contato](#autor-e-contato)
+
+## Status do projeto
+
+🟢 **Em desenvolvimento ativo**: o site está no ar e evolui com novas seções e ajustes visuais.
+
+## Demonstração
+
+A página é um **diorama 3D low-poly**: o scroll leva a câmera pela rua e cada serviço acende uma fachada.
 
 | Seção | Fachada | Na cena |
 |---|---|---|
@@ -12,111 +31,94 @@ câmera pela rua e cada serviço acende uma fachada:
 | Landing pages | Loja com vitrine | A vitrine vira uma tela que se monta peça por peça |
 | Redes sociais | Salão | Cards de post saem da porta e entram em órbita |
 | Tráfego pago | Esquina com outdoor | O outdoor liga e emite ondas de alcance |
-| IA (novo) | Estúdio no fim da rua | Holograma de influenciadora; a câmera aproxima |
+| IA | Estúdio no fim da rua | Holograma de influenciadora; a câmera aproxima |
 | Contato | Rua toda acesa | A câmera recua: "seu negócio, visto" |
 
-Os botões das seções abrem um formulário em modal, em duas etapas (nome, WhatsApp e empresa;
-depois ramo, produto principal e serviços de interesse), com rascunho salvo no navegador e
-confirmação com "fechar". Grava na tabela `leads` do D1 `marctco-leads`. Sem
-JavaScript, os mesmos botões levam ao WhatsApp. O CTA do cabeçalho vai direto ao WhatsApp.
+- **Formulário de lead em duas etapas** (nome, WhatsApp e empresa; depois ramo, produto e serviços de interesse), com rascunho salvo no navegador. Os leads ficam na tabela `leads` de um banco **D1** e geram aviso no Telegram.
+- **Funciona sem JavaScript e sem WebGL**: o HTML das seções é gerado no build e os botões levam ao WhatsApp.
+- **Identidade monocromática**: bairro cinza e preto, texto branco em Roboto minúsculo; cor só nos efeitos das animações.
+- **Orçamento de tamanho** verificado no build para manter o carregamento leve.
 
-> O CRM que morava neste repositório está no branch `crm-revisional`, sem ligação com o site.
+## Tecnologias utilizadas
 
-## Stack
+- **TypeScript** + **Vite**, sem framework de UI
+- **three.js** (cena, bloom e animações) e **Lenis** (scroll suave)
+- **Blender** (Python) para modelar a maquete, exportada em `.glb` e comprimida com **gltfpack** (Meshopt)
+- **Cloudflare Workers** (assets + `POST /api/leads`) e **D1**
+- **Vitest**, **oxlint**, lefthook e GitHub Actions (CI e deploy)
 
-Vite + three.js em TypeScript, sem framework de UI. Lenis suaviza o scroll; a timeline da
-câmera é própria (`src/timeline.ts`, `src/camera-path.ts`). Bloom só no que passa do branco.
+## Pré-requisitos e instalação
 
-Identidade: bairro cinza e preto, texto branco em Roboto (Black 900 nos títulos, Bold 700 no logo sempre pequeno,
-ExtraLight 200 no subtítulo e nos botões), títulos e subtítulos numa linha só (no celular o subtítulo quebra), tudo minúsculo. **Cor só nos efeitos**: um azul só (`BLUE`, #3f8cff, brilho 1) é o negócio local (vidros,
-toldo, tela da LP, outdoor, ondas, holograma, posts em tons vizinhos); pin vermelho e estrelas
-amarelas; amarelo quente
-é o resto do bairro acendendo no final — `ACCENT` em `src/scene/effects.ts`.
+**Pré-requisitos**
+
+- **Node.js 22** (versão em `.nvmrc`)
+- **pnpm 10** (`corepack enable`)
+- **Blender** apenas se for alterar a maquete 3D
+
+**Instalação**
+
+```bash
+git clone https://github.com/petzada/marctco.git
+cd marctco
+corepack enable
+pnpm install          # também instala os hooks do lefthook
+```
+
+## Como utilizar
+
+```bash
+pnpm dev              # http://localhost:5173
+pnpm build            # build + verificação do orçamento de tamanho
+pnpm preview          # serve o build localmente
+pnpm models           # comprime blender/export/bairro.raw.glb → src/models/bairro.glb
+```
+
+**Onde mexer**
 
 | Arquivo | Papel |
 |---|---|
 | `src/content.ts` | Todo o texto, a ordem das seções e o número do WhatsApp |
-| `src/render-sections.ts` | HTML das seções, gerado no build: o texto existe sem JS e sem WebGL |
-| `src/timeline.ts` | Scroll → progresso `p` (`p = i` é a câmera parada na seção i) |
-| `src/camera-path.ts` | Um quadro de câmera por seção e a interpolação entre eles |
-| `src/scene/street.ts` | Fachadas provisórias (código), nos grupos com os nomes das coleções do Blender |
-| `src/scene/effects.ts` | O efeito 3D colorido de cada serviço, dirigido pelo progresso local da seção |
-| `src/lead.ts` | Campos e validação do formulário, usados no navegador e no Worker |
-| `src/lead-form.ts` | Modal em duas etapas, rascunho, envio para `/api/leads` e confirmação |
-| `src/worker/index.ts` | Worker: `POST /api/leads` grava no D1; o resto são os assets |
-| `migrations/` | Schema do D1 (tabela `leads`), aplicado pelo job Deploy |
-| `src/scene/world.ts` | Renderer, luz, bloom, troca pelo `.glb`, Actions no scroll e o quadro de cada frame |
-| `blender/build_bairro.py` | Monta a maquete no Blender, salva `bairro.blend` e exporta o `.glb` |
+| `src/timeline.ts` / `src/camera-path.ts` | Scroll → progresso e um quadro de câmera por seção |
+| `src/scene/effects.ts` | O efeito 3D colorido de cada serviço |
+| `src/lead.ts` / `src/lead-form.ts` | Validação e modal do formulário de lead |
+| `src/worker/index.ts` | Worker: grava o lead no D1 |
+| `blender/build_bairro.py` | Monta a maquete no Blender e exporta o `.glb` |
 
-## Scripts
+O deploy é feito pelo GitHub Actions a cada merge na `main` (as migrations do D1 também).
+
+## Testes
 
 ```bash
-pnpm install
-pnpm dev          # http://localhost:5173
-pnpm lint
-pnpm typecheck
-pnpm test         # vitest --run
-pnpm build        # build + orçamento de tamanho (scripts/check-budget.mjs)
-pnpm models       # comprime blender/export/bairro.raw.glb → src/models/bairro.glb (Meshopt)
-# banner de compartilhamento (og.png, 1200x630, "m" preto na Roboto Black)
-uv run --with pillow --with fonttools --with brotli scripts/og-image.py
-# ícone da aba (favicon.svg/.ico e apple-touch-icon.png), o mesmo "m"
-uv run --with pillow --with fonttools --with brotli scripts/favicon.py
+pnpm test             # vitest --run
+pnpm typecheck        # tsc --noEmit
+pnpm lint             # oxlint
 ```
 
-Gates locais (lefthook): pre-commit roda o oxlint nos arquivos em stage; pre-push roda o
-typecheck e os testes ligados ao diff. O CI (`.github/workflows/ci.yml`) roda tudo e o build.
+Os testes cobrem conteúdo, validação do lead, aviso no Telegram e a lógica pura de scroll/câmera. O **lefthook** roda o oxlint no commit e o typecheck + testes do diff no push; lint, suíte completa, build e orçamento rodam no CI.
 
-## Blender → site
+## Contribuição
 
-A maquete é gerada por script, então dá para refazer e revisar no diff:
+Contribuições são bem-vindas! Para propor uma melhoria:
 
-```bash
-# Blender aberto com o add-on blender-mcp conectado (porta 9876):
-python blender/run_in_blender.py blender/build_bairro.py
-# ou sem interface:
-blender -b --python blender/build_bairro.py
-pnpm models
-```
+1. Abra uma **issue** descrevendo o problema ou a ideia antes de começar algo grande.
+2. Faça um **fork** e crie um branch a partir da `main`: `<tipo>/<nome-kebab>` (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`).
+3. Use **commits semânticos** em português: `<tipo>(<escopo>): <descrição no imperativo>`.
+4. Rode lint e testes antes de enviar (veja [Testes](#testes)).
+5. Abra o **Pull Request** em *draft*, explicando o quê e o porquê. O merge é feito pelo autor.
 
-- Um Empty por fachada com o nome da coleção: `street`, `shop_gmb`, `shop_lp`, `shop_social`,
-  `billboard_ads`, `studio_ai`. O site troca cada grupo provisório pelo de mesmo nome.
-- Materiais `glass*` acendem: dentro de uma fachada viram o vidro dela; `glass_filler_0..2`
-  são as janelas do bairro (três níveis de brilho); `glass_lamp`, os postes.
-- Actions com o id da seção tocam com o scroll: `gmb` (toldo abre), `lp` (porta de aço sobe),
-  `social` (placa bandeira gira), `ads` (refletores inclinam), `ai` (porta do estúdio sobe).
-- As peças estáticas de cada coleção são juntadas por material (~50 malhas, ~100 kB comprimido).
+Não inclua segredos (`.env`, chaves de API, tokens) em commits ou PRs.
 
-**Blender MCP** (Windows): `uv` via `winget install astral-sh.uv`; add-on `addon.py` de
-`ahujasid/blender-mcp` instalado e ativo no Blender 5.2 (inicia o servidor sozinho); servidor
-registrado com `claude mcp add blender --scope user -- uvx blender-mcp`. As ferramentas aparecem
-em sessões novas do Claude Code com o Blender aberto.
+Convenções do projeto (identidade visual, onde fica cada coisa) em [`AGENTS.md`](AGENTS.md).
 
-## Deploy (Cloudflare)
+## Licença
 
-Worker só de assets estáticos (`cloudflare.config.ts`, CLI `cf`) nos domínios `marct.co` e
-`www.marct.co`. O job **Deploy** do CI publica a cada push na `main`, com o secret
-`CLOUDFLARE_API_TOKEN` e a variável `CLOUDFLARE_ACCOUNT_ID`. Nunca publicar do notebook.
+Distribuído sob a licença **MIT**, de código aberto. Isso significa que você **pode** usar, copiar, modificar, mesclar, publicar, distribuir, sublicenciar e até vender cópias do código, inclusive em projetos comerciais, **desde que** mantenha o aviso de copyright e o texto da licença. O software é fornecido "no estado em que se encontra", **sem garantias**, e o autor não se responsabiliza por danos decorrentes do uso.
 
-O plugin da Cloudflare para Vite exige Node 22.18+; em Node mais antigo o `pnpm build` local
-sai como site estático puro (o mesmo conteúdo servido). O CI usa Node 24.
+Texto completo em [`LICENSE`](LICENSE).
 
-Cada contato gravado também chega no Telegram, pelo bot do BotFather, com os dados e o
-botão "Abrir no WhatsApp" (`src/worker/telegram.ts`). O deploy entrega ao Worker os segredos
-do repositório `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`; sem eles, o aviso é pulado.
+## Autor e contato
 
-Ver os contatos recebidos (o `cf` usa o login do seu notebook; só leitura):
+**Marcio Petigrosso** ("petzada"): idealização e desenvolvimento.
 
-```bash
-cf d1 query 9e73d86c-f8c6-4dee-a0de-3faf263e6834 --sql "SELECT * FROM leads ORDER BY created_at DESC LIMIT 50"
-```
-
-## Orçamento de desempenho
-
-- Cena completa < 3 MB comprimida (o build falha acima disso)
-- Primeira tela legível sem three.js: a cena carrega depois do texto
-- Celular: sem sombras, pixel ratio até 1,5 e bloom em resolução menor
-- `prefers-reduced-motion`: sem scroll suave; a câmera pula de quadro em quadro por seção
-- Sem WebGL ou sem GPU de verdade (render por software, como no PageSpeed): a mesma página em
-  texto, uma seção por tela, sem baixar o three.js. `?3d` força o passeio e `?2d` força o texto
-- O 3D só começa depois do `load`, quando o navegador fica ocioso
+- GitHub: [@petzada](https://github.com/petzada)
+- LinkedIn: [in/petigrosso](https://www.linkedin.com/in/petigrosso)
