@@ -17,7 +17,7 @@ jobs:
   # O nome "CI" é o check obrigatório da proteção da main.
   ci:
     name: CI
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
     name: Deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [ci]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
       group: deploy-production
