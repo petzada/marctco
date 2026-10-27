@@ -9,3 +9,14 @@ Leia o [README.md](./README.md): conceito, stack, mapa dos arquivos e o pipeline
 - Deploy só pelo CI (job Deploy, push na main); nunca do notebook.
 - UI: siga a skill **design-taste-frontend**.
 - O CRM (histórico deste repositório) vive no branch `crm-revisional`; não misture.
+
+## Processo (notebook ou VM da nuvem)
+
+- Branch nova a partir da `main` (`<tipo>/<nome-kebab>`), commits semânticos; nunca commitar na `main`.
+- Gates leves onde o agente está: o lefthook roda oxlint nos staged (pre-commit) e `pnpm typecheck` +
+  testes ligados ao diff (pre-push). Lint e suíte completos, build e orçamento de tamanho ficam no CI.
+- PR **sempre em draft** (`gh pr create --draft`); marcar como pronto só com os gates verdes. **O agente
+  nunca faz merge**: merge na `main` é deploy em produção (job Deploy) e é decisão do responsável.
+- Sem banco local, sem Docker local, sem `cf deploy`/`wrangler` do notebook ou da VM. Migrations do D1
+  são aplicadas pelo job Deploy. Nenhum segredo no repositório nem no ambiente da nuvem.
+- Nunca `--no-verify`, nunca desligar hooks ou a proteção da `main`.
